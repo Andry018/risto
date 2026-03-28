@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+@theme {
+  --color-charcoal: #121212;
+  --color-surface: #1E1E1E;
+  --color-surface-light: #2A2A2A;
+  --color-gold: #CFA055;
+  --color-gold-hover: #b88b44;
+}
+
+@layer base {
+  body {
+    font-family: 'Outfit', sans-serif;
+    @apply antialiased text-gray-100 bg-charcoal;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-light rounded-full border-2 border-charcoal;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-600;
+}
