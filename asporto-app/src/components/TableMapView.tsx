@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase, type Tavolo } from '../lib/supabase';
-import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart } from 'lucide-react';
+import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard } from 'lucide-react';
 
 const SALE = ['SALA', 'VERDE', 'ROTONDA'];
 
@@ -92,9 +93,14 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
 
       {/* View Header & Toggles */}
       <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
-        <div>
-          <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase">Gestione Sala</h2>
-          <h1 className="text-3xl font-black text-white mt-1">MAPPA TAVOLI</h1>
+        <div className="flex gap-4">
+          <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+             <LayoutDashboard size={24} />
+          </Link>
+          <div>
+            <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase">Gestione Sala</h2>
+            <h1 className="text-3xl font-black text-white mt-1">MAPPA TAVOLI</h1>
+          </div>
         </div>
 
         {/* Sala Selector Tabs */}

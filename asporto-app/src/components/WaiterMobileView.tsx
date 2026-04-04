@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type Tavolo } from '../lib/supabase';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, WifiOff } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, WifiOff, LayoutDashboard } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 
 type CartItem = Product & { quantity: number };
@@ -129,7 +130,12 @@ export default function WaiterMobileView() {
       
       {!selectedTable ? (
         <div className="p-6 space-y-6 overflow-y-auto">
-          <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
+            <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
+              <LayoutDashboard size={20} />
+            </Link>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             {tables.map(table => (
               <button 

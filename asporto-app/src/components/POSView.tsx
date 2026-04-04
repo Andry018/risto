@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient } from '../lib/supabase';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, CreditCard, AlertTriangle, Save, WifiOff } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, CreditCard, AlertTriangle, Save, WifiOff, LayoutDashboard } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 
 type CartItem = Product & { quantity: number };
@@ -203,23 +204,28 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
       <div className="flex-1 flex flex-col min-w-0">
         <header className="mb-8 flex flex-col gap-6">
           <div className="flex justify-between items-center">
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Smart Checkout</h2>
-                {testMode && <span className="px-2 py-0.5 bg-amber-500 text-black text-[8px] font-black rounded uppercase">Test Mode Attivo</span>}
-                {pendingSyncCount > 0 && (
-                  <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[8px] font-black rounded uppercase animate-pulse">
-                    <WifiOff size={8} /> Sincronizzazione in corso ({pendingSyncCount})
-                  </span>
-                )}
+            <div className="flex items-center gap-6">
+              <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+                 <LayoutDashboard size={24} />
+              </Link>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Smart Checkout</h2>
+                  {testMode && <span className="px-2 py-0.5 bg-amber-500 text-black text-[8px] font-black rounded uppercase">Test Mode Attivo</span>}
+                  {pendingSyncCount > 0 && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[8px] font-black rounded uppercase animate-pulse">
+                      <WifiOff size={8} /> Sincronizzazione in corso ({pendingSyncCount})
+                    </span>
+                  )}
+                </div>
+                <h1 className="text-4xl font-black text-white mt-1">POS <span className="text-gold italic">TERMINAL</span></h1>
+                <button 
+                  onClick={() => setTestMode(!testMode)}
+                  className="text-[10px] text-gray-500 hover:text-white underline mt-1"
+                >
+                  {testMode ? 'Disattiva Test Mode' : 'Attiva Test Mode'}
+                </button>
               </div>
-              <h1 className="text-4xl font-black text-white mt-1">POS <span className="text-gold italic">TERMINAL</span></h1>
-              <button 
-                onClick={() => setTestMode(!testMode)}
-                className="text-[10px] text-gray-500 hover:text-white underline mt-1"
-              >
-                {testMode ? 'Disattiva Test Mode' : 'Attiva Test Mode'}
-              </button>
             </div>
             
             {/* Search Bar */}

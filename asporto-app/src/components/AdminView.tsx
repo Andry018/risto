@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase, type Order, type Product } from '../lib/supabase';
-import { CheckCircle, Clock, LayoutGrid, List, ToggleLeft, ToggleRight, ChefHat, Bell } from 'lucide-react';
+import { CheckCircle, Clock, LayoutGrid, List, ToggleLeft, ToggleRight, ChefHat, Bell, LayoutDashboard } from 'lucide-react';
 
 export default function AdminView() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -70,6 +71,14 @@ export default function AdminView() {
           </div>
 
           <nav className="space-y-3 flex-1">
+            <Link 
+              to="/" 
+              className="w-full flex items-center gap-3 p-4 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-300"
+            >
+              <LayoutDashboard size={20} />
+              Dashboard Principale
+            </Link>
+            <div className="h-px bg-slate-800/50 my-2" />
             <button 
               onClick={() => setActiveTab('orders')} 
               className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
