@@ -13,7 +13,7 @@ export default function MobileOrderingView() {
     fetchProducts();
     const channel = supabase
       .channel('public:prodotti')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: any) => {
         setProducts(current => current.map(p => p.id === payload.new.id ? { ...p, disponibile: payload.new.disponibile } : p));
       })
       .subscribe();

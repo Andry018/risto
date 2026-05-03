@@ -57,9 +57,9 @@ export default function StaffDashboard() {
       supabase.from('tavoli').select('status')
     ]);
 
-    const pending = ordersRes.data?.filter(o => o.status === 'IN_ATTESA').length || 0;
-    const total = ordersRes.data?.reduce((sum, o) => sum + o.totale, 0) || 0;
-    const occupied = tablesRes.data?.filter(t => t.status === 'OCCUPATO').length || 0;
+    const pending = ordersRes.data?.filter((o: any) => o.status === 'IN_ATTESA').length || 0;
+    const total = ordersRes.data?.reduce((sum: number, o: any) => sum + o.totale, 0) || 0;
+    const occupied = tablesRes.data?.filter((t: any) => t.status === 'OCCUPATO').length || 0;
 
     setStats({ pendingOrders: pending, occupiedTables: occupied, totalToday: total });
   }

@@ -41,17 +41,17 @@ export default function AdminView() {
 
     const ordersChannel = supabase
       .channel('public:ordini')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, (payload: any) => {
         setOrders(current => [payload.new as Order, ...current]);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ordini' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ordini' }, (payload: any) => {
         setOrders(current => current.map(o => o.id === payload.new.id ? payload.new as Order : o));
       })
       .subscribe();
 
     const productsChannel = supabase
       .channel('public:prodotti')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: any) => {
         setProducts(current => current.map(p => p.id === payload.new.id ? { ...p, disponibile: payload.new.disponibile } : p));
       })
       .subscribe();
