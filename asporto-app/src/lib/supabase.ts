@@ -3,6 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+if (!supabaseUrl || !supabaseKey) {
+  console.warn('Supabase credentials missing. App will run in offline/demo mode if configured.');
+}
+
+export const supabase = (supabaseUrl && supabaseKey) 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null as any;
+
 export interface Tavolo {
   id: string;
   nome: string;
@@ -14,8 +22,6 @@ export interface Tavolo {
   sala: string;
   created_at?: string;
 }
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export type Product = {
   id: string;
