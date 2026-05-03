@@ -26,3 +26,8 @@ dist-ssr
 # Database dumps
 supabase_*_dump.sql
 
+# Local Env
+.env
+.env.local
+.env.*.local
+
