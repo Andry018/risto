@@ -483,15 +483,26 @@ export default function TakeawayTabletView() {
                             <AlertCircle size={14} className="text-gold" /> Varianti Rapide
                         </h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {['Senza Glutine', 'Senza Lattosio', 'Rosè', 'Bianca', 'Rossa', 'Cottura ++'].map(note => (
-                               <button 
-                                key={note}
-                                onClick={() => setEditingItem({...editingItem, notes: editingItem.notes === note ? '' : note})}
-                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${editingItem.notes === note ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
-                               >
-                                {note}
-                               </button>
-                            ))}
+                            {['Senza Glutine', 'Senza Lattosio', 'Rosè', 'Bianca', 'Rossa', 'Cottura ++'].map(note => {
+                               const isActive = editingItem.notes.includes(note);
+                               return (
+                                 <button 
+                                  key={note}
+                                  onClick={() => {
+                                    let newNotes = editingItem.notes;
+                                    if (isActive) {
+                                      newNotes = newNotes.replace(note, '').replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '').trim();
+                                    } else {
+                                      newNotes = newNotes ? `${newNotes}, ${note}` : note;
+                                    }
+                                    setEditingItem({...editingItem, notes: newNotes});
+                                  }}
+                                  className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${isActive ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
+                                 >
+                                  {note}
+                                 </button>
+                               );
+                            })}
                         </div>
                     </section>
 
