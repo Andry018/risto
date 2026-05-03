@@ -29,6 +29,7 @@ export type Product = {
 export type Ingredient = {
   id: string;
   nome: string;
+  prezzo: number;
   disponibile: boolean;
   created_at?: string;
 };
@@ -41,4 +42,12 @@ export type Order = {
   totale: number;
   status: 'IN_ATTESA' | 'COMPLETATO';
   carrello: any;
+};
+
+// Demo Mode support
+export const IS_DEMO_MODE = localStorage.getItem('demo_mode') === 'true';
+
+export const toggleDemoMode = (val: boolean) => {
+  localStorage.setItem('demo_mode', val ? 'true' : 'false');
+  window.location.reload(); // Refresh to apply throughout
 };

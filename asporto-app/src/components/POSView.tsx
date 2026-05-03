@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
+import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, CreditCard, AlertTriangle, Save, WifiOff, LayoutDashboard } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 
@@ -49,6 +50,7 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
   }, [tableId]);
 
   async function fetchExistingOrder() {
+    if (IS_DEMO_MODE) return;
     const { data } = await supabase
       .from('ordini')
       .select('*')
@@ -63,6 +65,11 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
   }
 
   async function fetchProducts() {
+    if (IS_DEMO_MODE) {
+      setProducts(MOCK_PRODUCTS);
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await supabase
         .from('prodotti')
@@ -76,6 +83,10 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
   }
 
   async function fetchIngredients() {
+    if (IS_DEMO_MODE) {
+      setIngredients(MOCK_INGREDIENTS);
+      return;
+    }
     const { data } = await supabase.from('ingredienti').select('*');
     if (data) setIngredients(data);
   }
@@ -198,10 +209,10 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
   if (loading) return <div className="flex-1 flex justify-center items-center bg-charcoal"><div className="w-12 h-12 border-4 border-gold border-t-transparent rounded-full animate-spin"></div></div>;
 
   return (
-    <div className="flex-1 flex h-full bg-charcoal text-white overflow-hidden p-8 gap-8">
+    <div className="h-screen flex bg-charcoal text-white overflow-hidden">
       
       {/* Left Column: Menu */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 p-8">
         <header className="mb-8 flex flex-col gap-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
@@ -309,7 +320,7 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
       </div>
 
       {/* Right Column: Calculator/Cart */}
-      <aside className="w-[450px] bg-surface flex flex-col rounded-[40px] border border-surface-light shadow-2xl relative overflow-hidden">
+      <aside className="w-[450px] bg-surface flex flex-col border-l border-surface-light shadow-2xl relative overflow-hidden">
         {/* Decor */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 blur-3xl pointer-events-none" />
 

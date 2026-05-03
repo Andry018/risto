@@ -3,7 +3,6 @@ import {
   PhoneCall,
   LayoutDashboard, 
   Map, 
-  ShoppingCart, 
   ChefHat, 
   Calculator, 
   Settings, 
@@ -110,15 +109,6 @@ export default function StaffDashboard() {
       color: "from-gold/20 to-gold/5",
       iconColor: "text-gold",
       badge: `${stats.occupiedTables} occupati`
-    },
-    {
-      title: "Prendi Ordine",
-      desc: "Interfaccia rapida cameriere",
-      icon: ShoppingCart,
-      path: "/waiter",
-      color: "from-emerald-500/20 to-emerald-500/5",
-      iconColor: "text-emerald-400",
-      badge: "Mobile"
     },
     {
       title: "Cucina (KDS)",

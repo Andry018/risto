@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Order } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, type Order, IS_DEMO_MODE } from '../lib/supabase';
+import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
 import { capacityUtils, CAPACITY_CONFIG } from '../lib/CapacityUtils';
 import { 
   Plus, 
@@ -16,7 +17,8 @@ import {
   LayoutDashboard,
   Utensils,
   ShoppingCart,
-  Eye
+  Eye,
+  AlertTriangle
 } from 'lucide-react';
 
 type CustomizedItem = Product & {
@@ -55,6 +57,12 @@ export default function TakeawayTabletView() {
   }, []);
 
   async function fetchData() {
+    if (IS_DEMO_MODE) {
+      setProducts(MOCK_PRODUCTS);
+      setIngredients(MOCK_INGREDIENTS);
+      setAllOrders(MOCK_ORDERS);
+      return;
+    }
     const [{ data: pData }, { data: iData }] = await Promise.all([
       supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true }),
       supabase.from('ingredienti').select('*').order('nome', { ascending: true })
@@ -65,6 +73,10 @@ export default function TakeawayTabletView() {
   }
 
   async function fetchOrders() {
+    if (IS_DEMO_MODE) {
+      setAllOrders(MOCK_ORDERS);
+      return;
+    }
     const today = new Date().toISOString().split('T')[0];
     const { data } = await supabase.from('ordini').select('*').gte('created_at', today);
     if (data) setAllOrders(data);
@@ -74,15 +86,35 @@ export default function TakeawayTabletView() {
   const availableSlots = useMemo(() => capacityUtils.generateSlots(), []);
 
   const addToCartDirectly = (product: Product) => {
-    const newItem: CustomizedItem = {
-      ...product,
-      quantity: 1,
-      addedIngredients: [],
-      removedIngredients: [],
-      notes: '',
-      uniqueId: Math.random().toString(36).substr(2, 9)
-    };
-    setCart(prev => [...prev, newItem]);
+    setCart(prev => {
+      // Find an existing item that is identical (same ID and no modifications)
+      const existingIdx = prev.findIndex(item => 
+        item.id === product.id && 
+        item.addedIngredients.length === 0 && 
+        item.removedIngredients.length === 0 && 
+        !item.notes
+      );
+
+      if (existingIdx > -1) {
+        const newCart = [...prev];
+        newCart[existingIdx] = {
+          ...newCart[existingIdx],
+          quantity: newCart[existingIdx].quantity + 1
+        };
+        return newCart;
+      }
+
+      // Add as new item
+      const newItem: CustomizedItem = {
+        ...product,
+        quantity: 1,
+        addedIngredients: [],
+        removedIngredients: [],
+        notes: '',
+        uniqueId: Math.random().toString(36).substr(2, 9)
+      };
+      return [...prev, newItem];
+    });
   };
 
   const openCustomization = (product: Product) => {
@@ -144,6 +176,14 @@ export default function TakeawayTabletView() {
   const submitOrder = async () => {
     if (!customerName || cart.length === 0 || !pickupTime) {
       alert('Inserisci Nome, Orario e almeno un prodotto');
+      return;
+    }
+
+    if (IS_DEMO_MODE) {
+      alert('ORDINE SIMULATO (Modalità Demo): L\'ordine apparirebbe ora nel database reale.');
+      setCart([]);
+      setCustomerName('');
+      setPickupTime('');
       return;
     }
 
@@ -232,7 +272,6 @@ export default function TakeawayTabletView() {
               key={p.id}
               className={`bg-surface border rounded-[32px] flex flex-col justify-between text-left transition-all group relative overflow-hidden h-40 ${p.disponibile ? 'border-surface-light' : 'opacity-40 grayscale pointer-events-none'}`}
             >
-              {/* Direct Add Search Area */}
               <button 
                 onClick={() => addToCartDirectly(p)}
                 className="absolute inset-0 z-0 p-6 flex flex-col justify-between active:scale-[0.98] transition-transform"
@@ -243,19 +282,18 @@ export default function TakeawayTabletView() {
                 </div>
                 <div className="flex justify-between items-end">
                   <span className="text-2xl font-black text-white italic">€{p.prezzo.toFixed(2)}</span>
-                  <div className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light group-hover:bg-gold group-hover:text-black transition-all">
-                    <Plus size={20} />
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); openCustomization(p); }}
+                      className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light hover:bg-surface-light-hover transition-all active:scale-95"
+                    >
+                      <Edit3 size={20} />
+                    </button>
+                    <div className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light group-hover:bg-gold group-hover:text-black transition-all">
+                      <Plus size={20} />
+                    </div>
                   </div>
                 </div>
-              </button>
-              
-              {/* Customization Button - Always visible for Tablet */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); openCustomization(p); }}
-                className="absolute top-4 right-4 z-10 p-3 bg-surface-light border border-surface-light rounded-2xl text-gold shadow-lg active:scale-90 transition-all hover:bg-surface-light-hover"
-                title="Personalizza"
-              >
-                <Edit3 size={18} />
               </button>
             </div>
           ))}
@@ -293,27 +331,33 @@ export default function TakeawayTabletView() {
                    </span>
                  )}
               </div>
-              <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="flex gap-2 overflow-x-auto pb-4 hide-scrollbar">
                   {availableSlots.map(slot => {
                     const status = getSlotStatus(slot);
                     const isSelected = pickupTime === slot;
+                    
                     return (
                       <button
                         key={slot}
-                        onClick={() => setPickupTime(slot)}
-                        className={`py-2 rounded-xl text-[10px] font-black border transition-all ${
-                          isSelected 
-                            ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' 
-                            : status === 'FULL'
-                              ? 'bg-red-500/10 border-red-500/20 text-red-500/50 cursor-not-allowed'
-                              : status === 'WARNING'
-                                ? 'bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20'
-                                : 'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-surface-light-hover'
-                        }`}
+                        onClick={() => status !== 'FULL' && setPickupTime(slot)}
+                        className={`
+                          flex-shrink-0 min-w-[90px] p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-1
+                          ${isSelected ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20 scale-105' : 
+                            status === 'FULL' ? 'bg-red-500/10 border-red-500/20 text-red-500/50 cursor-not-allowed' :
+                            status === 'WARNING' ? 'bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20' :
+                            'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-surface-light-hover'}
+                        `}
                       >
-                        {slot}
+                        <span className="text-[10px] font-black uppercase tracking-widest">{slot}</span>
+                        <div className="flex items-center gap-1">
+                           {status === 'WARNING' && <AlertTriangle size={10} className="text-amber-500" />}
+                           {status === 'FULL' && <AlertTriangle size={10} className="text-red-500" />}
+                           <span className={`text-[8px] font-bold ${isSelected ? 'text-black' : 'text-gray-600'}`}>
+                             {loadMap[slot] || 0}/{CAPACITY_CONFIG.MAX_PIZZAS_PER_SLOT}
+                           </span>
+                        </div>
                       </button>
-                    )
+                    );
                   })}
               </div>
             </div>
@@ -389,63 +433,99 @@ export default function TakeawayTabletView() {
       {/* Customization Modal */}
       {isModalOpen && editingItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in zoom-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden">
+          <div className="bg-surface border border-surface-light w-full max-w-5xl rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[90vh]">
              
              {/* Modal Header */}
-             <div className="p-10 border-b border-surface-light flex justify-between items-center">
+             <div className="p-8 border-b border-surface-light flex justify-between items-center bg-surface-light/5">
                  <div>
-                    <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">Personalizza <span className="text-gold">{editingItem.nome}</span></h2>
-                    <p className="text-xs font-black text-gray-500 uppercase tracking-[0.3em] mt-1">Prezzo Base: €{editingItem.prezzo.toFixed(2)}</p>
+                    <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Personalizza <span className="text-gold">{editingItem.nome}</span></h2>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-1">Configurazione Ingredienti e Varianti</p>
                  </div>
-                 <button onClick={() => setIsModalOpen(false)} className="p-3 bg-charcoal rounded-full text-gray-500 hover:text-white transition-colors">
-                    <X size={24} />
-                 </button>
+                 <div className="flex items-center gap-6">
+                    <div className="text-right">
+                       <p className="text-[10px] font-black text-gray-500 uppercase">Prezzo Piatto</p>
+                       <p className="text-2xl font-black text-white italic">€{calculateItemPrice(editingItem).toFixed(2)}</p>
+                    </div>
+                    <button onClick={() => setIsModalOpen(false)} className="p-4 bg-charcoal rounded-2xl text-gray-500 hover:text-white transition-colors border border-surface-light">
+                       <X size={24} />
+                    </button>
+                 </div>
              </div>
 
-             <div className="p-10 max-h-[70vh] overflow-y-auto custom-scrollbar space-y-12">
-                
-                {/* 1. Rimozioni */}
-                <section>
-                    <h3 className="text-xs font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center gap-2">
-                        <Minus size={14} className="text-red-500" /> Togli ingredienti
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                        {editingItem.ingredienti?.map(ing => {
-                           const isRemoved = editingItem.removedIngredients.includes(ing);
-                           return (
-                             <button
-                                key={ing}
-                                onClick={() => {
-                                  if (isRemoved) setEditingItem({...editingItem, removedIngredients: editingItem.removedIngredients.filter(r => r !== ing)});
-                                  else setEditingItem({...editingItem, removedIngredients: [...editingItem.removedIngredients, ing]});
-                                }}
-                                className={`px-4 py-3 rounded-2xl font-bold text-xs border transition-all ${isRemoved ? 'bg-red-500 border-red-500 text-white' : 'bg-charcoal border-surface-light text-gray-400'}`}
-                             >
-                                {isRemoved ? `NO ${ing.toUpperCase()}` : ing.toUpperCase()}
-                             </button>
-                           )
-                        })}
-                    </div>
-                </section>
-
-                {/* 2. Aggiunte */}
-                <section>
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xs font-black text-gray-500 tracking-widest uppercase flex items-center gap-2">
-                            <Plus size={14} className="text-emerald-500" /> Aggiungi extra
+             <div className="flex-1 overflow-hidden flex">
+                {/* Left Side: Removals & Options (40%) */}
+                <div className="w-[40%] border-r border-surface-light p-8 overflow-y-auto custom-scrollbar space-y-10">
+                    <section>
+                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center gap-2">
+                            <Minus size={14} className="text-red-500" /> Togli ingredienti
                         </h3>
-                        <div className="relative w-48">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={12} />
+                        <div className="grid grid-cols-2 gap-2">
+                            {editingItem.ingredienti?.map(ing => {
+                               const isRemoved = editingItem.removedIngredients.includes(ing);
+                               return (
+                                 <button
+                                    key={ing}
+                                    onClick={() => {
+                                      if (isRemoved) setEditingItem({...editingItem, removedIngredients: editingItem.removedIngredients.filter(r => r !== ing)});
+                                      else setEditingItem({...editingItem, removedIngredients: [...editingItem.removedIngredients, ing]});
+                                    }}
+                                    className={`px-4 py-3 rounded-2xl font-bold text-[10px] border transition-all text-center ${isRemoved ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-charcoal border-surface-light text-gray-400 hover:border-surface-light-hover'}`}
+                                 >
+                                    {isRemoved ? `NO ${ing.toUpperCase()}` : ing.toUpperCase()}
+                                 </button>
+                               )
+                            })}
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center gap-2">
+                            <AlertCircle size={14} className="text-gold" /> Varianti Rapide
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {['Senza Glutine', 'Senza Lattosio', 'Rosè', 'Bianca', 'Rossa', 'Cottura ++'].map(note => (
+                               <button 
+                                key={note}
+                                onClick={() => setEditingItem({...editingItem, notes: editingItem.notes === note ? '' : note})}
+                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${editingItem.notes === note ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
+                               >
+                                {note}
+                               </button>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-4">Note Libere</h3>
+                        <textarea 
+                            rows={2}
+                            placeholder="Altre note..."
+                            value={editingItem.notes}
+                            onChange={e => setEditingItem({...editingItem, notes: e.target.value})}
+                            className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white text-xs font-medium outline-none focus:border-gold transition-all"
+                        />
+                    </section>
+                </div>
+
+                {/* Right Side: Additions (60%) */}
+                <div className="flex-1 bg-charcoal/30 p-8 overflow-y-auto custom-scrollbar">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase flex items-center gap-2">
+                            <Plus size={14} className="text-emerald-500" /> Aggiungi ingredienti extra
+                        </h3>
+                        <div className="relative w-64">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
                             <input 
                                 type="text"
-                                placeholder="Cerca extra..."
+                                placeholder="Cerca aggiunta..."
                                 value={ingSearch}
                                 onChange={e => setIngSearch(e.target.value)}
-                                className="w-full bg-charcoal border border-surface-light rounded-xl py-2 pl-8 pr-3 text-[10px] font-bold text-white outline-none focus:border-gold/40"
+                                className="w-full bg-charcoal border border-surface-light rounded-xl py-3 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-gold"
                             />
                         </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                    
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {ingredients
                           .filter(i => i.disponibile && i.nome.toLowerCase().includes(ingSearch.toLowerCase()))
                           .map(ing => {
@@ -455,63 +535,39 @@ export default function TakeawayTabletView() {
                                 key={ing.id}
                                 onClick={() => {
                                   if (isAdded) setEditingItem({...editingItem, addedIngredients: editingItem.addedIngredients.filter(a => a.nome !== ing.nome)});
-                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: 1.5 }]});
+                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo || 1.5 }]});
                                 }}
-                                className={`p-4 rounded-2xl font-bold text-xs border transition-all text-left flex flex-col gap-2 ${isAdded ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-charcoal border-surface-light text-gray-500 hover:border-surface-light-hover'}`}
+                                className={`p-4 rounded-2xl font-bold text-[10px] border transition-all text-left flex flex-col gap-1 ${isAdded ? 'bg-emerald-500 border-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-charcoal border-surface-light text-gray-500 hover:border-surface-light-hover'}`}
                              >
-                                <span className={isAdded ? 'text-emerald-400' : 'text-gray-400'}>{ing.nome.toUpperCase()}</span>
-                                <span className="text-[10px] opacity-70">+ €1.50</span>
+                                <span className={isAdded ? 'text-black' : 'text-white'}>{ing.nome.toUpperCase()}</span>
+                                <span className={isAdded ? 'text-black/60 font-black' : 'text-emerald-500 font-black'}>+ €{(ing.prezzo || 1.5).toFixed(2)}</span>
                              </button>
                            )
                         })}
                     </div>
-                </section>
-
-                {/* 3. Note e Opzioni */}
-                <section>
-                    <h3 className="text-xs font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center gap-2">
-                        <AlertCircle size={14} className="text-gold" /> Richieste Speciali
-                    </h3>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {['Senza Glutine', 'Senza Lattosio', 'Rosè (poco sugo)', 'Bianca', 'Rossa'].map(note => (
-                           <button 
-                            key={note}
-                            onClick={() => setEditingItem({...editingItem, notes: editingItem.notes === note ? '' : note})}
-                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${editingItem.notes === note ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
-                           >
-                            {note}
-                           </button>
-                        ))}
-                    </div>
-                    <textarea 
-                        rows={3}
-                        placeholder="Altre note..."
-                        value={editingItem.notes}
-                        onChange={e => setEditingItem({...editingItem, notes: e.target.value})}
-                        className="w-full bg-charcoal border border-surface-light rounded-3xl p-6 text-white font-medium outline-none focus:border-gold transition-all"
-                    />
-                </section>
-
-                {/* 4. Quantità */}
-                <section className="flex items-center justify-between bg-charcoal border border-surface-light p-6 rounded-[28px]">
-                    <span className="text-sm font-black uppercase text-gray-400 tracking-widest">Quantità</span>
-                    <div className="flex items-center gap-6">
-                        <button onClick={() => setEditingItem({...editingItem, quantity: Math.max(1, editingItem.quantity - 1)})} className="p-3 bg-surface rounded-2xl text-gold border border-surface-light active:scale-90"><Minus size={20} /></button>
-                        <span className="text-4xl font-black italic w-12 text-center">{editingItem.quantity}</span>
-                        <button onClick={() => setEditingItem({...editingItem, quantity: editingItem.quantity + 1})} className="p-3 bg-surface rounded-2xl text-gold border border-surface-light active:scale-90"><Plus size={20} /></button>
-                    </div>
-                </section>
+                </div>
              </div>
 
              {/* Modal Footer */}
-             <div className="p-10 border-t border-surface-light bg-surface-light/10 flex justify-between items-center">
-                 <div>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Parziale Riga</p>
-                    <p className="text-4xl font-black italic">€<span className="text-white">{calculateItemPrice(editingItem).toFixed(2)}</span></p>
+             <div className="p-8 border-t border-surface-light bg-surface-light/5 flex justify-between items-center">
+                 <div className="flex items-center gap-8 bg-charcoal p-4 rounded-3xl border border-surface-light">
+                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Quantità Riga</span>
+                    <div className="flex items-center gap-6">
+                        <button onClick={() => setEditingItem({...editingItem, quantity: Math.max(1, editingItem.quantity - 1)})} className="p-2 bg-surface rounded-xl text-gold border border-surface-light active:scale-90"><Minus size={18} /></button>
+                        <span className="text-3xl font-black italic w-8 text-center">{editingItem.quantity}</span>
+                        <button onClick={() => setEditingItem({...editingItem, quantity: editingItem.quantity + 1})} className="p-2 bg-surface rounded-xl text-gold border border-surface-light active:scale-90"><Plus size={18} /></button>
+                    </div>
                  </div>
-                 <button onClick={saveCustomization} className="bg-emerald-500 hover:bg-emerald-600 text-black px-12 py-5 rounded-3xl font-black text-lg shadow-xl shadow-emerald-500/20 active:scale-95">
-                    AGGIUNGI ALL'ORDINE
-                 </button>
+                 
+                 <div className="flex items-center gap-6">
+                    <div className="text-right">
+                        <p className="text-[10px] font-black text-gray-500 uppercase">Totale Riga</p>
+                        <p className="text-4xl font-black italic text-white text-right">€{calculateItemPrice(editingItem).toFixed(2)}</p>
+                    </div>
+                    <button onClick={saveCustomization} className="bg-emerald-500 hover:bg-emerald-600 text-black px-12 py-6 rounded-[32px] font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">
+                        CONFERMA E AGGIUNGI
+                    </button>
+                 </div>
              </div>
           </div>
         </div>

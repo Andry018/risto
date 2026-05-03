@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Tavolo } from '../lib/supabase';
+import { supabase, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
+import { MOCK_TABLES } from '../lib/MockData';
 import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard } from 'lucide-react';
 
-const SALE = ['SALA', 'VERDE', 'ROTONDA'];
+const SALE = ['Principale', 'Verde', 'Rotonda'];
 
 export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: string, name: string) => void }) {
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
@@ -17,13 +18,19 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
 
   useEffect(() => {
     fetchTavoli();
-    const channel = supabase.channel('public:tavoli')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => fetchTavoli())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    if (!IS_DEMO_MODE) {
+      const channel = supabase.channel('public:tavoli')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => fetchTavoli())
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
   }, []);
 
   async function fetchTavoli() {
+    if (IS_DEMO_MODE) {
+      setTavoli(MOCK_TABLES);
+      return;
+    }
     const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
     if (data) setTavoli(data);
   }
@@ -86,7 +93,13 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
-  const filteredTavoli = tavoli.filter(t => (t.sala || 'SALA 1') === activeSala);
+  const filteredTavoli = tavoli.filter(t => {
+    const sala = (t.sala || 'Principale').toUpperCase();
+    const active = activeSala.toUpperCase();
+    const normalizedSala = sala === 'SALA' ? 'PRINCIPALE' : sala;
+    const normalizedActive = active === 'SALA' ? 'PRINCIPALE' : active;
+    return normalizedSala === normalizedActive;
+  });
 
   return (
     <div className="flex-1 flex flex-col h-full bg-charcoal text-white overflow-hidden p-8">
