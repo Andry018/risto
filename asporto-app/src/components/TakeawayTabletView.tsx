@@ -272,9 +272,9 @@ export default function TakeawayTabletView() {
               key={p.id}
               className={`bg-surface border rounded-[32px] flex flex-col justify-between text-left transition-all group relative overflow-hidden h-40 ${p.disponibile ? 'border-surface-light' : 'opacity-40 grayscale pointer-events-none'}`}
             >
-              <button 
+              <div 
                 onClick={() => addToCartDirectly(p)}
-                className="absolute inset-0 z-0 p-6 flex flex-col justify-between active:scale-[0.98] transition-transform"
+                className="absolute inset-0 z-0 p-6 flex flex-col justify-between active:scale-[0.98] transition-transform cursor-pointer"
               >
                 <div>
                   <h3 className="font-black text-xl text-white leading-tight mb-2 group-hover:text-gold transition-colors">{p.nome}</h3>
@@ -294,7 +294,7 @@ export default function TakeawayTabletView() {
                     </div>
                   </div>
                 </div>
-              </button>
+              </div>
             </div>
           ))}
         </div>
@@ -483,19 +483,32 @@ export default function TakeawayTabletView() {
                             <AlertCircle size={14} className="text-gold" /> Varianti Rapide
                         </h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {['Senza Glutine', 'Senza Lattosio', 'Rosè', 'Bianca', 'Rossa', 'Cottura ++'].map(note => {
+                            {['Rosè', 'Bianca', 'Rossa', 'Cottura ++', 'Senza Glutine', 'Senza Lattosio'].map(note => {
                                const isActive = editingItem.notes.includes(note);
                                return (
                                  <button 
                                   key={note}
                                   onClick={() => {
                                     let newNotes = editingItem.notes;
+                                    let newAdded = [...editingItem.addedIngredients];
+                                    
+                                    const pricedVariants: Record<string, number> = {
+                                      'Senza Glutine': 5.0,
+                                      'Senza Lattosio': 1.5
+                                    };
+
                                     if (isActive) {
                                       newNotes = newNotes.replace(note, '').replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '').trim();
+                                      if (pricedVariants[note]) {
+                                        newAdded = newAdded.filter(a => a.nome !== note);
+                                      }
                                     } else {
                                       newNotes = newNotes ? `${newNotes}, ${note}` : note;
+                                      if (pricedVariants[note]) {
+                                        newAdded.push({ nome: note, prezzo: pricedVariants[note] });
+                                      }
                                     }
-                                    setEditingItem({...editingItem, notes: newNotes});
+                                    setEditingItem({...editingItem, notes: newNotes, addedIngredients: newAdded});
                                   }}
                                   className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${isActive ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
                                  >

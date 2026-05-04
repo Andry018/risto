@@ -5,6 +5,11 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
   console.warn('Supabase credentials missing. App will run in offline/demo mode if configured.');
+  console.log('Environment Debug:', { 
+    url: supabaseUrl ? 'Defined' : 'Empty', 
+    key: supabaseKey ? 'Defined' : 'Empty',
+    all_env: import.meta.env 
+  });
 }
 
 export const supabase = (supabaseUrl && supabaseKey) 
@@ -48,6 +53,18 @@ export type Order = {
   totale: number;
   status: 'IN_ATTESA' | 'COMPLETATO';
   carrello: any;
+};
+
+export type Reservation = {
+  id: string;
+  nome: string;
+  data: string;
+  ora: string;
+  persone: number;
+  tavolo_id?: string;
+  status: 'CONFERMATA' | 'ANNULLATA' | 'ARRIVATA';
+  note?: string;
+  created_at?: string;
 };
 
 // Demo Mode support

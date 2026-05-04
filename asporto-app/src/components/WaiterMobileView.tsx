@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type Tavolo, IS_DEMO_MODE, toggleDemoMode } from '../lib/supabase';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, WifiOff, LayoutDashboard, Edit3, X } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Trash2 } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
+import SyncStatusIndicator from './SyncStatusIndicator';
 
 type CustomizedItem = Product & {
   quantity: number;
@@ -20,15 +21,19 @@ export default function WaiterMobileView() {
   const [cart, setCart] = useState<CustomizedItem[]>([]);
   const [selectedTable, setSelectedTable] = useState<Tavolo | null>(null);
   const [activeRoom, setActiveRoom] = useState<string>('Principale');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState<'MENU' | 'RIEPILOGO'>('MENU');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCoversModalOpen, setIsCoversModalOpen] = useState(false);
+  const [tempCovers, setTempCovers] = useState(2);
   const [ingSearch, setIngSearch] = useState('');
 
   useEffect(() => {
@@ -76,11 +81,18 @@ export default function WaiterMobileView() {
   }
 
   const selectTable = async (table: Tavolo) => {
+    if (table.status === 'LIBERO') {
+      setSelectedTable(table);
+      setTempCovers(2);
+      setIsCoversModalOpen(true);
+      return;
+    }
+
     setSelectedTable(table);
     setCart([]);
     setActiveOrderId(null);
 
-    if (IS_DEMO_MODE) return;
+    if (IS_DEMO_MODE || !supabase) return;
 
     // Fetch existing order
     const { data } = await supabase
@@ -92,7 +104,51 @@ export default function WaiterMobileView() {
     
     if (data) {
       setActiveOrderId(data.id);
-      setCart(data.carrello || []);
+      const mappedCart = (data.carrello || []).map((item: any) => {
+        const product = products.find(p => p.nome === item.nome);
+        return {
+          ...(product || { id: Math.random().toString(), nome: item.nome, prezzo: item.prezzo_unitario, categoria: 'Generale', disponibile: true }),
+          quantity: item.quantity,
+          addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
+            const ing = ingredients.find(i => i.nome === name);
+            return { nome: name, prezzo: ing?.prezzo || 0 };
+          }) || [],
+          removedIngredients: item.modifiche?.rimozioni || [],
+          notes: item.modifiche?.note || '',
+          uniqueId: Math.random().toString(36).substring(2, 11)
+        };
+      });
+      setCart(mappedCart);
+      setActiveTab('RIEPILOGO');
+    } else {
+      setActiveTab('MENU');
+    }
+  };
+
+  const confirmCovers = async () => {
+    if (!selectedTable) return;
+    
+    // Update table with guests and mark as occupied
+    const updatedTable = { ...selectedTable, clienti: tempCovers, status: 'OCCUPATO' as const };
+    setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
+    setSelectedTable(updatedTable);
+    setIsCoversModalOpen(false);
+
+    if (!IS_DEMO_MODE) {
+      await syncManager.pushTableUpdate(selectedTable.id, { clienti: tempCovers, status: 'OCCUPATO' });
+    }
+
+    // Automatically add "Coperto" to cart
+    const copertoProd = products.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+    if (copertoProd) {
+      setCart([{
+        ...copertoProd,
+        quantity: tempCovers,
+        addedIngredients: [],
+        removedIngredients: [],
+        notes: '',
+        uniqueId: 'initial-coperto'
+      }]);
     }
   };
 
@@ -149,7 +205,7 @@ export default function WaiterMobileView() {
     return (item.prezzo + extrasPrice) * item.quantity;
   };
 
-  const total = cart.reduce((sum, item) => sum + (item.prezzo * item.quantity), 0);
+  const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
 
   const saveOrder = async (isClosing: boolean = false) => {
     if (!selectedTable || cart.length === 0) return;
@@ -201,7 +257,7 @@ export default function WaiterMobileView() {
   if (loading) return <div className="min-h-screen bg-charcoal flex items-center justify-center text-gold">Caricamento...</div>;
 
   return (
-    <div className="min-h-screen bg-charcoal text-white font-sans flex flex-col max-w-md mx-auto relative border-x border-surface">
+    <div className="h-screen overflow-hidden bg-charcoal text-white font-sans flex flex-col max-w-md mx-auto relative border-x border-surface">
       
       {!selectedTable ? (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -256,134 +312,254 @@ export default function WaiterMobileView() {
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Mobile */}
-          <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between sticky top-0 z-20">
-            <button onClick={() => setSelectedTable(null)} className="p-2 bg-charcoal rounded-xl text-gray-400"><ChevronLeft /></button>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-black italic uppercase text-white">{selectedTable.nome}</h2>
-              {pendingSyncCount > 0 && <WifiOff size={14} className="text-blue-500 animate-pulse" />}
+          <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
+            <button onClick={() => setSelectedTable(null)} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
+            <div className="flex flex-col items-center">
+              <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[8px] font-black text-gold uppercase tracking-[0.2em]">Coperti: {selectedTable.clienti}</span>
+                <SyncStatusIndicator />
+              </div>
             </div>
-            <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-black font-black">
+            <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-black font-black shadow-lg">
                €{total.toFixed(0)}
             </div>
           </div>
 
-          {/* Search & Products */}
-          <div className="p-4 bg-charcoal">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input 
-                type="text" 
-                placeholder="Cerca prodotto..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-12 text-white font-bold outline-none"
-              />
-            </div>
+          {/* Tab Switcher */}
+          <div className="flex p-2 bg-charcoal shrink-0">
+            <button 
+              onClick={() => setActiveTab('RIEPILOGO')}
+              className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'RIEPILOGO' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-500'}`}
+            >
+              Riepilogo
+            </button>
+            <button 
+              onClick={() => setActiveTab('MENU')}
+              className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'MENU' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-500'}`}
+            >
+              Menu
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-40">
-            {products
-              .filter(p => !searchQuery || p.nome.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map(product => {
-                const missing = product.ingredienti?.filter(ingName => {
-                  const ingredient = ingredients.find(i => i.nome === ingName);
-                  return ingredient && !ingredient.disponibile;
-                }) || [];
-                const available = product.disponibile && missing.length === 0;
+          {activeTab === 'MENU' ? (
+            <>
+              {/* Sticky Search & Categories */}
+              <div className="p-4 bg-charcoal space-y-4 shrink-0 shadow-xl z-10">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="Cerca prodotto..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-12 text-white font-bold outline-none focus:border-gold transition-all"
+                  />
+                </div>
+                
+                <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                  <button 
+                    onClick={() => setActiveCategory(null)}
+                    className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all ${!activeCategory ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-surface border-surface-light text-gray-500'}`}
+                  >
+                    Tutti
+                  </button>
+                  {Array.from(new Set(products.map(p => p.categoria))).map(cat => (
+                    <button 
+                      key={cat}
+                      onClick={() => setActiveCategory(cat)}
+                      className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all whitespace-nowrap ${activeCategory === cat ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-surface border-surface-light text-gray-500'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                return (
-                  <div key={product.id} className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${available ? 'bg-surface border-surface-light' : 'bg-red-500/5 border-red-500/20 opacity-60'}`}>
-                    <div className="flex-1 pr-4">
-                      <h3 className={`font-bold ${available ? 'text-white' : 'text-gray-500 line-through'}`}>{product.nome}</h3>
-                      <p className="text-[10px] uppercase font-black text-gray-500">{available ? product.categoria : `MANCA: ${missing.join(', ')}`}</p>
-                    </div>
-                    {available ? (
-                      <div className="flex items-center gap-2">
-                         {cart.filter(c => c.id === product.id).map(c => (
-                           <div key={c.uniqueId} className="flex flex-col items-center">
-                              <span className="text-[8px] font-bold text-gold">x{c.quantity}</span>
-                              <button onClick={() => removeFromCart(c.uniqueId)} className="p-1 text-red-500/50 hover:text-red-500"><X size={10} /></button>
-                           </div>
-                         ))}
-                        <button 
-                          onClick={() => openCustomization(product)}
-                          className="w-10 h-10 bg-charcoal text-gold rounded-xl flex items-center justify-center border border-surface-light active:scale-90"
-                        >
-                          <Edit3 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => {
-                            addToCart(product);
-                          }} 
-                          className="w-10 h-10 bg-gold text-black rounded-xl flex items-center justify-center shadow-lg active:scale-90"
-                        >
-                          <Plus size={18} />
-                        </button>
+              {/* Product Grid - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-40">
+                {products
+                  .filter(p => {
+                    const search = searchQuery.toLowerCase().split('').join('.*');
+                    const regex = new RegExp(search);
+                    return (!searchQuery || regex.test(p.nome.toLowerCase())) && (!activeCategory || p.categoria === activeCategory);
+                  })
+                  .map(product => {
+                    const missing = product.ingredienti?.filter(ingName => {
+                      const ingredient = ingredients.find(i => i.nome === ingName);
+                      return ingredient && !ingredient.disponibile;
+                    }) || [];
+                    const available = product.disponibile && missing.length === 0;
+
+                    return (
+                      <div key={product.id} className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${available ? 'bg-surface border-surface-light active:bg-surface-light/30' : 'bg-red-500/5 border-red-500/20 opacity-60'}`}>
+                        <div className="flex-1 pr-4" onClick={() => available && addToCart(product)}>
+                          <h3 className={`font-bold ${available ? 'text-white' : 'text-gray-500 line-through'}`}>{product.nome}</h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[10px] uppercase font-black text-gray-500">{available ? product.categoria : `MANCA: ${missing.join(', ')}`}</p>
+                            <span className="text-[10px] font-black text-gold">€{product.prezzo.toFixed(2)}</span>
+                          </div>
+                        </div>
+                        {available ? (
+                          <div className="flex items-center gap-2">
+                             {cart.filter(c => c.id === product.id).map(c => (
+                               <div key={c.uniqueId} className="flex flex-col items-center mr-1">
+                                  <span className="text-[10px] font-black text-gold">x{c.quantity}</span>
+                               </div>
+                             ))}
+                            <button 
+                              onClick={() => openCustomization(product)}
+                              className="w-10 h-10 bg-charcoal text-gold rounded-xl flex items-center justify-center border border-surface-light active:scale-90"
+                            >
+                              <Edit3 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => addToCart(product)} 
+                              className="w-10 h-10 bg-gold text-black rounded-xl flex items-center justify-center shadow-lg active:scale-90"
+                            >
+                              <Plus size={18} />
+                            </button>
+                          </div>
+                        ) : (
+                          <AlertTriangle size={18} className="text-red-500" />
+                        )}
                       </div>
-                    ) : (
-                      <AlertTriangle size={18} className="text-red-500" />
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-               {cart.map(item => (
-                 <div key={item.uniqueId} className="bg-surface p-4 rounded-2xl border border-surface-light flex justify-between items-center">
-                    <div className="flex-1">
-                      <h4 className="font-bold text-sm text-white">{item.nome} x{item.quantity}</h4>
-                      <p className="text-[10px] text-gray-500">
-                        {item.addedIngredients.length > 0 && `+${item.addedIngredients.map(a => a.nome).join(', ')} `}
-                        {item.removedIngredients.length > 0 && `NO ${item.removedIngredients.join(', ')} `}
-                        {item.notes}
-                      </p>
-                    </div>
+                    );
+                  })}
+              </div>
+            </>
+          ) : (
+            /* Summary View - Scrollable */
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-40">
+              <div className="bg-surface/50 rounded-3xl p-6 border border-surface-light mb-4">
+                <div className="flex justify-between items-end mb-6">
+                  <div>
+                    <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stato Tavolo</h3>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => editCartItem(item)} className="p-2 text-gray-500"><Edit3 size={14} /></button>
-                      <span className="font-black text-gold text-xs">€{calculateItemPrice(item).toFixed(1)}</span>
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-xl font-black italic text-white uppercase">{activeOrderId ? 'Servizio in corso' : 'Tavolo Occupato'}</span>
                     </div>
-                 </div>
-               ))}
-            </div>
+                  </div>
+                  <div className="text-right">
+                    <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Totale Attuale</h3>
+                    <span className="text-3xl font-black text-gold italic">€{total.toFixed(2)}</span>
+                  </div>
+                </div>
 
-            <div className="p-4 bg-surface border-t border-surface-light rounded-t-[40px] shadow-2xl z-30">
-            <div className="flex justify-between items-center mb-4 px-2">
-              <span className="text-sm font-black text-gray-400 uppercase tracking-widest">Totale</span>
-              <span className="text-3xl font-black text-gold">€{total.toFixed(2)}</span>
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-surface-light pb-2">Articoli Comandati</h4>
+                  {cart.length === 0 ? (
+                    <div className="py-8 text-center text-gray-500 italic text-sm">Nessun articolo aggiunto</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {cart.map(item => (
+                        <div key={item.uniqueId} className="flex justify-between items-start group">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 bg-charcoal rounded text-[10px] flex items-center justify-center font-black text-gold">{item.quantity}</span>
+                              <h5 className="font-bold text-sm text-white">{item.nome}</h5>
+                            </div>
+                            <p className="text-[10px] text-gray-500 ml-7 mt-1">
+                              {item.addedIngredients.length > 0 && <span className="text-emerald-500/80">+{item.addedIngredients.map(a => a.nome).join(', ')} </span>}
+                              {item.removedIngredients.length > 0 && <span className="text-red-500/80">NO {item.removedIngredients.join(', ')} </span>}
+                              {item.notes && <span className="italic">({item.notes})</span>}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-black text-white text-xs">€{calculateItemPrice(item).toFixed(1)}</span>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => editCartItem(item)} className="p-2 bg-charcoal rounded-lg text-gray-500"><Edit3 size={12} /></button>
+                              <button onClick={() => removeFromCart(item.uniqueId)} className="p-2 bg-charcoal rounded-lg text-red-500/50"><Trash2 size={12} /></button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => setActiveTab('MENU')}
+                className="w-full bg-surface border border-gold/30 text-gold py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 shadow-xl"
+              >
+                <Plus size={16} /> AGGIUNGI ALTRI PIATTI
+              </button>
             </div>
+          )}
+
+          {/* Sticky Footer Action Bar */}
+          <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl border-t border-white/5 rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] z-40">
             <div className="flex gap-3">
               <button 
                 onClick={() => saveOrder(false)}
                 disabled={cart.length === 0}
-                className="flex-[2] bg-surface-light hover:bg-white/10 text-white font-black py-4 rounded-2xl border border-white/10 flex items-center justify-center gap-2 disabled:opacity-50"
+                className={`flex-[2] py-4 rounded-2xl border font-black flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                  success 
+                    ? 'bg-emerald-500 border-emerald-500 text-black' 
+                    : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
+                } disabled:opacity-30`}
               >
-                {success ? 'SALVATO!' : 'AGGIORNA'} <Save size={18} />
+                {success ? 'INVIATO!' : 'AGGIORNA'} <Save size={18} />
               </button>
               <button 
                 onClick={() => saveOrder(true)}
                 disabled={cart.length === 0}
-                className="flex-[3] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                className="flex-[3] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl shadow-2xl shadow-gold/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-30"
               >
                 PAGA & CHIUDI <CreditCard size={18} />
               </button>
             </div>
             {IS_DEMO_MODE && (
-               <div className="mt-2 text-center">
-                 <span className="text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">MODALITÀ DEMO ATTIVA</span>
+               <div className="mt-3 text-center">
+                 <span className="text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">DEMO MODE</span>
                </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Covers Modal */}
+      {isCoversModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden p-8">
+            <h2 className="text-2xl font-black italic uppercase text-white mb-2 text-center">Numero Coperti</h2>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-8 text-center">{selectedTable?.nome}</p>
+            
+            <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-3xl p-4 mb-8">
+              <button 
+                onClick={() => setTempCovers(Math.max(1, tempCovers - 1))}
+                className="w-14 h-14 bg-surface rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
+              >
+                <Minus size={24} />
+              </button>
+              <span className="text-5xl font-black italic text-white">{tempCovers}</span>
+              <button 
+                onClick={() => setTempCovers(tempCovers + 1)}
+                className="w-14 h-14 bg-surface rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
+              >
+                <Plus size={24} />
+              </button>
+            </div>
+            
             <button 
-              onClick={() => toggleDemoMode(!IS_DEMO_MODE)}
-              className="w-full text-center text-[10px] text-gray-500 mt-2 underline"
+              onClick={confirmCovers}
+              className="w-full bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-xl shadow-xl shadow-gold/20 active:scale-95 transition-all"
             >
-              {IS_DEMO_MODE ? 'Torna Online' : 'Attiva Modalità Demo'}
+              INIZIA ORDINE
+            </button>
+            <button 
+              onClick={() => { setSelectedTable(null); setIsCoversModalOpen(false); }}
+              className="w-full mt-4 text-gray-500 font-bold uppercase text-[10px] tracking-widest hover:text-white"
+            >
+              ANNULLA
             </button>
           </div>
         </div>
       )}
 
       {/* Customization Modal Mobile */}
+
       {isModalOpen && editingItem && (
         <div className="fixed inset-0 z-[100] flex items-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-surface w-full max-h-[90vh] rounded-t-[40px] shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-300">
@@ -449,6 +625,45 @@ export default function WaiterMobileView() {
                       >
                         {ing.nome.toUpperCase()}
                         <span className="text-[8px] opacity-70">+€{(ing.prezzo || 1.5).toFixed(2)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+              <section>
+                <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-4 flex items-center gap-2">
+                  <AlertCircle size={12} className="text-gold" /> VARIANTI RAPIDE
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {['Rosè', 'Bianca', 'Rossa', 'Senza Glutine', 'Senza Lattosio', 'Ben Cotta'].map(variant => {
+                    const isActive = editingItem.notes.includes(variant);
+                    return (
+                      <button
+                        key={variant}
+                        onClick={() => {
+                          let newNotes = editingItem.notes;
+                          let newAdded = [...editingItem.addedIngredients];
+                          const pricedVariants: Record<string, number> = {
+                            'Senza Glutine': 2.0,
+                            'Senza Lattosio': 1.5
+                          };
+
+                          if (isActive) {
+                            newNotes = newNotes.replace(variant, '').replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '').trim();
+                            if (pricedVariants[variant]) {
+                              newAdded = newAdded.filter(a => a.nome !== variant);
+                            }
+                          } else {
+                            newNotes = newNotes ? `${newNotes}, ${variant}` : variant;
+                            if (pricedVariants[variant]) {
+                              newAdded.push({ nome: variant, prezzo: pricedVariants[variant] });
+                            }
+                          }
+                          setEditingItem({...editingItem, notes: newNotes, addedIngredients: newAdded});
+                        }}
+                        className={`px-4 py-2 rounded-xl font-bold text-[10px] border transition-all ${isActive ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-400'}`}
+                      >
+                        {variant.toUpperCase()}
                       </button>
                     )
                   })}

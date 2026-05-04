@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
-import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, CreditCard, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, AlertCircle } from 'lucide-react';
+import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, CreditCard, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Users } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 
 type CustomizedItem = Product & {
@@ -13,13 +13,20 @@ type CustomizedItem = Product & {
   uniqueId: string;
 };
 
-export default function POSView({ tableId, tableName, onOrderFinished }: { tableId?: string, tableName?: string, onOrderFinished?: () => void }) {
+export default function POSView({ tableId: propTableId, tableName: propTableName, onOrderFinished }: { tableId?: string, tableName?: string, onOrderFinished?: () => void }) {
+  const [searchParams] = useSearchParams();
+  const tableId = propTableId || searchParams.get('tableId');
+  const tableName = propTableName || searchParams.get('tableName');
+
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [cart, setCart] = useState<CustomizedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+  const [splitType, setSplitType] = useState<'NONE' | 'EQUAL' | 'GUESTS' | 'CUSTOM'>('NONE');
+  const [customSplitCount, setCustomSplitCount] = useState(2);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -42,9 +49,8 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
   useEffect(() => {
     fetchProducts();
     fetchIngredients();
-    if (tableId) {
-      fetchExistingOrder();
-    }
+
+    if (!supabase) return;
 
     const productsChannel = supabase
       .channel('public:prodotti')
@@ -58,20 +64,76 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
       supabase.removeChannel(productsChannel); 
       supabase.removeChannel(ingredientsChannel);
     };
-  }, [tableId]);
+  }, []);
+
+  useEffect(() => {
+    if (tableId && products.length > 0) {
+      fetchExistingOrder();
+    }
+  }, [tableId, products.length]);
 
   async function fetchExistingOrder() {
-    if (IS_DEMO_MODE) return;
-    const { data } = await supabase
+    if (IS_DEMO_MODE) {
+      // In demo mode, if we selected a table, let's see if it's one of the mock ones with guests
+      const mockTable = MOCK_TABLES.find(t => t.id === tableId || t.nome === tableName);
+      if (mockTable && mockTable.clienti > 0) {
+        const copertoProd = MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+        if (copertoProd) {
+          setCart([{
+            ...copertoProd,
+            quantity: mockTable.clienti,
+            addedIngredients: [],
+            removedIngredients: [],
+            notes: '',
+            uniqueId: 'initial-coperto'
+          }]);
+        }
+      }
+      return;
+    }
+    const { data: order } = await supabase
       .from('ordini')
       .select('*')
       .eq('nome_cliente', tableName)
       .eq('status', 'IN_ATTESA')
       .maybeSingle();
     
-    if (data) {
-      setActiveOrderId(data.id);
-      setCart(data.carrello || []);
+    if (order) {
+      setActiveOrderId(order.id);
+      const mappedCart = (order.carrello || []).map((item: any) => {
+        const product = products.find(p => p.nome === item.nome);
+        return {
+          ...(product || { id: Math.random().toString(), nome: item.nome, prezzo: item.prezzo_unitario, categoria: 'Generale', disponibile: true }),
+          quantity: item.quantity,
+          addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
+            const ing = ingredients.find(i => i.nome === name);
+            return { nome: name, prezzo: ing?.prezzo || 0 };
+          }) || [],
+          removedIngredients: item.modifiche?.rimozioni || [],
+          notes: item.modifiche?.note || '',
+          uniqueId: Math.random().toString(36).substring(2, 11)
+        };
+      });
+      setCart(mappedCart);
+    } else if (tableId && supabase) {
+      // New order for this table - fetch table to get guest count
+      const { data: table } = await supabase.from('tavoli').select('clienti').eq('id', tableId).single();
+      if (table && table.clienti > 0) {
+        // Fetch products to find "COPERTO"
+        const { data: prods } = await supabase.from('prodotti').select('*').eq('nome', 'COPERTO').maybeSingle();
+        const copertoProd = prods || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+        
+        if (copertoProd) {
+          setCart([{
+            ...copertoProd,
+            quantity: table.clienti,
+            addedIngredients: [],
+            removedIngredients: [],
+            notes: '',
+            uniqueId: 'initial-coperto'
+          }]);
+        }
+      }
     }
   }
 
@@ -82,6 +144,10 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
       return;
     }
     try {
+      if (!supabase) {
+        setProducts(MOCK_PRODUCTS);
+        return;
+      }
       const { data } = await supabase
         .from('prodotti')
         .select('*')
@@ -94,7 +160,7 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
   }
 
   async function fetchIngredients() {
-    if (IS_DEMO_MODE) {
+    if (IS_DEMO_MODE || !supabase) {
       setIngredients(MOCK_INGREDIENTS);
       return;
     }
@@ -256,7 +322,7 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
     if (cart.length === 0 || !tableId) return;
     try {
       const orderData = {
-        nome_cliente: tableName,
+        nome_cliente: tableName || 'POS',
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         totale: total,
         status: 'IN_ATTESA' as const,
@@ -375,10 +441,10 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
               const isTrulyAvailable = product.disponibile && missingIngredients.length === 0;
 
               return (
-                <button
+                <div
                   key={product.id}
                   onClick={() => isTrulyAvailable && addToCart(product)}
-                  className={`bg-surface border p-5 rounded-[24px] flex flex-col justify-between text-left transition-all active:scale-95 group shadow-xl h-44 relative overflow-hidden ${
+                  className={`bg-surface border p-5 rounded-[24px] flex flex-col justify-between text-left transition-all active:scale-95 group shadow-xl h-44 relative overflow-hidden cursor-pointer ${
                     isTrulyAvailable ? 'border-surface-light hover:border-gold/40' : 'border-red-500/20 grayscale opacity-60 cursor-not-allowed'
                   }`}
                 >
@@ -415,7 +481,7 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
                        <span className="bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">ESAURITO</span>
                     </div>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -511,13 +577,21 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
             </div>
           ) : (
             <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setIsSplitModalOpen(true)}
+                disabled={cart.length === 0}
+                className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-4 rounded-2xl border border-dashed border-gold/30 mb-2 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Users size={16} /> DIVISIONE CONTO
+              </button>
+              
               {tableId && (
                 <button
                   onClick={handleUpdateBill}
                   disabled={cart.length === 0}
                   className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-lg py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                 >
-                  Aggiorna Scontrino <Save size={20} />
+                  Salva solo Comanda <Save size={20} />
                 </button>
               )}
               <button
@@ -533,6 +607,74 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
       </aside>
 
     </div>
+      {/* Payment Split Modal */}
+      {isSplitModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden p-10">
+            <div className="flex justify-between items-center mb-10">
+              <div>
+                <h2 className="text-4xl font-black italic uppercase text-white tracking-tighter">Divisione <span className="text-gold">Conto</span></h2>
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Seleziona come dividere il totale di €{total.toFixed(2)}</p>
+              </div>
+              <button onClick={() => setIsSplitModalOpen(false)} className="p-4 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light"><X size={24} /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-10">
+              <button 
+                onClick={() => setSplitType('EQUAL')}
+                className={`p-6 rounded-3xl border-2 flex flex-col items-center gap-4 transition-all ${splitType === 'EQUAL' ? 'bg-gold/10 border-gold text-gold shadow-xl' : 'bg-charcoal border-surface-light text-gray-500'}`}
+              >
+                <div className="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center text-xl font-black italic">1/2</div>
+                <div className="text-center">
+                  <div className="text-xs font-black uppercase tracking-widest">In due</div>
+                  <div className="text-[10px] opacity-60 mt-1">€{(total / 2).toFixed(2)} a testa</div>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setSplitType('GUESTS')}
+                className={`p-6 rounded-3xl border-2 flex flex-col items-center gap-4 transition-all ${splitType === 'GUESTS' ? 'bg-gold/10 border-gold text-gold shadow-xl' : 'bg-charcoal border-surface-light text-gray-500'}`}
+              >
+                <Users size={32} />
+                <div className="text-center">
+                  <div className="text-xs font-black uppercase tracking-widest">Per Coperti</div>
+                  <div className="text-[10px] opacity-60 mt-1">Diviso {MOCK_TABLES.find(t => t.id === tableId)?.clienti || 1} persone</div>
+                </div>
+              </button>
+
+              <div className={`col-span-2 p-6 rounded-3xl border-2 flex items-center justify-between transition-all ${splitType === 'CUSTOM' ? 'bg-gold/10 border-gold text-gold shadow-xl' : 'bg-charcoal border-surface-light text-gray-500'}`}>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setSplitType('CUSTOM')} className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${splitType === 'CUSTOM' ? 'bg-gold text-black' : 'bg-surface'}`}>N</button>
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-widest">Dividi per numero...</div>
+                    {splitType === 'CUSTOM' && <div className="text-[10px] opacity-60 mt-1">€{(total / customSplitCount).toFixed(2)} a testa</div>}
+                  </div>
+                </div>
+                {splitType === 'CUSTOM' && (
+                  <div className="flex items-center gap-4 bg-charcoal p-2 rounded-2xl border border-surface-light">
+                    <button onClick={() => setCustomSplitCount(Math.max(1, customSplitCount - 1))} className="p-2 text-gold"><Minus size={16} /></button>
+                    <span className="text-xl font-black italic text-white w-8 text-center">{customSplitCount}</span>
+                    <button onClick={() => setCustomSplitCount(customSplitCount + 1)} className="p-2 text-gold"><Plus size={16} /></button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button 
+              onClick={() => {
+                const parts = splitType === 'EQUAL' ? 2 : splitType === 'GUESTS' ? (MOCK_TABLES.find(t => t.id === tableId)?.clienti || 1) : customSplitCount;
+                alert(`SIMULAZIONE: Avvio pagamento diviso in ${parts} quote da €${(total / parts).toFixed(2)} ciascuna.`);
+                handleFinishOrder();
+                setIsSplitModalOpen(false);
+              }}
+              disabled={splitType === 'NONE'}
+              className="w-full bg-gold hover:bg-gold-hover text-black font-black py-6 rounded-3xl text-xl shadow-2xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30"
+            >
+              PROCEDI AL PAGAMENTO DIVISO
+            </button>
+          </div>
+        </div>
+      )}
       {/* Customization Modal */}
       {isModalOpen && editingItem && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in zoom-in duration-200">
@@ -586,21 +728,32 @@ export default function POSView({ tableId, tableName, onOrderFinished }: { table
                             <AlertCircle size={14} className="text-gold" /> Varianti Rapide
                         </h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {['Senza Glutine', 'Senza Lattosio', 'Rosè', 'Bianca', 'Rossa', 'Cottura ++'].map(note => {
+                            {['Rosè', 'Bianca', 'Rossa', 'Cottura ++', 'Senza Glutine', 'Senza Lattosio'].map(note => {
                                const isActive = editingItem.notes.includes(note);
                                return (
                                  <button 
                                   key={note}
                                   onClick={() => {
                                     let newNotes = editingItem.notes;
+                                    let newAdded = [...editingItem.addedIngredients];
+                                    
+                                    const pricedVariants: Record<string, number> = {
+                                      'Senza Glutine': 5.0,
+                                      'Senza Lattosio': 1.5
+                                    };
+
                                     if (isActive) {
-                                      // Remove the note and clean up extra spaces/commas
                                       newNotes = newNotes.replace(note, '').replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '').trim();
+                                      if (pricedVariants[note]) {
+                                        newAdded = newAdded.filter(a => a.nome !== note);
+                                      }
                                     } else {
-                                      // Add the note
                                       newNotes = newNotes ? `${newNotes}, ${note}` : note;
+                                      if (pricedVariants[note]) {
+                                        newAdded.push({ nome: note, prezzo: pricedVariants[note] });
+                                      }
                                     }
-                                    setEditingItem({...editingItem, notes: newNotes});
+                                    setEditingItem({...editingItem, notes: newNotes, addedIngredients: newAdded});
                                   }}
                                   className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${isActive ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
                                  >

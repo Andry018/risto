@@ -15,7 +15,8 @@ import {
   ShieldCheck,
   CreditCard,
   RefreshCw,
-  Trash2
+  Trash2,
+  BookOpen
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';

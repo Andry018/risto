@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Order, type Product, type Ingredient } from '../lib/supabase';
-import { LayoutDashboard, BookOpen, CheckCircle2, Map as MapIcon, Save, Calculator, Plus } from 'lucide-react';
+import { supabase, type Order, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
+import { dbUtils } from '../lib/DatabaseUtils';
+import SyncStatusIndicator from './SyncStatusIndicator';
+
+import { LayoutDashboard, BookOpen, CheckCircle2, Map as MapIcon, Save, Calculator, Plus, Minus, Calendar } from 'lucide-react';
 import TableMapView from './TableMapView';
 import POSView from './POSView';
+import ReservationsView from './ReservationsView';
 
 export default function TabletDashboardView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [activeView, setActiveView] = useState<'POS' | 'ORDINI' | 'MAPPA' | 'MENU'>('MAPPA');
+  const [activeView, setActiveView] = useState<'POS' | 'ORDINI' | 'MAPPA' | 'MENU' | 'PRENOTAZIONI'>('MAPPA');
   const [menuTab, setMenuTab] = useState<'PRODOTTI' | 'INGREDIENTI'>('INGREDIENTI');
   const [selectedTable, setSelectedTable] = useState<{ id: string, nome: string } | null>(null);
 
@@ -60,6 +64,16 @@ export default function TabletDashboardView() {
     if (error) fetchIngredients();
   };
 
+  const updateProductPrice = async (id: string, newPrice: number) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, prezzo: newPrice } : p));
+    await supabase.from('prodotti').update({ prezzo: newPrice }).eq('id', id);
+  };
+
+  const updateIngredientPrice = async (id: string, newPrice: number) => {
+    setIngredients(prev => prev.map(i => i.id === id ? { ...i, prezzo: newPrice } : i));
+    await supabase.from('ingredienti').update({ prezzo: newPrice }).eq('id', id);
+  };
+
   return (
     <div className="min-h-screen bg-charcoal text-white flex">
       
@@ -87,6 +101,13 @@ export default function TabletDashboardView() {
         </button>
 
         <button 
+          onClick={() => { setActiveView('PRENOTAZIONI'); setSelectedTable(null); }}
+          className={`p-4 rounded-2xl transition-all hover:scale-110 ${activeView === 'PRENOTAZIONI' ? 'bg-charcoal text-gold shadow-2xl scale-110' : 'text-black hover:bg-black/10'}`}
+        >
+          <Calendar size={28} strokeWidth={3} />
+        </button>
+
+        <button 
           onClick={() => { setActiveView('MENU'); setSelectedTable(null); }}
           className={`p-4 rounded-2xl transition-all hover:scale-110 ${activeView === 'MENU' ? 'bg-charcoal text-gold shadow-2xl scale-110' : 'text-black hover:bg-black/10'}`}
         >
@@ -104,6 +125,7 @@ export default function TabletDashboardView() {
                   {selectedTable.nome.match(/\d+/)?.[0] || 'T'}
                 </div>
                 <h2 className="text-xl font-black text-white italic uppercase">{selectedTable.nome}</h2>
+                <SyncStatusIndicator />
               </div>
               <button 
                 onClick={() => setSelectedTable(null)}
@@ -128,6 +150,8 @@ export default function TabletDashboardView() {
             setSelectedTable({ id, nome });
             setActiveView('ORDINI');
           }} />
+        ) : activeView === 'PRENOTAZIONI' ? (
+          <ReservationsView />
         ) : activeView === 'MENU' ? (
           <div className="flex-1 flex flex-col p-8 overflow-hidden bg-charcoal">
             <header className="flex justify-between items-center mb-8 bg-surface p-4 rounded-3xl border border-surface-light shadow-2xl">
@@ -158,7 +182,18 @@ export default function TabletDashboardView() {
                     <div key={product.id} className="flex items-center justify-between p-6 bg-surface border border-surface-light rounded-3xl">
                       <div>
                         <h3 className={`font-bold text-xl ${product.disponibile ? 'text-white' : 'text-gray-500 line-through'}`}>{product.nome}</h3>
-                        <p className="text-gray-500 text-[10px] font-bold uppercase">{product.categoria}</p>
+                        <div className="flex items-center gap-3">
+                           <p className="text-gray-500 text-[10px] font-bold uppercase">{product.categoria}</p>
+                           <button 
+                             onClick={() => {
+                               const p = prompt('Nuovo prezzo per ' + product.nome, product.prezzo?.toString() || '0');
+                               if (p) updateProductPrice(product.id, parseFloat(p));
+                             }}
+                             className="text-gold text-xs font-black bg-gold/10 px-2 py-0.5 rounded border border-gold/20 hover:bg-gold hover:text-black transition-all"
+                           >
+                             €{typeof product.prezzo === 'number' ? product.prezzo.toFixed(2) : '0.00'}
+                           </button>
+                         </div>
                       </div>
                       <button 
                         onClick={() => toggleProductAvailability(product.id, product.disponibile)}
@@ -185,6 +220,15 @@ export default function TabletDashboardView() {
                         </button>
                       </div>
                       <h3 className={`font-black text-xl uppercase ${ing.disponibile ? 'text-white' : 'text-red-500'}`}>{ing.nome}</h3>
+                      <button 
+                         onClick={() => {
+                           const p = prompt('Nuovo prezzo per extra ' + ing.nome, ing.prezzo?.toString() || '0');
+                           if (p) updateIngredientPrice(ing.id, parseFloat(p));
+                         }}
+                         className="text-gold text-[10px] font-black mt-1"
+                       >
+                         Extra: €{typeof ing.prezzo === 'number' ? ing.prezzo.toFixed(2) : '0.00'}
+                       </button>
                     </div>
                   ))}
                 </div>
@@ -235,6 +279,8 @@ export default function TabletDashboardView() {
           </div>
         )}
       </main>
+
+
     </div>
   );
 }

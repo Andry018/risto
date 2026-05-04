@@ -41,7 +41,7 @@ class OfflineSync {
 
   public async pushOrder(orderData: Partial<Order>) {
     const pending: PendingOrder = {
-      id: crypto.randomUUID(),
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11),
       data: orderData,
       type: 'INSERT'
     };
@@ -52,7 +52,7 @@ class OfflineSync {
 
   public async pushTableUpdate(tableId: string, updates: any) {
     const pending: PendingOrder = {
-      id: crypto.randomUUID(),
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11),
       data: {},
       type: 'TABLE_UPDATE',
       tableId,
@@ -67,8 +67,12 @@ class OfflineSync {
     return this.queue.length;
   }
 
+  public getIsSyncing() {
+    return this.isSyncing;
+  }
+
   public async sync() {
-    if (this.isSyncing || !navigator.onLine || this.queue.length === 0) return;
+    if (this.isSyncing || !navigator.onLine || this.queue.length === 0 || !supabase) return;
     this.isSyncing = true;
 
     const itemsToSync = [...this.queue];
@@ -76,8 +80,15 @@ class OfflineSync {
       try {
         let success = false;
         if (item.type === 'INSERT') {
-          const { error } = await supabase.from('ordini').insert([item.data]);
+          const { error } = await supabase.from('ordini').upsert([item.data]);
           if (!error) success = true;
+          else {
+            console.error('Supabase Sync Error:', error);
+            if (error.code === '23505' || error.code === '409') {
+              // Conflict but handled by upsert usually, if it still fails, might be a different issue
+              success = true; // Mark as success to clear the queue if it's a permanent conflict
+            }
+          }
         } else if (item.type === 'TABLE_UPDATE' && item.tableId) {
           const { error } = await supabase.from('tavoli').update(item.tableUpdates).eq('id', item.tableId);
           if (!error) success = true;

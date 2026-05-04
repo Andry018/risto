@@ -1,17 +1,22 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_TABLES } from '../lib/MockData';
-import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard } from 'lucide-react';
+import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin } from 'lucide-react';
 
 const SALE = ['Principale', 'Verde', 'Rotonda'];
 
-export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: string, name: string) => void }) {
+export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: string, name: string, status: string) => void }) {
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
   const [activeSala, setActiveSala] = useState(SALE[0]);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
   const [editingTable, setEditingTable] = useState<Tavolo | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [isEditLayoutMode, setIsEditLayoutMode] = useState(false);
+  const [quickCoversModal, setQuickCoversModal] = useState<Tavolo | null>(null);
+  const [isReservationsOpen, setIsReservationsOpen] = useState(false);
+  const [transferTable, setTransferTable] = useState<Tavolo | null>(null);
+  const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
   const pointerDownPos = useRef({ x: 0, y: 0 });
   const pointerDownTime = useRef(0);
@@ -25,6 +30,22 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
       return () => { supabase.removeChannel(channel); };
     }
   }, []);
+
+  async function handleTransfer(from: Tavolo, to: Tavolo) {
+     if (to.status !== 'LIBERO') {
+       alert('Il tavolo di destinazione deve essere libero');
+       return;
+     }
+     
+     const { data: order } = await supabase.from('ordini').select('*').eq('nome_cliente', from.nome).eq('status', 'IN_ATTESA').maybeSingle();
+     if (order) {
+       await supabase.from('ordini').update({ nome_cliente: to.nome }).eq('id', order.id);
+       await updateTable(from.id, { status: 'LIBERO', clienti: 0 });
+       await updateTable(to.id, { status: 'OCCUPATO', clienti: from.clienti });
+       setTransferTable(null);
+       alert(`Ordine spostato da ${from.nome} a ${to.nome}`);
+     }
+   }
 
   async function fetchTavoli() {
     if (IS_DEMO_MODE) {
@@ -64,6 +85,7 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
     if (viewMode === 'LIST') return;
     pointerDownPos.current = { x: e.clientX, y: e.clientY };
     pointerDownTime.current = Date.now();
+    if (!isEditLayoutMode) return;
     setDraggingId(id);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
@@ -144,6 +166,19 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
           </button>
           <div className="w-px h-8 bg-surface-light mx-2" />
           <button
+            onClick={() => setIsEditLayoutMode(!isEditLayoutMode)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all border ${isEditLayoutMode ? 'bg-gold text-black border-gold shadow-lg shadow-gold/20' : 'bg-charcoal text-gray-500 border-surface-light'}`}
+          >
+            {isEditLayoutMode ? <Save size={18} /> : <Edit2 size={18} />} 
+            {isEditLayoutMode ? 'SALVA' : 'LAYOUT'}
+          </button>
+          <button
+            onClick={() => setIsReservationsOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-surface border border-surface-light text-gold rounded-xl font-bold transition-all shadow-lg active:scale-95"
+          >
+            <BookOpen size={20} /> PRENOTAZIONI
+          </button>
+          <button
             onClick={addTable}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95"
           >
@@ -151,6 +186,22 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
           </button>
         </div>
       </header>
+
+      {/* Transfer Mode Indicator */}
+      {transferTable && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] bg-blue-600 text-white px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-6 animate-bounce">
+           <div className="flex flex-col">
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-70">Modalità Spostamento</span>
+              <span className="text-sm font-bold">Seleziona il tavolo di destinazione per {transferTable.nome}</span>
+           </div>
+           <button 
+             onClick={() => setTransferTable(null)}
+             className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-all"
+           >
+             <X size={20} />
+           </button>
+        </div>
+      )}
 
       {/* Main View Area */}
       <div className="flex-1 relative bg-surface/50 rounded-[40px] border border-surface-light overflow-hidden shadow-inner flex flex-col">
@@ -191,7 +242,20 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                       );
                       const duration = Date.now() - pointerDownTime.current;
                       if (dist < 10 && duration < 500) {
-                        setEditingTable(tavolo);
+                        if (isEditLayoutMode) {
+                          setEditingTable(tavolo);
+                        } else {
+                           if (transferTable) {
+                             handleTransfer(transferTable, tavolo);
+                             return;
+                           }
+                           if (tavolo.status === 'OCCUPATO') {
+                            if (onSelectTable) onSelectTable(tavolo.id, tavolo.nome, tavolo.status);
+                            else navigate(`/pos?tableId=${tavolo.id}&tableName=${encodeURIComponent(tavolo.nome)}`);
+                          } else {
+                            setQuickCoversModal(tavolo);
+                          }
+                        }
                       }
                     }}
                     className={`
@@ -201,14 +265,34 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                       ${tavolo.status === 'LIBERO' ? 'bg-charcoal border-gray-700 text-gray-400 hover:border-gray-500' : ''}
                       ${tavolo.status === 'OCCUPATO' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : ''}
                       ${tavolo.status === 'PRENOTATO' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : ''}
+                      ${transferTable?.id === tavolo.id ? 'ring-4 ring-blue-500 animate-pulse' : ''}
                       hover:scale-105 active:scale-95
                     `}
                   >
-                    <span className="text-xs font-black uppercase tracking-tighter opacity-70 mb-1 pointer-events-none">{tavolo.nome}</span>
-                    <div className="flex items-center gap-1 font-bold text-lg pointer-events-none">
-                      <Users size={14} /> {tavolo.clienti}
-                    </div>
+                     <div className="text-center">
+                        <div className={`text-2xl font-black italic mb-0.5 ${tavolo.status === 'OCCUPATO' ? 'text-black' : 'text-white'}`}>{tavolo.nome}</div>
+                        {tavolo.status === 'OCCUPATO' && (
+                          <div className="flex items-center justify-center gap-1 text-[8px] font-black opacity-60">
+                            <Users size={8} /> {tavolo.clienti}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Pulse Alert for long stay */}
+                      {tavolo.status === 'OCCUPATO' && (
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
+                      )}
+                    {tavolo.status === 'OCCUPATO' && (
+                      <div className="mt-1 px-2 py-0.5 bg-black/40 rounded-full text-[8px] font-black tracking-tighter text-emerald-400">
+                        {Math.floor(Math.random() * 45 + 15)}m
+                      </div>
+                    )}
                   </div>
+                  {isEditLayoutMode && (
+                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-gold rounded-full flex items-center justify-center text-black animate-bounce shadow-lg">
+                      <Edit2 size={10} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -231,6 +315,14 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    {onSelectTable && (
+                      <button 
+                        onClick={() => onSelectTable(tavolo.id, tavolo.nome, tavolo.status)}
+                        className={`p-3 rounded-xl transition-all ${tavolo.status === 'LIBERO' ? 'bg-gold text-black' : 'bg-emerald-500 text-black'}`}
+                      >
+                        {tavolo.status === 'LIBERO' ? <Plus size={20} /> : <ShoppingCart size={20} />}
+                      </button>
+                    )}
                     <button onClick={() => setEditingTable(tavolo)} className="p-3 bg-surface-light hover:bg-gold hover:text-black rounded-xl text-gray-400 transition-all"><Edit2 size={20} /></button>
                     <button onClick={() => deleteTable(tavolo.id)} className="p-3 bg-surface-light hover:bg-red-500 hover:text-white rounded-xl text-gray-400 transition-all"><Trash2 size={20} /></button>
                   </div>
@@ -242,34 +334,60 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
 
       </div>
 
-      {/* Edit Modal (Glassmorphism) */}
+      {/* Quick Covers Modal */}
+      {quickCoversModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden p-8 text-center">
+            <h2 className="text-2xl font-black italic uppercase text-white mb-2">{quickCoversModal.nome}</h2>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-8">Inserisci numero di coperti</p>
+            
+            <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-3xl p-4 mb-8">
+              <button 
+                onClick={() => setQuickCoversModal({...quickCoversModal, clienti: Math.max(1, (quickCoversModal.clienti || 2) - 1)})}
+                className="w-12 h-12 flex items-center justify-center bg-surface rounded-2xl text-gold"
+              ><Minus /></button>
+              <span className="text-5xl font-black text-white italic">{quickCoversModal.clienti || 2}</span>
+              <button 
+                onClick={() => setQuickCoversModal({...quickCoversModal, clienti: (quickCoversModal.clienti || 2) + 1})}
+                className="w-12 h-12 flex items-center justify-center bg-surface rounded-2xl text-gold"
+              ><Plus /></button>
+            </div>
+
+            <div className="grid gap-3">
+              <button 
+                onClick={async () => {
+                  const covers = quickCoversModal.clienti || 2;
+                  await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
+                  if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
+                  else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
+                  setQuickCoversModal(null);
+                }}
+                className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+              >
+                {quickCoversModal.status === 'PRENOTATO' ? 'CHECK-IN' : 'APRI TAVOLO'}
+              </button>
+              <button onClick={() => setQuickCoversModal(null)} className="text-gray-500 font-black text-xs uppercase tracking-widest py-2">Annulla</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Technical Edit Modal */}
       {editingTable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md">
           <div className="bg-surface border border-surface-light w-full max-w-md rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden">
             <div className="p-10">
               <div className="flex justify-between items-center mb-10">
-                <h2 className="text-2xl font-black tracking-tight uppercase">Gestisci {editingTable.nome}</h2>
-                <button onClick={() => setEditingTable(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button>
+                <div>
+                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Configurazione <span className="text-gold">{editingTable.nome}</span></h2>
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Impostazioni Tecniche Layout</p>
+                </div>
+                <button onClick={() => setEditingTable(null)} className="p-4 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light">
+                  <X size={24} />
+                </button>
               </div>
 
-              <div className="space-y-6 max-h-[60vh] overflow-y-auto px-1 custom-scrollbar">
-                {/* Sala Assignment */}
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Sposta in un'altra sala</label>
-                  <div className="flex gap-2">
-                    {SALE.map(sala => (
-                      <button
-                        key={sala}
-                        onClick={() => setEditingTable({ ...editingTable, sala })}
-                        className={`flex-1 py-3 rounded-xl font-bold text-[10px] transition-all border ${editingTable.sala === sala ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500'}`}
-                      >
-                        {sala}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Name Input */}
+              <div className="space-y-8">
                 <div className="space-y-3">
                   <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Nome Tavolo</label>
                   <input
@@ -280,80 +398,91 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                   />
                 </div>
 
-                {/* Status Toggle */}
                 <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Stato Tavolo</label>
-                  <div className="flex gap-2">
-                    {['LIBERO', 'OCCUPATO', 'PRENOTATO'].map(status => (
-                      <button
-                        key={status}
-                        onClick={() => setEditingTable({ ...editingTable, status: status as any })}
-                        className={`flex-1 py-3 rounded-xl font-black text-[10px] tracking-wider transition-all border ${editingTable.status === status ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500'}`}
-                      >
-                        {status}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Customer Count */}
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Numero Clienti</label>
-                  <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-2xl p-2 px-4">
-                    <button
-                      onClick={() => setEditingTable({ ...editingTable, clienti: Math.max(0, editingTable.clienti - 1) })}
-                      className="w-10 h-10 flex items-center justify-center bg-surface hover:bg-gold hover:text-black rounded-xl text-gold"
-                    >
-                      <Plus size={16} className="rotate-45" />
+                  <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Forma Tavolo</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button onClick={() => setEditingTable({...editingTable, shape: 'SQUARE'})} className={`p-4 rounded-2xl border ${editingTable.shape === 'SQUARE' ? 'bg-gold/10 border-gold text-gold' : 'bg-charcoal border-surface-light text-gray-500'} transition-all flex flex-col items-center gap-2`}>
+                       <div className="w-8 h-8 bg-current opacity-50 rounded-md" />
+                       <span className="text-[10px] font-black">QUADRATO</span>
                     </button>
-                    <span className="text-3xl font-black text-white">{editingTable.clienti}</span>
-                    <button
-                      onClick={() => setEditingTable({ ...editingTable, clienti: editingTable.clienti + 1 })}
-                      className="w-10 h-10 flex items-center justify-center bg-surface hover:bg-gold hover:text-black rounded-xl text-gold"
-                    >
-                      <Plus size={16} />
+                    <button onClick={() => setEditingTable({...editingTable, shape: 'ROUND'})} className={`p-4 rounded-2xl border ${editingTable.shape === 'ROUND' ? 'bg-gold/10 border-gold text-gold' : 'bg-charcoal border-surface-light text-gray-500'} transition-all flex flex-col items-center gap-2`}>
+                       <div className="w-8 h-8 bg-current opacity-50 rounded-full" />
+                       <span className="text-[10px] font-black">ROTONDO</span>
+                    </button>
+                    <button onClick={() => setEditingTable({...editingTable, shape: 'RECTANGLE'})} className={`p-4 rounded-2xl border ${editingTable.shape === 'RECTANGLE' ? 'bg-gold/10 border-gold text-gold' : 'bg-charcoal border-surface-light text-gray-500'} transition-all flex flex-col items-center gap-2`}>
+                       <div className="w-12 h-6 bg-current opacity-50 rounded-sm" />
+                       <span className="text-[10px] font-black">RETTANGOLO</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Shape Toggle */}
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Forma</label>
-                  <div className="flex gap-3">
-                    <button onClick={() => setEditingTable({ ...editingTable, shape: 'SQUARE' })} className={`flex-1 p-3 rounded-2xl border ${editingTable.shape === 'SQUARE' ? 'border-gold bg-gold/10' : 'border-surface-light'} transition-all flex flex-col items-center gap-2`}>
-                      <div className="w-8 h-8 bg-gold/50 rounded-lg"></div>
-                      <span className="text-[10px] font-bold">QUADRATO</span>
-                    </button>
-                    <button onClick={() => setEditingTable({ ...editingTable, shape: 'ROUND' })} className={`flex-1 p-3 rounded-2xl border ${editingTable.shape === 'ROUND' ? 'border-gold bg-gold/10' : 'border-surface-light'} transition-all flex flex-col items-center gap-2`}>
-                      <div className="w-8 h-8 bg-gold/50 rounded-full"></div>
-                      <span className="text-[10px] font-bold">ROTONDO</span>
-                    </button>
-                    <button onClick={() => setEditingTable({ ...editingTable, shape: 'RECTANGLE' })} className={`flex-1 p-3 rounded-2xl border ${editingTable.shape === 'RECTANGLE' ? 'border-gold bg-gold/10' : 'border-surface-light'} transition-all flex flex-col items-center gap-2`}>
-                      <div className="w-12 h-6 bg-gold/50 rounded-lg"></div>
-                      <span className="text-[10px] font-bold">RETTANGOLO</span>
-                    </button>
-                  </div>
-                </div>
-
+                 <button
+                   onClick={() => { setTransferTable(editingTable); setEditingTable(null); }}
+                   className="w-full bg-blue-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-10 shadow-xl"
+                 >
+                   <MapPin size={20} /> SPOSTA ORDINE / TAVOLO
+                 </button>
+                 <button
+                   onClick={() => { updateTable(editingTable.id, editingTable); setEditingTable(null); }}
+                   className="w-full bg-gold text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-2 shadow-xl"
+                 >
+                   <Save size={20} /> SALVA CONFIGURAZIONE
+                 </button>
                 <button
-                  onClick={() => {
-                    if (onSelectTable) {
-                      onSelectTable(editingTable.id, editingTable.nome);
-                      setEditingTable(null);
-                    }
-                  }}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-6 shadow-xl"
+                  onClick={() => { deleteTable(editingTable.id); setEditingTable(null); }}
+                  className="w-full bg-red-500/10 text-red-500 font-black py-3 rounded-2xl text-xs uppercase tracking-widest mt-2"
                 >
-                  <ShoppingCart size={20} /> ORDINA AL TAVOLO
-                </button>
-
-                <button
-                  onClick={() => { updateTable(editingTable.id, editingTable); setEditingTable(null); }}
-                  className="w-full bg-surface-light hover:bg-white/20 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-3 border border-surface-light"
-                >
-                  <Save size={20} /> SALVA MODIFICHE
+                  <Trash2 size={16} className="inline mr-2" /> ELIMINA TAVOLO
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reservations Modal */}
+      {isReservationsOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300">
+          <div className="bg-surface border border-surface-light w-full max-w-4xl rounded-[50px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-10 border-b border-surface-light flex justify-between items-center bg-surface-light/5">
+              <div>
+                <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">Libro <span className="text-gold">Prenotazioni</span></h2>
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-1">Gestione Tavoli e Orari di Arrivo</p>
+              </div>
+              <button onClick={() => setIsReservationsOpen(false)} className="p-4 bg-charcoal rounded-3xl text-gray-500 hover:text-white border border-surface-light">
+                <X size={28} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+               <div className="grid gap-4">
+                  {[
+                    { name: 'Famiglia Rossi', time: '20:30', guests: 4, table: 'Tavolo 14' },
+                    { name: 'Luca Bianchi', time: '21:00', guests: 2, table: 'Tavolo 5' },
+                    { name: 'Cena Aziendale', time: '20:00', guests: 12, table: 'Tavolo 20' }
+                  ].map((res, i) => (
+                    <div key={i} className="bg-charcoal border border-surface-light p-6 rounded-[32px] flex items-center justify-between group hover:border-gold/30 transition-all">
+                       <div className="flex items-center gap-8">
+                          <div className="text-center min-w-[80px]">
+                             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Orario</p>
+                             <p className="text-3xl font-black text-white italic">{res.time}</p>
+                          </div>
+                          <div className="w-px h-10 bg-surface-light" />
+                          <div>
+                             <p className="text-2xl font-black text-white">{res.name}</p>
+                             <p className="text-[10px] font-black text-gold uppercase tracking-widest">{res.table} • {res.guests} Persone</p>
+                          </div>
+                       </div>
+                       <button className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                          CHECK-IN
+                       </button>
+                    </div>
+                  ))}
+                  
+                  <button className="mt-10 border-2 border-dashed border-surface-light p-8 rounded-[40px] text-gray-500 font-black uppercase tracking-widest flex items-center justify-center gap-4 hover:border-gold/30 hover:text-gold transition-all">
+                     <Plus size={24} /> NUOVA PRENOTAZIONE
+                  </button>
+               </div>
             </div>
           </div>
         </div>

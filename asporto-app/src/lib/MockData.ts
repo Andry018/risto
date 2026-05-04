@@ -19,6 +19,7 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 'p9', nome: 'COCA COLA 33CL', prezzo: 3.0, categoria: 'Bibite', disponibile: true, ingredienti: [] },
   { id: 'p10', nome: 'ACQUA NATURALE 50CL', prezzo: 1.5, categoria: 'Bibite', disponibile: true, ingredienti: [] },
   { id: 'p11', nome: 'BIRRA MORETTI 33CL', prezzo: 4.0, categoria: 'Bibite', disponibile: true, ingredienti: [] },
+  { id: 'p12', nome: 'COPERTO', prezzo: 2.0, categoria: 'Servizio', disponibile: true, ingredienti: [] },
 ];
 
 export const MOCK_INGREDIENTS: Ingredient[] = [
@@ -29,6 +30,8 @@ export const MOCK_INGREDIENTS: Ingredient[] = [
   { id: 'i5', nome: 'Fiori di Zucca', prezzo: 2.0, disponibile: true },
   { id: 'i6', nome: 'Bordo Ripieno', prezzo: 3.0, disponibile: true },
   { id: 'i7', nome: 'Funghi Porcini', prezzo: 2.5, disponibile: true },
+  { id: 'i8', nome: 'Senza Glutine', prezzo: 2.0, disponibile: true },
+  { id: 'i9', nome: 'Senza Lattosio', prezzo: 1.5, disponibile: true },
 ];
 
 export const MOCK_TABLES: Tavolo[] = [
