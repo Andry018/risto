@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Order, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
-import { dbUtils } from '../lib/DatabaseUtils';
+import { supabase, type Order, type Product, type Ingredient } from '../lib/supabase';
 import SyncStatusIndicator from './SyncStatusIndicator';
 
-import { LayoutDashboard, BookOpen, CheckCircle2, Map as MapIcon, Save, Calculator, Plus, Minus, Calendar } from 'lucide-react';
+import { LayoutDashboard, BookOpen, CheckCircle2, Map as MapIcon, Save, Calculator, Plus, Calendar } from 'lucide-react';
 import TableMapView from './TableMapView';
 import POSView from './POSView';
 import ReservationsView from './ReservationsView';

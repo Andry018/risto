@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Tavolo, IS_DEMO_MODE, toggleDemoMode } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Trash2 } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2 } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 import SyncStatusIndicator from './SyncStatusIndicator';
 
@@ -27,7 +27,6 @@ export default function WaiterMobileView() {
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'MENU' | 'RIEPILOGO'>('MENU');
-  const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
@@ -35,12 +34,6 @@ export default function WaiterMobileView() {
   const [isCoversModalOpen, setIsCoversModalOpen] = useState(false);
   const [tempCovers, setTempCovers] = useState(2);
   const [ingSearch, setIngSearch] = useState('');
-
-  useEffect(() => {
-    const handleSyncChange = () => setPendingSyncCount(syncManager.getPendingCount());
-    window.addEventListener('sync-status-changed', handleSyncChange);
-    return () => window.removeEventListener('sync-status-changed', handleSyncChange);
-  }, []);
 
   useEffect(() => {
     fetchInitialData();
