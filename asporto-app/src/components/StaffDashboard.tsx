@@ -13,10 +13,11 @@ import {
   X,
   Database,
   ShieldCheck,
-  CreditCard,
   RefreshCw,
-  Trash2
+  Trash2,
+  LogOut
 } from 'lucide-react';
+import { staffLogout } from '../lib/staffAuth';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { dbUtils } from '../lib/DatabaseUtils';
@@ -31,25 +32,8 @@ export default function StaffDashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchStats();
-    
-    // Stats real-time subscription
-    const ordersChannel = supabase.channel('dashboard-stats')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => fetchStats())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => fetchStats())
-      .subscribe();
-    
-    // Dynamic Clock
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    
-    return () => { 
-      supabase.removeChannel(ordersChannel); 
-      clearInterval(timer);
-    };
-  }, []);
-
   async function fetchStats() {
+    if (!supabase) return;
     const today = new Date().toISOString().split('T')[0];
     
     const [ordersRes, tablesRes] = await Promise.all([
@@ -57,12 +41,36 @@ export default function StaffDashboard() {
       supabase.from('tavoli').select('status')
     ]);
 
-    const pending = ordersRes.data?.filter((o: any) => o.status === 'IN_ATTESA').length || 0;
-    const total = ordersRes.data?.reduce((sum: number, o: any) => sum + o.totale, 0) || 0;
-    const occupied = tablesRes.data?.filter((t: any) => t.status === 'OCCUPATO').length || 0;
+    type OrderRow = { status: string; totale: number };
+    type TableRow = { status: string };
+    const pending = ordersRes.data?.filter((o: OrderRow) => o.status === 'IN_ATTESA').length || 0;
+    const total = ordersRes.data?.reduce((sum: number, o: OrderRow) => sum + o.totale, 0) || 0;
+    const occupied = tablesRes.data?.filter((t: TableRow) => t.status === 'OCCUPATO').length || 0;
 
     setStats({ pendingOrders: pending, occupiedTables: occupied, totalToday: total });
   }
+
+  useEffect(() => {
+    void fetchStats();
+    
+    if (!supabase) {
+      const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+      return () => clearInterval(timer);
+    }
+
+    const sb = supabase;
+    const ordersChannel = sb.channel('dashboard-stats')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => void fetchStats())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchStats())
+      .subscribe();
+    
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    
+    return () => { 
+      sb.removeChannel(ordersChannel); 
+      clearInterval(timer);
+    };
+  }, []);
 
   const handleCleanup = async () => {
     if (!confirm('Sei sicuro? Questo eliminerà TUTTI gli ordini e resetterà i tavoli.')) return;
@@ -71,7 +79,7 @@ export default function StaffDashboard() {
       await dbUtils.cleanupDatabase();
       await fetchStats();
       alert('Database pulito!');
-    } catch (e) {
+    } catch {
       alert('Errore pulizia');
     } finally {
       setLoading(null);
@@ -84,7 +92,7 @@ export default function StaffDashboard() {
       await dbUtils.populateDemoData();
       await fetchStats();
       alert('Dati demo ripristinati!');
-    } catch (e) {
+    } catch {
       alert('Errore salvataggio');
     } finally {
       setLoading(null);
@@ -297,23 +305,6 @@ export default function StaffDashboard() {
                     <div className="bg-charcoal border border-surface-light p-5 rounded-3xl flex items-center justify-between group">
                       <div className="flex items-center gap-4">
                          <div className="p-2 bg-surface rounded-xl text-gray-400">
-                           <CreditCard size={18} />
-                         </div>
-                         <div>
-                            <p className="text-sm font-bold text-white uppercase italic tracking-tight leading-none mb-1">SumUp Affiliate Key</p>
-                            <p className="text-[10px] text-gray-500 uppercase font-black">Necessario per i pagamenti mobile</p>
-                         </div>
-                      </div>
-                      <input 
-                        type="password" 
-                        placeholder="••••••••••••"
-                        className="bg-surface border border-surface-light rounded-xl px-4 py-2 text-gold font-bold text-xs outline-none focus:border-gold/40 w-32"
-                      />
-                    </div>
-
-                    <div className="bg-charcoal border border-surface-light p-5 rounded-3xl flex items-center justify-between group">
-                      <div className="flex items-center gap-4">
-                         <div className="p-2 bg-surface rounded-xl text-gray-400">
                            <Activity size={18} />
                          </div>
                          <div>
@@ -325,6 +316,16 @@ export default function StaffDashboard() {
                         <div className="w-4 h-4 bg-gold rounded-full shadow-lg" />
                       </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Uscire dall\'area staff? Dovrai reinserire il PIN.')) staffLogout();
+                      }}
+                      className="w-full bg-charcoal border border-red-500/30 hover:border-red-500/50 p-5 rounded-3xl flex items-center justify-center gap-3 text-red-400 font-black text-xs uppercase tracking-widest transition-colors"
+                    >
+                      <LogOut size={18} /> Esci dall&apos;area staff
+                    </button>
                   </div>
                 </section>
               </div>

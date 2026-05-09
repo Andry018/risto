@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Order, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
+import { completeKitchenOrder } from '../lib/tableOrderUtils';
 import { CheckCircle, Clock, LayoutGrid, List, ToggleLeft, ToggleRight, ChefHat, Bell, LayoutDashboard, Plus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
 
 export default function AdminView() {
@@ -27,6 +28,25 @@ export default function AdminView() {
 
   const [menuSearch, setMenuSearch] = useState('');
   const [ingredientSearch, setIngredientSearch] = useState('');
+  const [isIngredientsModalOpen, setIsIngredientsModalOpen] = useState(false);
+
+  async function fetchOrders() {
+    if (!supabase) return;
+    const { data } = await supabase.from('ordini').select('*').order('created_at', { ascending: false });
+    if (data) setOrders(data);
+  }
+
+  async function fetchProducts() {
+    if (!supabase) return;
+    const { data } = await supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true });
+    if (data) setProducts(data);
+  }
+  
+  async function fetchIngredients() {
+    if (!supabase) return;
+    const { data } = await supabase.from('ingredienti').select('*').order('nome', { ascending: true });
+    if (data) setIngredients(data);
+  }
 
   useEffect(() => {
     if (IS_DEMO_MODE) {
@@ -35,62 +55,64 @@ export default function AdminView() {
       setIngredients(MOCK_INGREDIENTS);
       return;
     }
-    fetchOrders();
-    fetchProducts();
-    fetchIngredients();
+    if (!supabase) return;
+    const sb = supabase;
+    void fetchOrders();
+    void fetchProducts();
+    void fetchIngredients();
 
-    const ordersChannel = supabase
+    const ordersChannel = sb
       .channel('public:ordini')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, (payload: any) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, (payload: { new: Record<string, unknown> }) => {
         setOrders(current => [payload.new as Order, ...current]);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ordini' }, (payload: any) => {
-        setOrders(current => current.map(o => o.id === payload.new.id ? payload.new as Order : o));
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ordini' }, (payload: { new: Record<string, unknown> }) => {
+        setOrders(current => current.map(o => o.id === (payload.new as Order).id ? payload.new as Order : o));
       })
       .subscribe();
 
-    const productsChannel = supabase
+    const productsChannel = sb
       .channel('public:prodotti')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: any) => {
-        setProducts(current => current.map(p => p.id === payload.new.id ? { ...p, disponibile: payload.new.disponibile } : p));
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: { new: Record<string, unknown> }) => {
+        const row = payload.new as Pick<Product, 'id' | 'disponibile'>;
+        setProducts(current => current.map(p => p.id === row.id ? { ...p, disponibile: row.disponibile } : p));
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(ordersChannel);
-      supabase.removeChannel(productsChannel);
+      sb.removeChannel(ordersChannel);
+      sb.removeChannel(productsChannel);
     };
   }, []);
 
-  async function fetchOrders() {
-    const { data } = await supabase.from('ordini').select('*').order('created_at', { ascending: false });
-    if (data) setOrders(data);
-  }
-
-  async function fetchProducts() {
-    const { data } = await supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true });
-    if (data) setProducts(data);
-  }
-  
-  async function fetchIngredients() {
-    const { data } = await supabase.from('ingredienti').select('*').order('nome', { ascending: true });
-    if (data) setIngredients(data);
-  }
-
   const markAsReady = async (id: string) => {
-    await supabase.from('ordini').update({ status: 'COMPLETATO' }).eq('id', id);
+    if (IS_DEMO_MODE) {
+      setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: 'COMPLETATO' as const } : o)));
+      return;
+    }
+    if (!supabase) return;
+    try {
+      await completeKitchenOrder(supabase, id);
+      void fetchOrders();
+    } catch (e) {
+      console.error(e);
+      alert('Errore aggiornamento ordine');
+    }
   };
 
   const toggleAvailability = async (id: string, currentStatus: boolean) => {
+    if (!supabase) return;
     await supabase.from('prodotti').update({ disponibile: !currentStatus }).eq('id', id);
   };
 
   const toggleIngredientAvailability = async (id: string, currentStatus: boolean) => {
+    if (!supabase) return;
     await supabase.from('ingredienti').update({ disponibile: !currentStatus }).eq('id', id);
     fetchIngredients();
   };
 
   const handleSaveProduct = async () => {
+    if (!supabase) return;
     const productData = editingProduct || newProduct;
     if (!productData.nome || !productData.prezzo) return;
 
@@ -107,6 +129,7 @@ export default function AdminView() {
   };
 
   const handleSaveIngredient = async () => {
+    if (!supabase) return;
     const ingData = editingIngredient || newIngredient;
     if (!ingData.nome) return;
 
@@ -123,15 +146,15 @@ export default function AdminView() {
   };
 
   const deleteIngredient = async (id: string) => {
+    if (!supabase) return;
     if (confirm('Sei sicuro di voler eliminare questa aggiunta?')) {
         await supabase.from('ingredienti').delete().eq('id', id);
         fetchIngredients();
     }
   };
 
-  const [isIngredientsModalOpen, setIsIngredientsModalOpen] = useState(false);
-
   const deleteProduct = async (id: string) => {
+    if (!supabase) return;
     if (confirm('Sei sicuro di voler eliminare questo prodotto?')) {
         await supabase.from('prodotti').delete().eq('id', id);
         fetchProducts();
@@ -268,7 +291,7 @@ export default function AdminView() {
                     
                     <div className="p-6 flex-1 flex flex-col">
                       <ul className="space-y-3 mb-6 flex-1">
-                        {order.carrello.map((item: any, idx: number) => (
+                        {order.carrello.map((item: OrderCarrelloItem, idx: number) => (
                           <li key={idx} className="flex justify-between items-center text-slate-300 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
                             <span className="font-medium text-white line-clamp-1">{item.nome}</span>
                             <span className="font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded text-sm">x{item.quantity}</span>
@@ -492,7 +515,11 @@ export default function AdminView() {
                                 value={editingProduct ? editingProduct.ingredienti?.join(', ') : newProduct.ingredienti?.join(', ')}
                                 onChange={e => {
                                     const ings = e.target.value.split(',').map(i => i.trim()).filter(i => i !== '');
-                                    editingProduct ? setEditingProduct({...editingProduct, ingredienti: ings}) : setNewProduct({...newProduct, ingredienti: ings});
+                                    if (editingProduct) {
+                                      setEditingProduct({ ...editingProduct, ingredienti: ings });
+                                    } else {
+                                      setNewProduct({ ...newProduct, ingredienti: ings });
+                                    }
                                 }}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none h-24"
                                 placeholder="Pomodoro, Mozzarella, Basilico..."

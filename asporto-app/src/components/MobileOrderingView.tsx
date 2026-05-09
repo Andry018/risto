@@ -9,21 +9,25 @@ export default function MobileOrderingView() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activePortata, setActivePortata] = useState<number>(2);
 
-  useEffect(() => {
-    fetchProducts();
-    const channel = supabase
-      .channel('public:prodotti')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: any) => {
-        setProducts(current => current.map(p => p.id === payload.new.id ? { ...p, disponibile: payload.new.disponibile } : p));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
   async function fetchProducts() {
+    if (!supabase) return;
     const { data } = await supabase.from('prodotti').select('*').eq('disponibile', true).order('nome', { ascending: true });
     if (data) setProducts(data);
   }
+
+  useEffect(() => {
+    void fetchProducts();
+    if (!supabase) return;
+    const sb = supabase;
+    const channel = sb
+      .channel('public:prodotti')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: { new: Record<string, unknown> }) => {
+        const row = payload.new as Pick<Product, 'id' | 'disponibile'>;
+        setProducts(current => current.map(p => p.id === row.id ? { ...p, disponibile: row.disponibile } : p));
+      })
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+  }, []);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -49,7 +53,7 @@ export default function MobileOrderingView() {
   const displayedProducts = products.filter(p => cart.some(c => c.id === p.id && c.portata === activePortata) || true); // Showing all available for the active portata
 
   const submitOrder = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !supabase) return;
     await supabase.from('ordini').insert([{
       nome_cliente: 'TAVOLO 4',
       orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),

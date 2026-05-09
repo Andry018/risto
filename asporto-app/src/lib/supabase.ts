@@ -1,20 +1,29 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+/**
+ * In sviluppo, se mancano le env, usiamo l'istanza locale standard di `supabase start`.
+ * L'anon key è pubblica (è il default della CLI); non è login utente né password DB.
+ */
+const LOCAL_DEV_SUPABASE_URL = 'http://127.0.0.1:54321';
+const LOCAL_DEV_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn('Supabase credentials missing. App will run in offline/demo mode if configured.');
-  console.log('Environment Debug:', { 
-    url: supabaseUrl ? 'Defined' : 'Empty', 
-    key: supabaseKey ? 'Defined' : 'Empty',
-    all_env: import.meta.env 
-  });
+const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
+const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? '';
+
+const supabaseUrl =
+  envUrl || (import.meta.env.DEV ? LOCAL_DEV_SUPABASE_URL : '');
+const supabaseKey =
+  envKey || (import.meta.env.DEV ? LOCAL_DEV_ANON_KEY : '');
+
+if (import.meta.env.DEV && (!envUrl || !envKey)) {
+  console.info(
+    '[Supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY non impostati: uso default locale (supabase start).'
+  );
 }
 
-export const supabase = (supabaseUrl && supabaseKey) 
-  ? createClient(supabaseUrl, supabaseKey) 
-  : null as any;
+export const supabase: SupabaseClient | null =
+  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export interface Tavolo {
   id: string;
@@ -34,7 +43,7 @@ export type Product = {
   prezzo: number;
   categoria: string;
   disponibile: boolean;
-  ingredienti: string[]; // List of ingredient names or IDs
+  ingredienti: string[];
 };
 
 export type Ingredient = {
@@ -45,6 +54,18 @@ export type Ingredient = {
   created_at?: string;
 };
 
+export type OrderCarrelloItem = {
+  nome: string;
+  quantity: number;
+  prezzo_unitario?: number;
+  categoria?: string;
+  modifiche?: {
+    aggiunte?: string[];
+    rimozioni?: string[];
+    note?: string;
+  };
+};
+
 export type Order = {
   id: string;
   created_at: string;
@@ -52,7 +73,7 @@ export type Order = {
   orario_ritiro: string;
   totale: number;
   status: 'IN_ATTESA' | 'COMPLETATO';
-  carrello: any;
+  carrello: OrderCarrelloItem[];
 };
 
 export type Reservation = {
@@ -67,10 +88,9 @@ export type Reservation = {
   created_at?: string;
 };
 
-// Demo Mode support
 export const IS_DEMO_MODE = localStorage.getItem('demo_mode') === 'true';
 
 export const toggleDemoMode = (val: boolean) => {
   localStorage.setItem('demo_mode', val ? 'true' : 'false');
-  window.location.reload(); // Refresh to apply throughout
+  window.location.reload();
 };

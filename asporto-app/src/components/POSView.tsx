@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
+import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, CreditCard, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Users } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Users } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 
 type CustomizedItem = Product & {
@@ -28,9 +29,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [splitType, setSplitType] = useState<'NONE' | 'EQUAL' | 'GUESTS' | 'CUSTOM'>('NONE');
   const [customSplitCount, setCustomSplitCount] = useState(2);
   const [orderSuccess, setOrderSuccess] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
-  const [testMode, setTestMode] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   
   // Customization state
@@ -43,99 +42,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     window.addEventListener('sync-status-changed', handleSyncChange);
     return () => window.removeEventListener('sync-status-changed', handleSyncChange);
   }, []);
-
-  const SUMUP_AFFILIATE_KEY = import.meta.env.VITE_SUMUP_AFFILIATE_KEY || "YOUR_AFFILIATE_KEY";
-
-  useEffect(() => {
-    fetchProducts();
-    fetchIngredients();
-
-    if (!supabase) return;
-
-    const productsChannel = supabase
-      .channel('public:prodotti')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => fetchProducts())
-      .subscribe();
-    const ingredientsChannel = supabase
-      .channel('public:ingredienti')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => fetchIngredients())
-      .subscribe();
-    return () => { 
-      supabase.removeChannel(productsChannel); 
-      supabase.removeChannel(ingredientsChannel);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (tableId && products.length > 0) {
-      fetchExistingOrder();
-    }
-  }, [tableId, products.length]);
-
-  async function fetchExistingOrder() {
-    if (IS_DEMO_MODE) {
-      // In demo mode, if we selected a table, let's see if it's one of the mock ones with guests
-      const mockTable = MOCK_TABLES.find(t => t.id === tableId || t.nome === tableName);
-      if (mockTable && mockTable.clienti > 0) {
-        const copertoProd = MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
-        if (copertoProd) {
-          setCart([{
-            ...copertoProd,
-            quantity: mockTable.clienti,
-            addedIngredients: [],
-            removedIngredients: [],
-            notes: '',
-            uniqueId: 'initial-coperto'
-          }]);
-        }
-      }
-      return;
-    }
-    const { data: order } = await supabase
-      .from('ordini')
-      .select('*')
-      .eq('nome_cliente', tableName)
-      .eq('status', 'IN_ATTESA')
-      .maybeSingle();
-    
-    if (order) {
-      setActiveOrderId(order.id);
-      const mappedCart = (order.carrello || []).map((item: any) => {
-        const product = products.find(p => p.nome === item.nome);
-        return {
-          ...(product || { id: Math.random().toString(), nome: item.nome, prezzo: item.prezzo_unitario, categoria: 'Generale', disponibile: true }),
-          quantity: item.quantity,
-          addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
-            const ing = ingredients.find(i => i.nome === name);
-            return { nome: name, prezzo: ing?.prezzo || 0 };
-          }) || [],
-          removedIngredients: item.modifiche?.rimozioni || [],
-          notes: item.modifiche?.note || '',
-          uniqueId: Math.random().toString(36).substring(2, 11)
-        };
-      });
-      setCart(mappedCart);
-    } else if (tableId && supabase) {
-      // New order for this table - fetch table to get guest count
-      const { data: table } = await supabase.from('tavoli').select('clienti').eq('id', tableId).single();
-      if (table && table.clienti > 0) {
-        // Fetch products to find "COPERTO"
-        const { data: prods } = await supabase.from('prodotti').select('*').eq('nome', 'COPERTO').maybeSingle();
-        const copertoProd = prods || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
-        
-        if (copertoProd) {
-          setCart([{
-            ...copertoProd,
-            quantity: table.clienti,
-            addedIngredients: [],
-            removedIngredients: [],
-            notes: '',
-            uniqueId: 'initial-coperto'
-          }]);
-        }
-      }
-    }
-  }
 
   async function fetchProducts() {
     if (IS_DEMO_MODE) {
@@ -168,6 +74,98 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     if (data) setIngredients(data);
   }
 
+  async function fetchExistingOrder() {
+    if (IS_DEMO_MODE) {
+      const mockTable = MOCK_TABLES.find(t => t.id === tableId || t.nome === tableName);
+      if (mockTable && mockTable.clienti > 0) {
+        const copertoProd = MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+        if (copertoProd) {
+          setCart([{
+            ...copertoProd,
+            quantity: mockTable.clienti,
+            addedIngredients: [],
+            removedIngredients: [],
+            notes: '',
+            uniqueId: 'initial-coperto'
+          }]);
+        }
+      }
+      return;
+    }
+    if (!supabase) return;
+    const { data: order } = await supabase
+      .from('ordini')
+      .select('*')
+      .eq('nome_cliente', tableName)
+      .eq('status', 'IN_ATTESA')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (order) {
+      setActiveOrderId(order.id);
+      const mappedCart = (order.carrello || []).map((item: OrderCarrelloItem) => {
+        const product = products.find(p => p.nome === item.nome);
+        return {
+          ...(product || { id: newUniqueId(), nome: item.nome, prezzo: item.prezzo_unitario ?? 0, categoria: 'Generale', disponibile: true, ingredienti: [] }),
+          quantity: item.quantity,
+          addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
+            const ing = ingredients.find(i => i.nome === name);
+            return { nome: name, prezzo: ing?.prezzo || 0 };
+          }) || [],
+          removedIngredients: item.modifiche?.rimozioni || [],
+          notes: item.modifiche?.note || '',
+          uniqueId: newUniqueId()
+        };
+      });
+      setCart(mappedCart);
+    } else if (tableId) {
+      const { data: table } = await supabase.from('tavoli').select('clienti').eq('id', tableId).single();
+      if (table && table.clienti > 0) {
+        const { data: prods } = await supabase.from('prodotti').select('*').eq('nome', 'COPERTO').maybeSingle();
+        const copertoProd = prods || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+        
+        if (copertoProd) {
+          setCart([{
+            ...copertoProd,
+            quantity: table.clienti,
+            addedIngredients: [],
+            removedIngredients: [],
+            notes: '',
+            uniqueId: 'initial-coperto'
+          }]);
+        }
+      }
+    }
+  }
+
+  useEffect(() => {
+    void fetchProducts();
+    void fetchIngredients();
+
+    if (!supabase) return;
+    const sb = supabase;
+
+    const productsChannel = sb
+      .channel('public:prodotti')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts())
+      .subscribe();
+    const ingredientsChannel = sb
+      .channel('public:ingredienti')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients())
+      .subscribe();
+    return () => { 
+      sb.removeChannel(productsChannel); 
+      sb.removeChannel(ingredientsChannel);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (tableId && products.length > 0) {
+      void fetchExistingOrder();
+    }
+  }, [tableId, products.length]);
+
   const addToCart = (product: Product) => {
     setCart(prev => {
       const existingIdx = prev.findIndex(item => 
@@ -192,7 +190,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         addedIngredients: [],
         removedIngredients: [],
         notes: '',
-        uniqueId: Math.random().toString(36).substr(2, 9)
+        uniqueId: newUniqueId()
       };
       return [...prev, newItem];
     });
@@ -205,7 +203,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       addedIngredients: [],
       removedIngredients: [],
       notes: '',
-      uniqueId: Math.random().toString(36).substr(2, 9)
+      uniqueId: newUniqueId()
     });
     setIsModalOpen(true);
   };
@@ -253,30 +251,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
 
-  const handleSumUpPayment = () => {
-    const amount = total.toFixed(2);
-    const currency = "EUR";
-    const title = "Ordine RistoPremium";
-    const foreignTxId = `POS-${Date.now()}`;
-    const callbackUrl = window.location.href;
-
-    const sumupUrl = `sumupmerchant://pay/1.0?amount=${amount}&currency=${currency}&affiliate-key=${SUMUP_AFFILIATE_KEY}&title=${encodeURIComponent(title)}&foreign-tx-id=${foreignTxId}&callbacksuccess=${encodeURIComponent(callbackUrl)}&callbackfail=${encodeURIComponent(callbackUrl)}`;
-    
-    window.location.href = sumupUrl;
-  };
-
   const handleFinishOrder = async () => {
     if (cart.length === 0) return;
-
-    if (paymentMethod === 'CARD') {
-      if (testMode) {
-        setOrderSuccess(true);
-        // Simulate delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      } else {
-        handleSumUpPayment();
-      }
-    }
 
     try {
       const orderData = {
@@ -378,8 +354,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               </Link>
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Smart Checkout</h2>
-                  {testMode && <span className="px-2 py-0.5 bg-amber-500 text-black text-[8px] font-black rounded uppercase">Test Mode Attivo</span>}
+                  <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Comanda & Conto</h2>
                   {pendingSyncCount > 0 && (
                     <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[8px] font-black rounded uppercase animate-pulse">
                       <WifiOff size={8} /> Sincronizzazione in corso ({pendingSyncCount})
@@ -387,12 +362,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   )}
                 </div>
                 <h1 className="text-4xl font-black text-white mt-1">POS <span className="text-gold italic">TERMINAL</span></h1>
-                <button 
-                  onClick={() => setTestMode(!testMode)}
-                  className="text-[10px] text-gray-500 hover:text-white underline mt-1"
-                >
-                  {testMode ? 'Disattiva Test Mode' : 'Attiva Test Mode'}
-                </button>
               </div>
             </div>
             
@@ -458,7 +427,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     <span className={`text-xl font-black ${isTrulyAvailable ? 'text-white' : 'text-gray-500'}`}>€{product.prezzo.toFixed(2)}</span>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={(e) => { e.stopPropagation(); isTrulyAvailable && openCustomization(product); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isTrulyAvailable) openCustomization(product);
+                        }}
                         className={`p-2 rounded-xl border transition-all active:scale-95 ${
                           isTrulyAvailable 
                             ? 'bg-charcoal border-surface-light text-gold hover:bg-surface-light' 
@@ -549,22 +521,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
         {/* Total & Checkout */}
         <div className="p-8 border-t border-surface-light bg-surface-light/10 relative z-10">
-          
-          {/* Payment Method Selector */}
-          <div className="flex gap-4 mb-8">
-            <button 
-              onClick={() => setPaymentMethod('CASH')}
-              className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'CASH' ? 'bg-gold/10 border-gold text-gold shadow-lg shadow-gold/10' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
-            >
-              <div className="text-sm font-black uppercase tracking-widest">Contanti</div>
-            </button>
-            <button 
-              onClick={() => setPaymentMethod('CARD')}
-              className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${paymentMethod === 'CARD' ? 'bg-gold/10 border-gold text-gold shadow-lg shadow-gold/10' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
-            >
-              <div className="text-sm font-black uppercase tracking-widest">Carta (SumUp)</div>
-            </button>
-          </div>
 
           <div className="flex justify-between items-end mb-8">
             <span className="text-[10px] font-black text-gray-400 uppercase tracking-[.3em]">Totale</span>
@@ -573,7 +529,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
           {orderSuccess ? (
             <div className="w-full bg-emerald-500 text-black font-black text-xl py-6 rounded-3xl flex items-center justify-center gap-3 animate-in zoom-in">
-              <CheckCircle size={24} /> {paymentMethod === 'CARD' ? 'TRANSAZIONE AVVIATA' : 'OPERAZIONE COMPLETATA!'}
+              <CheckCircle size={24} /> OPERAZIONE COMPLETATA!
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -599,7 +555,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 disabled={cart.length === 0}
                 className="w-full bg-gold hover:bg-gold-hover text-black font-black text-2xl py-6 rounded-3xl shadow-2xl shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale"
               >
-                {paymentMethod === 'CARD' ? 'Paga con SumUp' : 'Paga e Chiudi'} <CreditCard size={28} />
+                Chiudi Conto <CheckCircle size={28} />
               </button>
             </div>
           )}

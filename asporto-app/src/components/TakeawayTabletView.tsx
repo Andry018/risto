@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type Order, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
 import { capacityUtils, CAPACITY_CONFIG } from '../lib/CapacityUtils';
+import { newUniqueId } from '../lib/id';
 import { 
   Plus, 
   Minus, 
@@ -45,16 +46,16 @@ export default function TakeawayTabletView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-    const productsSub = supabase.channel('products-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => fetchData()).subscribe();
-    const ordersSub = supabase.channel('orders-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => fetchOrders()).subscribe();
-    
-    return () => { 
-      supabase.removeChannel(productsSub); 
-      supabase.removeChannel(ordersSub);
-    };
-  }, []);
+  async function fetchOrders() {
+    if (IS_DEMO_MODE) {
+      setAllOrders(MOCK_ORDERS);
+      return;
+    }
+    if (!supabase) return;
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase.from('ordini').select('*').gte('created_at', today);
+    if (data) setAllOrders(data);
+  }
 
   async function fetchData() {
     if (IS_DEMO_MODE) {
@@ -63,24 +64,28 @@ export default function TakeawayTabletView() {
       setAllOrders(MOCK_ORDERS);
       return;
     }
+    if (!supabase) return;
     const [{ data: pData }, { data: iData }] = await Promise.all([
       supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true }),
       supabase.from('ingredienti').select('*').order('nome', { ascending: true })
     ]);
     if (pData) setProducts(pData);
     if (iData) setIngredients(iData);
-    fetchOrders();
+    void fetchOrders();
   }
 
-  async function fetchOrders() {
-    if (IS_DEMO_MODE) {
-      setAllOrders(MOCK_ORDERS);
-      return;
-    }
-    const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase.from('ordini').select('*').gte('created_at', today);
-    if (data) setAllOrders(data);
-  }
+  useEffect(() => {
+    void fetchData();
+    if (!supabase) return;
+    const sb = supabase;
+    const productsSub = sb.channel('products-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchData()).subscribe();
+    const ordersSub = sb.channel('orders-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => void fetchOrders()).subscribe();
+    
+    return () => { 
+      sb.removeChannel(productsSub); 
+      sb.removeChannel(ordersSub);
+    };
+  }, []);
 
   const loadMap = useMemo(() => capacityUtils.calculateLoadMap(allOrders), [allOrders]);
   const availableSlots = useMemo(() => capacityUtils.generateSlots(), []);
@@ -111,7 +116,7 @@ export default function TakeawayTabletView() {
         addedIngredients: [],
         removedIngredients: [],
         notes: '',
-        uniqueId: Math.random().toString(36).substr(2, 9)
+        uniqueId: newUniqueId()
       };
       return [...prev, newItem];
     });
@@ -124,7 +129,7 @@ export default function TakeawayTabletView() {
       addedIngredients: [],
       removedIngredients: [],
       notes: '',
-      uniqueId: Math.random().toString(36).substr(2, 9)
+      uniqueId: newUniqueId()
     });
     setIsModalOpen(true);
   };
@@ -187,6 +192,7 @@ export default function TakeawayTabletView() {
       return;
     }
 
+    if (!supabase) return;
     const { error } = await supabase.from('ordini').insert([{
       nome_cliente: customerName.toUpperCase(),
       orario_ritiro: pickupTime,

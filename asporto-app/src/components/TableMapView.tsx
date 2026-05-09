@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_TABLES } from '../lib/MockData';
+import { stablePseudoMinutes } from '../lib/id';
 import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin } from 'lucide-react';
 
 const SALE = ['Principale', 'Verde', 'Rotonda'];
@@ -21,23 +22,38 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
   const pointerDownPos = useRef({ x: 0, y: 0 });
   const pointerDownTime = useRef(0);
 
-  useEffect(() => {
-    fetchTavoli();
-    if (!IS_DEMO_MODE) {
-      const channel = supabase.channel('public:tavoli')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => fetchTavoli())
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
+  const updateTable = async (id: string, updates: Partial<Tavolo>) => {
+    setTavoli(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    if (!IS_DEMO_MODE && supabase) {
+      await supabase.from('tavoli').update(updates).eq('id', id);
     }
-  }, []);
+  };
+
+  async function fetchTavoli() {
+    if (IS_DEMO_MODE) {
+      setTavoli(MOCK_TABLES);
+      return;
+    }
+    if (!supabase) return;
+    const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
+    if (data) setTavoli(data);
+  }
 
   async function handleTransfer(from: Tavolo, to: Tavolo) {
      if (to.status !== 'LIBERO') {
        alert('Il tavolo di destinazione deve essere libero');
        return;
      }
+     if (!supabase) return;
      
-     const { data: order } = await supabase.from('ordini').select('*').eq('nome_cliente', from.nome).eq('status', 'IN_ATTESA').maybeSingle();
+     const { data: order } = await supabase
+       .from('ordini')
+       .select('*')
+       .eq('nome_cliente', from.nome)
+       .eq('status', 'IN_ATTESA')
+       .order('created_at', { ascending: false })
+       .limit(1)
+       .maybeSingle();
      if (order) {
        await supabase.from('ordini').update({ nome_cliente: to.nome }).eq('id', order.id);
        await updateTable(from.id, { status: 'LIBERO', clienti: 0 });
@@ -47,29 +63,16 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
      }
    }
 
-  async function fetchTavoli() {
-    if (IS_DEMO_MODE) {
-      setTavoli(MOCK_TABLES);
-      return;
-    }
-    const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
-    if (data) setTavoli(data);
-  }
-
-  const updateTable = async (id: string, updates: Partial<Tavolo>) => {
-    // Optimistic update
-    setTavoli(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    await supabase.from('tavoli').update(updates).eq('id', id);
-  };
-
   const deleteTable = async (id: string) => {
-    if (confirm('Sei sicuro di voler eliminare questo tavolo?')) {
+    if (!confirm('Sei sicuro di voler eliminare questo tavolo?')) return;
+    if (!IS_DEMO_MODE && supabase) {
       await supabase.from('tavoli').delete().eq('id', id);
     }
   };
 
   const addTable = async () => {
     const newName = `Tavolo ${tavoli.length + 1}`;
+    if (!supabase) return;
     await supabase.from('tavoli').insert([{
       nome: newName,
       x: 10,
@@ -81,10 +84,21 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
     }]);
   };
 
+  useEffect(() => {
+    void fetchTavoli();
+    if (!IS_DEMO_MODE && supabase) {
+      const sb = supabase;
+      const channel = sb.channel('public:tavoli')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTavoli())
+        .subscribe();
+      return () => { sb.removeChannel(channel); };
+    }
+  }, []);
+
   const handlePointerDown = (id: string, e: React.PointerEvent) => {
     if (viewMode === 'LIST') return;
     pointerDownPos.current = { x: e.clientX, y: e.clientY };
-    pointerDownTime.current = Date.now();
+    pointerDownTime.current = e.timeStamp;
     if (!isEditLayoutMode) return;
     setDraggingId(id);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -240,7 +254,7 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                         Math.pow(e.clientX - pointerDownPos.current.x, 2) + 
                         Math.pow(e.clientY - pointerDownPos.current.y, 2)
                       );
-                      const duration = Date.now() - pointerDownTime.current;
+                      const duration = e.timeStamp - pointerDownTime.current;
                       if (dist < 10 && duration < 500) {
                         if (isEditLayoutMode) {
                           setEditingTable(tavolo);
@@ -284,7 +298,7 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                       )}
                     {tavolo.status === 'OCCUPATO' && (
                       <div className="mt-1 px-2 py-0.5 bg-black/40 rounded-full text-[8px] font-black tracking-tighter text-emerald-400">
-                        {Math.floor(Math.random() * 45 + 15)}m
+                        {stablePseudoMinutes(tavolo.id)}m
                       </div>
                     )}
                   </div>

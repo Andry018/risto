@@ -7,9 +7,12 @@ export const isTablet = () => {
   return window.innerWidth >= 768;
 };
 
+type WindowWithCapacitor = Window & {
+  Capacitor?: { isNativePlatform?: boolean };
+};
+
 export const isNativeApp = () => {
-  // Capacitor adds the Capacitor object to window
-  return (window as any).Capacitor?.isNativePlatform === true;
+  return (window as WindowWithCapacitor).Capacitor?.isNativePlatform === true;
 };
 
 export const getDeviceType = () => {

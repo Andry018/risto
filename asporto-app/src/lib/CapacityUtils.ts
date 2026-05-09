@@ -1,3 +1,5 @@
+import type { Order, OrderCarrelloItem } from './supabase';
+
 export const CAPACITY_CONFIG = {
   MAX_PIZZAS_PER_SLOT: 10,
   SLOT_INTERVAL_MINS: 15,
@@ -24,7 +26,7 @@ export const capacityUtils = {
   },
 
   // Count pizzas in a carrello array
-  countPizzas(carrello: any[]): number {
+  countPizzas(carrello: OrderCarrelloItem[] | null | undefined): number {
     if (!carrello) return 0;
     return carrello.reduce((sum, item) => {
       const isPizza = item.nome?.toLowerCase().includes('pizza') || 
@@ -46,7 +48,7 @@ export const capacityUtils = {
   },
 
   // Calculate the load map { "19:00": 4, "19:15": 10 }
-  calculateLoadMap(orders: any[]): Record<string, number> {
+  calculateLoadMap(orders: Order[]): Record<string, number> {
     const loadMap: Record<string, number> = {};
     
     orders.forEach(order => {
@@ -61,7 +63,7 @@ export const capacityUtils = {
     return loadMap;
   },
 
-  isLive(order: any): boolean {
+  isLive(order: Order): boolean {
     const orderTime = new Date(order.created_at).getTime();
     const now = new Date().getTime();
     return (now - orderTime) < (4 * 60 * 60 * 1000); // Consider "live" if within last 4 hours

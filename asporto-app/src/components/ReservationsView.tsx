@@ -18,24 +18,12 @@ export default function ReservationsView() {
     status: 'CONFERMATA'
   });
 
-  useEffect(() => {
-    fetchReservations();
-    fetchTables();
-    
-    if (!IS_DEMO_MODE && supabase) {
-      const channel = supabase.channel('public:prenotazioni')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'prenotazioni' }, () => fetchReservations())
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [selectedDate]);
-
   async function fetchReservations() {
     if (IS_DEMO_MODE) {
-       // Mock for now if offline
        setReservations([]);
        return;
     }
+    if (!supabase) return;
     const { data } = await supabase
       .from('prenotazioni')
       .select('*')
@@ -45,12 +33,26 @@ export default function ReservationsView() {
   }
 
   async function fetchTables() {
+    if (!supabase) return;
     const { data } = await supabase.from('tavoli').select('*').order('nome');
     if (data) setTables(data);
   }
 
+  useEffect(() => {
+    void fetchReservations();
+    void fetchTables();
+    
+    if (!IS_DEMO_MODE && supabase) {
+      const sb = supabase;
+      const channel = sb.channel('public:prenotazioni')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'prenotazioni' }, () => void fetchReservations())
+        .subscribe();
+      return () => { sb.removeChannel(channel); };
+    }
+  }, [selectedDate]);
+
   async function handleAddReservation() {
-    if (!newRes.nome || !newRes.data || !newRes.ora) return;
+    if (!newRes.nome || !newRes.data || !newRes.ora || !supabase) return;
     setLoading(true);
     try {
       const { error } = await supabase.from('prenotazioni').insert([newRes]);
@@ -64,7 +66,7 @@ export default function ReservationsView() {
         status: 'CONFERMATA'
       });
       fetchReservations();
-    } catch (e) {
+    } catch {
       alert('Errore salvataggio prenotazione');
     } finally {
       setLoading(false);
@@ -72,11 +74,13 @@ export default function ReservationsView() {
   }
 
   async function updateStatus(id: string, status: Reservation['status']) {
+    if (!supabase) return;
     await supabase.from('prenotazioni').update({ status }).eq('id', id);
     fetchReservations();
   }
 
   async function deleteReservation(id: string) {
+    if (!supabase) return;
     if (confirm('Eliminare questa prenotazione?')) {
       await supabase.from('prenotazioni').delete().eq('id', id);
       fetchReservations();

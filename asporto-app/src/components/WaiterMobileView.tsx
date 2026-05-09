@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
+import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2 } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut } from 'lucide-react';
+import { staffLogout } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
 import SyncStatusIndicator from './SyncStatusIndicator';
 
@@ -35,22 +37,12 @@ export default function WaiterMobileView() {
   const [tempCovers, setTempCovers] = useState(2);
   const [ingSearch, setIngSearch] = useState('');
 
-  useEffect(() => {
-    fetchInitialData();
-    const tablesChannel = supabase.channel('public:tavoli').on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => fetchTables()).subscribe();
-    return () => { supabase.removeChannel(tablesChannel); };
-  }, []);
-
-  async function fetchInitialData() {
-    await Promise.all([fetchTables(), fetchProducts(), fetchIngredients()]);
-    setLoading(false);
-  }
-
   async function fetchTables() {
     if (IS_DEMO_MODE) {
       setTables(MOCK_TABLES);
       return;
     }
+    if (!supabase) return;
     const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
     if (data) setTables(data);
   }
@@ -60,6 +52,7 @@ export default function WaiterMobileView() {
       setProducts(MOCK_PRODUCTS);
       return;
     }
+    if (!supabase) return;
     const { data } = await supabase.from('prodotti').select('*').order('nome', { ascending: true });
     if (data) setProducts(data);
   }
@@ -69,9 +62,23 @@ export default function WaiterMobileView() {
       setIngredients(MOCK_INGREDIENTS);
       return;
     }
+    if (!supabase) return;
     const { data } = await supabase.from('ingredienti').select('*');
     if (data) setIngredients(data);
   }
+
+  async function fetchInitialData() {
+    await Promise.all([fetchTables(), fetchProducts(), fetchIngredients()]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void fetchInitialData();
+    if (!supabase) return;
+    const sb = supabase;
+    const tablesChannel = sb.channel('public:tavoli').on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTables()).subscribe();
+    return () => { sb.removeChannel(tablesChannel); };
+  }, []);
 
   const selectTable = async (table: Tavolo) => {
     if (table.status === 'LIBERO') {
@@ -93,14 +100,16 @@ export default function WaiterMobileView() {
       .select('*')
       .eq('nome_cliente', table.nome)
       .eq('status', 'IN_ATTESA')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     
     if (data) {
       setActiveOrderId(data.id);
-      const mappedCart = (data.carrello || []).map((item: any) => {
+      const mappedCart = (data.carrello || []).map((item: OrderCarrelloItem) => {
         const product = products.find(p => p.nome === item.nome);
         return {
-          ...(product || { id: Math.random().toString(), nome: item.nome, prezzo: item.prezzo_unitario, categoria: 'Generale', disponibile: true }),
+          ...(product || { id: newUniqueId(), nome: item.nome, prezzo: item.prezzo_unitario ?? 0, categoria: 'Generale', disponibile: true, ingredienti: [] }),
           quantity: item.quantity,
           addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
             const ing = ingredients.find(i => i.nome === name);
@@ -108,7 +117,7 @@ export default function WaiterMobileView() {
           }) || [],
           removedIngredients: item.modifiche?.rimozioni || [],
           notes: item.modifiche?.note || '',
-          uniqueId: Math.random().toString(36).substring(2, 11)
+          uniqueId: newUniqueId()
         };
       });
       setCart(mappedCart);
@@ -152,7 +161,7 @@ export default function WaiterMobileView() {
       addedIngredients: [],
       removedIngredients: [],
       notes: '',
-      uniqueId: Math.random().toString(36).substr(2, 9)
+      uniqueId: newUniqueId()
     };
     setCart(prev => [...prev, newItem]);
   };
@@ -164,7 +173,7 @@ export default function WaiterMobileView() {
       addedIngredients: [],
       removedIngredients: [],
       notes: '',
-      uniqueId: Math.random().toString(36).substr(2, 9)
+      uniqueId: newUniqueId()
     });
     setIsModalOpen(true);
   };
@@ -232,7 +241,10 @@ export default function WaiterMobileView() {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
         await syncManager.pushOrder(orderData);
-        await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO' });
+        // Il tavolo è già OCCUPATO da conferma coperti; in chiusura diretta non serve marcarlo di nuovo.
+        if (!isClosing) {
+          await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO' });
+        }
       }
 
       if (isClosing) {
@@ -242,7 +254,7 @@ export default function WaiterMobileView() {
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
-    } catch (e) {
+    } catch {
       alert('Errore nel salvataggio');
     }
   };
@@ -257,9 +269,21 @@ export default function WaiterMobileView() {
           <div className="p-6 pb-2 space-y-4">
             <div className="flex justify-between items-center">
               <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
-              <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
-                <LayoutDashboard size={20} />
-              </Link>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('Uscire? Dovrai reinserire il PIN.')) staffLogout();
+                  }}
+                  className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
+                  title="Esci staff"
+                >
+                  <LogOut size={20} />
+                </button>
+                <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
+                  <LayoutDashboard size={20} />
+                </Link>
+              </div>
             </div>
             
             {/* Room Slider */}

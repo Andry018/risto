@@ -14,29 +14,11 @@ export default function CustomerView() {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    // SEO & Title
-    document.title = 'Ordina Online | Ristorante Premium';
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) metaDesc.setAttribute('content', 'Ordina i tuoi piatti preferiti per l\'asporto. Qualità premium direttamente a casa tua.');
-
-    fetchProducts();
-    
-    const channel = supabase
-      .channel('public:prodotti')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: any) => {
-        setProducts(current => 
-          current.map(p => p.id === payload.new.id ? { ...p, disponibile: payload.new.disponibile } : p)
-        );
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
   async function fetchProducts() {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('prodotti')
@@ -53,6 +35,30 @@ export default function CustomerView() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    document.title = 'Ordina Online | Ristorante Premium';
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.setAttribute('content', 'Ordina i tuoi piatti preferiti per l\'asporto. Qualità premium direttamente a casa tua.');
+
+    void fetchProducts();
+    
+    if (!supabase) return;
+    const sb = supabase;
+    const channel = sb
+      .channel('public:prodotti')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: { new: Record<string, unknown> }) => {
+        const row = payload.new as Pick<Product, 'id' | 'disponibile'>;
+        setProducts(current => 
+          current.map(p => p.id === row.id ? { ...p, disponibile: row.disponibile } : p)
+        );
+      })
+      .subscribe();
+
+    return () => {
+      sb.removeChannel(channel);
+    };
+  }, []);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -78,7 +84,7 @@ export default function CustomerView() {
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cart.length === 0 || !customerName || !pickupTime) return;
+    if (cart.length === 0 || !customerName || !pickupTime || !supabase) return;
 
     try {
       const { error } = await supabase.from('ordini').insert([{
@@ -116,15 +122,17 @@ export default function CustomerView() {
     return acc;
   }, {} as Record<string, Product[]>);
 
-  // Initialize expanded state once products are loaded
   useEffect(() => {
-    if (Object.keys(groupedProducts).length > 0 && Object.keys(expandedCategories).length === 0) {
+    const keys = Object.keys(groupedProducts);
+    if (keys.length === 0) return;
+    setExpandedCategories(prev => {
+      if (Object.keys(prev).length > 0) return prev;
       const initial: Record<string, boolean> = {};
-      Object.keys(groupedProducts).forEach(cat => {
-        initial[cat] = true; // All expanded by default for better visibility initially
+      keys.forEach(cat => {
+        initial[cat] = true;
       });
-      setExpandedCategories(initial);
-    }
+      return initial;
+    });
   }, [groupedProducts]);
 
   if (loading) return (

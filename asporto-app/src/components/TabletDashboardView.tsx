@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Order, type Product, type Ingredient } from '../lib/supabase';
+import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem } from '../lib/supabase';
 import SyncStatusIndicator from './SyncStatusIndicator';
 
 import { LayoutDashboard, BookOpen, CheckCircle2, Map as MapIcon, Save, Calculator, Plus, Calendar } from 'lucide-react';
 import TableMapView from './TableMapView';
+import { completeKitchenOrder } from '../lib/tableOrderUtils';
 import POSView from './POSView';
 import ReservationsView from './ReservationsView';
 
@@ -15,61 +16,77 @@ export default function TabletDashboardView() {
   const [menuTab, setMenuTab] = useState<'PRODOTTI' | 'INGREDIENTI'>('INGREDIENTI');
   const [selectedTable, setSelectedTable] = useState<{ id: string, nome: string } | null>(null);
 
-  useEffect(() => {
-    fetchOrders();
-    fetchProducts();
-    fetchIngredients();
-    const ordersChannel = supabase.channel('public:ordini')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => fetchOrders()).subscribe();
-    const productsChannel = supabase.channel('public:prodotti')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => fetchProducts()).subscribe();
-    const ingredientsChannel = supabase.channel('public:ingredienti')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => fetchIngredients()).subscribe();
-    return () => { 
-      supabase.removeChannel(ordersChannel); 
-      supabase.removeChannel(productsChannel); 
-      supabase.removeChannel(ingredientsChannel);
-    };
-  }, []);
-
   async function fetchOrders() {
+    if (!supabase) return;
     const { data } = await supabase.from('ordini').select('*').order('created_at', { ascending: false });
     if (data) setOrders(data);
   }
 
   async function fetchProducts() {
+    if (!supabase) return;
     const { data } = await supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true });
     if (data) setProducts(data);
   }
 
   async function fetchIngredients() {
+    if (!supabase) return;
     const { data } = await supabase.from('ingredienti').select('*').order('nome', { ascending: true });
     if (data) setIngredients(data);
   }
 
+  useEffect(() => {
+    void fetchOrders();
+    void fetchProducts();
+    void fetchIngredients();
+    if (!supabase) return;
+    const sb = supabase;
+    const ordersChannel = sb.channel('public:ordini')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => void fetchOrders()).subscribe();
+    const productsChannel = sb.channel('public:prodotti')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts()).subscribe();
+    const ingredientsChannel = sb.channel('public:ingredienti')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients()).subscribe();
+    return () => { 
+      sb.removeChannel(ordersChannel); 
+      sb.removeChannel(productsChannel); 
+      sb.removeChannel(ingredientsChannel);
+    };
+  }, []);
+
   const markAsReady = async (id: string) => {
-    await supabase.from('ordini').update({ status: 'COMPLETATO' }).eq('id', id);
+    if (!supabase) return;
+    try {
+      await completeKitchenOrder(supabase, id);
+      void fetchOrders();
+    } catch (e) {
+      console.error(e);
+      alert('Errore aggiornamento ordine');
+    }
   };
 
   const toggleProductAvailability = async (id: string, currentStatus: boolean) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, disponibile: !currentStatus } : p));
+    if (!supabase) return;
     const { error } = await supabase.from('prodotti').update({ disponibile: !currentStatus }).eq('id', id);
     if (error) fetchProducts();
   };
 
   const toggleIngredientAvailability = async (id: string, currentStatus: boolean) => {
     setIngredients(prev => prev.map(i => i.id === id ? { ...i, disponibile: !currentStatus } : i));
+    if (!supabase) return;
     const { error } = await supabase.from('ingredienti').update({ disponibile: !currentStatus }).eq('id', id);
     if (error) fetchIngredients();
   };
 
   const updateProductPrice = async (id: string, newPrice: number) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, prezzo: newPrice } : p));
+    if (!supabase) return;
     await supabase.from('prodotti').update({ prezzo: newPrice }).eq('id', id);
   };
 
   const updateIngredientPrice = async (id: string, newPrice: number) => {
     setIngredients(prev => prev.map(i => i.id === id ? { ...i, prezzo: newPrice } : i));
+    if (!supabase) return;
     await supabase.from('ingredienti').update({ prezzo: newPrice }).eq('id', id);
   };
 
@@ -251,7 +268,7 @@ export default function TabletDashboardView() {
                   </div>
                   <div className="p-6 flex-1">
                     <ul className="space-y-4">
-                      {order.carrello?.map((item: any, idx: number) => (
+                      {order.carrello?.map((item: OrderCarrelloItem, idx: number) => (
                         <li key={idx} className="flex items-start gap-4 p-3 rounded-2xl bg-charcoal/40">
                           <CheckCircle2 size={26} className={order.status === 'COMPLETATO' ? 'text-emerald-400' : 'text-gray-500'} />
                           <div>

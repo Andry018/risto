@@ -19,5 +19,9 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Caricamento dati al mount con setState in async fetch è un pattern voluto qui.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

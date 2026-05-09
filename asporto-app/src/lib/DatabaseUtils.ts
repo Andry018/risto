@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 
 export const dbUtils = {
   async cleanupDatabase() {
+    if (!supabase) throw new Error('Supabase non configurato');
     console.log("Inizio pulizia ordini e reset tavoli...");
     
     // 1. Delete all orders
@@ -19,6 +20,7 @@ export const dbUtils = {
   },
 
   async populateDemoData() {
+    if (!supabase) throw new Error('Supabase non configurato');
     console.log("Ripristino dati demo...");
     
     // Ensure we have some default products if the DB is empty
