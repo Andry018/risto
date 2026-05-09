@@ -665,6 +665,7 @@ export default function WaiterMobileView() {
                               <button onClick={() => setCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity + 1 } : i))} className="w-7 h-7 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-lg text-gray-500 transition-all active:scale-90"><Plus size={12} /></button>
                             </div>
                             <span className="font-black text-white text-xs min-w-[3rem] text-right">€{calculateItemPrice(item).toFixed(1)}</span>
+                            <button onClick={() => editCartItem(item)} className="p-1.5 bg-charcoal rounded-lg text-gray-500 hover:text-gold transition-colors"><Edit3 size={12} /></button>
                             <button onClick={() => removeFromCart(item.uniqueId)} className="p-1.5 bg-charcoal rounded-lg text-red-500/50 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
                           </div>
                         </div>
