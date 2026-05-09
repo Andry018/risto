@@ -9,6 +9,7 @@ import { staffLogout } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
 import {
   addedIngredientsFromStoredOrderLine,
+  calculateRemovalsPrice,
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -72,11 +73,13 @@ export default function WaiterMobileView() {
       const mappedCart = (data.carrello || []).map((item: OrderCarrelloItem) => {
         const product = findProductForOrderLine(prods, item.nome);
         const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
+        const rimozioni = item.modifiche?.rimozioni || [];
+        const removalsPrice = calculateRemovalsPrice(rimozioni, ings);
         return {
           ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
           quantity: item.quantity,
-          addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo),
-          removedIngredients: item.modifiche?.rimozioni || [],
+          addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo, removalsPrice),
+          removedIngredients: rimozioni,
           notes: item.modifiche?.note || '',
           uniqueId: newUniqueId()
         };
@@ -130,7 +133,13 @@ export default function WaiterMobileView() {
     if (!supabase) return;
     const sb = supabase;
     const tablesChannel = sb.channel('public:tavoli').on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTables()).subscribe();
-    return () => { sb.removeChannel(tablesChannel); };
+    const productsChannel = sb.channel('public:prodotti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts()).subscribe();
+    const ingredientsChannel = sb.channel('public:ingredienti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients()).subscribe();
+    return () => {
+      sb.removeChannel(tablesChannel);
+      sb.removeChannel(productsChannel);
+      sb.removeChannel(ingredientsChannel);
+    };
   }, []);
 
   /** Tavolo occupato: aggiorna carrello se ordine o riga tavolo cambiano (es. da tablet POS). */
@@ -280,7 +289,11 @@ export default function WaiterMobileView() {
 
   const calculateItemPrice = (item: CustomizedItem) => {
     const extrasPrice = item.addedIngredients.reduce((sum, ing) => sum + ing.prezzo, 0);
-    return (item.prezzo + extrasPrice) * item.quantity;
+    const removalsPrice = item.removedIngredients.reduce((sum, rName) => {
+      const ing = ingredients.find(i => i.nome.toLowerCase() === rName.toLowerCase());
+      return sum + (ing?.prezzo_rimozione || 0);
+    }, 0);
+    return Math.max(0, (item.prezzo + extrasPrice - removalsPrice)) * item.quantity;
   };
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
@@ -302,16 +315,23 @@ export default function WaiterMobileView() {
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         totale: total,
         status: (isClosing ? 'COMPLETATO' : 'IN_ATTESA') as 'COMPLETATO' | 'IN_ATTESA',
-        carrello: cart.map(item => ({
-          nome: item.nome,
-          quantity: item.quantity,
-          prezzo_unitario: item.prezzo + item.addedIngredients.reduce((s, a) => s + a.prezzo, 0),
-          modifiche: {
-            aggiunte: item.addedIngredients.map(a => a.nome),
-            rimozioni: item.removedIngredients,
-            note: item.notes
-          }
-        }))
+        carrello: cart.map(item => {
+          const extras = item.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+          const removals = item.removedIngredients.reduce((s, rName) => {
+            const ing = ingredients.find(i => i.nome.toLowerCase() === rName.toLowerCase());
+            return s + (ing?.prezzo_rimozione || 0);
+          }, 0);
+          return {
+            nome: item.nome,
+            quantity: item.quantity,
+            prezzo_unitario: Math.max(0, item.prezzo + extras - removals),
+            modifiche: {
+              aggiunte: item.addedIngredients.map(a => a.nome),
+              rimozioni: item.removedIngredients,
+              note: item.notes
+            }
+          };
+        })
       };
 
       if (activeOrderId) {
@@ -475,13 +495,35 @@ export default function WaiterMobileView() {
 
               {/* Product Grid - Scrollable */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-40">
-                {products
-                  .filter(p => {
+                {(() => {
+                  const filtered = products.filter(p => {
                     const search = searchQuery.toLowerCase().split('').join('.*');
                     const regex = new RegExp(search);
                     return (!searchQuery || regex.test(p.nome.toLowerCase())) && (!activeCategory || p.categoria === activeCategory);
-                  })
-                  .map(product => {
+                  });
+
+                  const showSub = activeCategory === 'Bevande' || (!activeCategory && filtered.some(p => p.categoria === 'Bevande'));
+                  
+                  if (showSub) {
+                    const bevande = filtered.filter(p => p.categoria === 'Bevande');
+                    const other = filtered.filter(p => p.categoria !== 'Bevande');
+                    const subcats = [...new Set(bevande.map(p => p.sottocategoria || 'Altro'))];
+                    return (
+                      <>
+                        {other.map(product => renderProduct(product))}
+                        {subcats.map(sub => (
+                          <div key={sub}>
+                            <div className="text-[10px] font-black text-gold uppercase tracking-widest py-2 px-1">{sub}</div>
+                            {bevande.filter(p => (p.sottocategoria || 'Altro') === sub).map(product => renderProduct(product))}
+                          </div>
+                        ))}
+                      </>
+                    );
+                  }
+
+                  return filtered.map(product => renderProduct(product));
+
+                  function renderProduct(product: Product) {
                     const missing = product.ingredienti?.filter(ingName => {
                       const ingredient = ingredients.find(i => i.nome === ingName);
                       return ingredient && !ingredient.disponibile;
@@ -522,7 +564,8 @@ export default function WaiterMobileView() {
                         )}
                       </div>
                     );
-                  })}
+                  }
+                })()}
               </div>
             </>
           ) : (
@@ -695,6 +738,7 @@ export default function WaiterMobileView() {
                 <div className="flex flex-wrap gap-2">
                   {editingItem.ingredienti?.map(ing => {
                     const isRemoved = editingItem.removedIngredients.includes(ing);
+                    const removalPrice = ingredients.find(i => i.nome.toLowerCase() === ing.toLowerCase())?.prezzo_rimozione || 0;
                     return (
                       <button
                         key={ing}
@@ -704,7 +748,7 @@ export default function WaiterMobileView() {
                         }}
                         className={`px-4 py-2 rounded-xl font-bold text-[10px] border transition-all ${isRemoved ? 'bg-red-500 border-red-500 text-white' : 'bg-charcoal border-surface-light text-gray-400'}`}
                       >
-                        {isRemoved ? `NO ${ing.toUpperCase()}` : ing.toUpperCase()}
+                        {isRemoved ? `NO ${ing.toUpperCase()} -€${removalPrice.toFixed(2)}` : ing.toUpperCase()}
                       </button>
                     )
                   })}
@@ -734,12 +778,12 @@ export default function WaiterMobileView() {
                         key={ing.id}
                         onClick={() => {
                           if (isAdded) setEditingItem({...editingItem, addedIngredients: editingItem.addedIngredients.filter(a => a.nome !== ing.nome)});
-                          else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo || 1.5 }]});
+                          else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo ?? 0 }]});
                         }}
                         className={`p-3 rounded-xl font-bold text-[10px] border transition-all text-left flex flex-col ${isAdded ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 font-black tracking-tight' : 'bg-charcoal border-surface-light text-gray-500'}`}
                       >
                         {ing.nome.toUpperCase()}
-                        <span className="text-[8px] opacity-70">+€{(ing.prezzo || 1.5).toFixed(2)}</span>
+                        <span className="text-[8px] opacity-70">+€{(ing.prezzo ?? 0).toFixed(2)}</span>
                       </button>
                     )
                   })}

@@ -45,7 +45,7 @@ export default function CustomerView() {
     
     if (!supabase) return;
     const sb = supabase;
-    const channel = sb
+    const prodottiChannel = sb
       .channel('public:prodotti')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Pick<Product, 'id' | 'disponibile'>;
@@ -55,8 +55,14 @@ export default function CustomerView() {
       })
       .subscribe();
 
+    const ingredientiChannel = sb
+      .channel('public:ingredienti-customer')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchProducts())
+      .subscribe();
+
     return () => {
-      sb.removeChannel(channel);
+      sb.removeChannel(prodottiChannel);
+      sb.removeChannel(ingredientiChannel);
     };
   }, []);
 

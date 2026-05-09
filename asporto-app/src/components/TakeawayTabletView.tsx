@@ -160,7 +160,11 @@ export default function TakeawayTabletView() {
 
   const calculateItemPrice = (item: CustomizedItem) => {
     const extrasPrice = item.addedIngredients.reduce((sum, ing) => sum + ing.prezzo, 0);
-    return (item.prezzo + extrasPrice) * item.quantity;
+    const removalsPrice = item.removedIngredients.reduce((sum, rName) => {
+      const ing = ingredients.find(i => i.nome.toLowerCase() === rName.toLowerCase());
+      return sum + (ing?.prezzo_rimozione || 0);
+    }, 0);
+    return Math.max(0, (item.prezzo + extrasPrice - removalsPrice)) * item.quantity;
   };
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
@@ -198,16 +202,23 @@ export default function TakeawayTabletView() {
       orario_ritiro: pickupTime,
       totale: total,
       status: 'IN_ATTESA',
-      carrello: cart.map(i => ({
-        nome: i.nome,
-        quantity: i.quantity,
-        prezzo_unitario: i.prezzo + i.addedIngredients.reduce((s, a) => s + a.prezzo, 0),
-        modifiche: {
-          aggiunte: i.addedIngredients.map(a => a.nome),
-          rimozioni: i.removedIngredients,
-          note: i.notes
-        }
-      }))
+      carrello: cart.map(i => {
+        const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+        const removals = i.removedIngredients.reduce((s, rName) => {
+          const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
+          return s + (ing?.prezzo_rimozione || 0);
+        }, 0);
+        return {
+          nome: i.nome,
+          quantity: i.quantity,
+          prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+          modifiche: {
+            aggiunte: i.addedIngredients.map(a => a.nome),
+            rimozioni: i.removedIngredients,
+            note: i.notes
+          }
+        };
+      })
     }]);
 
     if (!error) {
@@ -222,6 +233,37 @@ export default function TakeawayTabletView() {
   const filteredProducts = products.filter(p => 
     (!activeCategory || p.categoria === activeCategory) &&
     (!searchQuery || p.nome.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const renderProductCard = (p: Product) => (
+    <div
+      key={p.id}
+      className={`bg-surface border rounded-[32px] flex flex-col justify-between text-left transition-all group relative overflow-hidden h-40 ${p.disponibile ? 'border-surface-light' : 'opacity-40 grayscale pointer-events-none'}`}
+    >
+      <div 
+        onClick={() => addToCartDirectly(p)}
+        className="absolute inset-0 z-0 p-6 flex flex-col justify-between active:scale-[0.98] transition-transform cursor-pointer"
+      >
+        <div>
+          <h3 className="font-black text-xl text-white leading-tight mb-2 group-hover:text-gold transition-colors">{p.nome}</h3>
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-2 py-0.5 bg-charcoal rounded-full border border-surface-light">{p.categoria}</span>
+        </div>
+        <div className="flex justify-between items-end">
+          <span className="text-2xl font-black text-white italic">€{p.prezzo.toFixed(2)}</span>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={(e) => { e.stopPropagation(); openCustomization(p); }}
+              className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light hover:bg-surface-light-hover transition-all active:scale-95"
+            >
+              <Edit3 size={20} />
+            </button>
+            <div className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light group-hover:bg-gold group-hover:text-black transition-all">
+              <Plus size={20} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   return (
@@ -272,37 +314,35 @@ export default function TakeawayTabletView() {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
-          {filteredProducts.map(p => (
-            <div
-              key={p.id}
-              className={`bg-surface border rounded-[32px] flex flex-col justify-between text-left transition-all group relative overflow-hidden h-40 ${p.disponibile ? 'border-surface-light' : 'opacity-40 grayscale pointer-events-none'}`}
-            >
-              <div 
-                onClick={() => addToCartDirectly(p)}
-                className="absolute inset-0 z-0 p-6 flex flex-col justify-between active:scale-[0.98] transition-transform cursor-pointer"
-              >
-                <div>
-                  <h3 className="font-black text-xl text-white leading-tight mb-2 group-hover:text-gold transition-colors">{p.nome}</h3>
-                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-2 py-0.5 bg-charcoal rounded-full border border-surface-light">{p.categoria}</span>
-                </div>
-                <div className="flex justify-between items-end">
-                  <span className="text-2xl font-black text-white italic">€{p.prezzo.toFixed(2)}</span>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); openCustomization(p); }}
-                      className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light hover:bg-surface-light-hover transition-all active:scale-95"
-                    >
-                      <Edit3 size={20} />
-                    </button>
-                    <div className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light group-hover:bg-gold group-hover:text-black transition-all">
-                      <Plus size={20} />
-                    </div>
+        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-12">
+          {(() => {
+            const showSub = activeCategory === 'Bevande' || (!activeCategory && filteredProducts.some(p => p.categoria === 'Bevande'));
+            if (showSub) {
+              const bevande = filteredProducts.filter(p => p.categoria === 'Bevande');
+              const other = filteredProducts.filter(p => p.categoria !== 'Bevande');
+              const subcats = [...new Set(bevande.map(p => p.sottocategoria || 'Altro'))];
+              return (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
+                    {other.map(product => renderProductCard(product))}
                   </div>
-                </div>
+                  {subcats.map(sub => (
+                    <div key={sub}>
+                      <div className="text-[10px] font-black text-gold uppercase tracking-widest py-2 px-1 mt-6 mb-3">{sub}</div>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {bevande.filter(p => (p.sottocategoria || 'Altro') === sub).map(product => renderProductCard(product))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              );
+            }
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredProducts.map(product => renderProductCard(product))}
               </div>
-            </div>
-          ))}
+            );
+          })()}
         </div>
       </main>
 
@@ -468,6 +508,7 @@ export default function TakeawayTabletView() {
                         <div className="grid grid-cols-2 gap-2">
                             {editingItem.ingredienti?.map(ing => {
                                const isRemoved = editingItem.removedIngredients.includes(ing);
+                               const removalPrice = ingredients.find(i => i.nome.toLowerCase() === ing.toLowerCase())?.prezzo_rimozione || 0;
                                return (
                                  <button
                                     key={ing}
@@ -477,7 +518,7 @@ export default function TakeawayTabletView() {
                                     }}
                                     className={`px-4 py-3 rounded-2xl font-bold text-[10px] border transition-all text-center ${isRemoved ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-charcoal border-surface-light text-gray-400 hover:border-surface-light-hover'}`}
                                  >
-                                    {isRemoved ? `NO ${ing.toUpperCase()}` : ing.toUpperCase()}
+                                    {isRemoved ? `NO ${ing.toUpperCase()} -€${removalPrice.toFixed(2)}` : ing.toUpperCase()}
                                  </button>
                                )
                             })}
@@ -565,12 +606,12 @@ export default function TakeawayTabletView() {
                                 key={ing.id}
                                 onClick={() => {
                                   if (isAdded) setEditingItem({...editingItem, addedIngredients: editingItem.addedIngredients.filter(a => a.nome !== ing.nome)});
-                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo || 1.5 }]});
+                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo ?? 0 }]});
                                 }}
                                 className={`p-4 rounded-2xl font-bold text-[10px] border transition-all text-left flex flex-col gap-1 ${isAdded ? 'bg-emerald-500 border-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-charcoal border-surface-light text-gray-500 hover:border-surface-light-hover'}`}
                              >
                                 <span className={isAdded ? 'text-black' : 'text-white'}>{ing.nome.toUpperCase()}</span>
-                                <span className={isAdded ? 'text-black/60 font-black' : 'text-emerald-500 font-black'}>+ €{(ing.prezzo || 1.5).toFixed(2)}</span>
+                                <span className={isAdded ? 'text-black/60 font-black' : 'text-emerald-500 font-black'}>+ €{(ing.prezzo ?? 0).toFixed(2)}</span>
                              </button>
                            )
                         })}

@@ -42,6 +42,7 @@ export type Product = {
   nome: string;
   prezzo: number;
   categoria: string;
+  sottocategoria?: string;
   disponibile: boolean;
   ingredienti: string[];
 };
@@ -50,6 +51,7 @@ export type Ingredient = {
   id: string;
   nome: string;
   prezzo: number;
+  prezzo_rimozione: number;
   disponibile: boolean;
   created_at?: string;
 };

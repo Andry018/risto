@@ -14,6 +14,20 @@ export function findIngredientByName(ingredients: Ingredient[], name: string): I
 }
 
 /**
+ * Calcola il prezzo totale delle rimozioni per una riga d'ordine,
+ * cercando ogni ingrediente rimosso nella tabella ingredienti e sommando prezzo_rimozione.
+ */
+export function calculateRemovalsPrice(
+  removedNames: string[],
+  ingredients: Ingredient[]
+): number {
+  return removedNames.reduce((sum, name) => {
+    const ing = findIngredientByName(ingredients, name);
+    return sum + (ing?.prezzo_rimozione ?? 0);
+  }, 0);
+}
+
+/**
  * Ricostruisce aggiunte con prezzo da tabella ingredienti; se la somma non coincide con
  * `prezzo_unitario` salvato (es. nome ingrediente non trovato → prezzo 0), ripartisce la
  * differenza così il totale riga torna ad allinearsi al DB.
@@ -21,7 +35,8 @@ export function findIngredientByName(ingredients: Ingredient[], name: string): I
 export function addedIngredientsFromStoredOrderLine(
   item: OrderCarrelloItem,
   ingredients: Ingredient[],
-  baseProductPrezzo: number
+  baseProductPrezzo: number,
+  removalsPrice?: number
 ): { nome: string; prezzo: number }[] {
   const names = item.modifiche?.aggiunte ?? [];
   let rows = names.map((name: string) => {
@@ -32,7 +47,8 @@ export function addedIngredientsFromStoredOrderLine(
   const saved = item.prezzo_unitario;
   if (saved == null || !Number.isFinite(saved) || rows.length === 0) return rows;
 
-  const extrasTarget = Math.max(0, saved - baseProductPrezzo);
+  const removalsDeduction = removalsPrice ?? 0;
+  const extrasTarget = Math.max(0, saved - baseProductPrezzo + removalsDeduction);
   const sum = rows.reduce((s, r) => s + r.prezzo, 0);
   if (Math.abs(sum - extrasTarget) < 0.02) return rows;
 

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { supabase, type Reservation, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
-import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save } from 'lucide-react';
 
 export default function ReservationsView() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(false);
   
   // New Reservation State
@@ -15,7 +16,8 @@ export default function ReservationsView() {
     data: new Date().toISOString().split('T')[0],
     ora: '20:00',
     persone: 2,
-    status: 'CONFERMATA'
+    status: 'CONFERMATA',
+    note: ''
   });
 
   async function fetchReservations() {
@@ -51,20 +53,39 @@ export default function ReservationsView() {
     }
   }, [selectedDate]);
 
-  async function handleAddReservation() {
+  async function setTableStatus(tavolo_id: string, status: 'PRENOTATO' | 'OCCUPATO' | 'LIBERO', clienti?: number) {
+    const update: Partial<Tavolo> = { status };
+    if (clienti !== undefined) update.clienti = clienti;
+    if (status === 'LIBERO') update.clienti = 0;
+    if (!IS_DEMO_MODE) {
+      await supabase!.from('tavoli').update(update).eq('id', tavolo_id);
+    }
+  }
+
+  async function handleSaveReservation() {
     if (!newRes.nome || !newRes.data || !newRes.ora || !supabase) return;
     setLoading(true);
     try {
-      const { error } = await supabase.from('prenotazioni').insert([newRes]);
-      if (error) throw error;
-      setIsModalOpen(false);
-      setNewRes({
-        nome: '',
-        data: selectedDate,
-        ora: '20:00',
-        persone: 2,
-        status: 'CONFERMATA'
-      });
+      if (editingReservation) {
+        const oldRes = editingReservation;
+        await supabase.from('prenotazioni').update(newRes).eq('id', editingReservation.id);
+
+        // Se cambia tavolo: libera il vecchio, prenota il nuovo
+        if (oldRes.tavolo_id && oldRes.tavolo_id !== newRes.tavolo_id) {
+          await setTableStatus(oldRes.tavolo_id, 'LIBERO');
+        }
+        if (newRes.tavolo_id && oldRes.tavolo_id !== newRes.tavolo_id) {
+          await setTableStatus(newRes.tavolo_id, 'PRENOTATO');
+        }
+      } else {
+        const { error } = await supabase.from('prenotazioni').insert([newRes]);
+        if (error) throw error;
+
+        if (newRes.tavolo_id) {
+          await setTableStatus(newRes.tavolo_id, 'PRENOTATO');
+        }
+      }
+      closeModal();
       fetchReservations();
     } catch {
       alert('Errore salvataggio prenotazione');
@@ -73,18 +94,57 @@ export default function ReservationsView() {
     }
   }
 
-  async function updateStatus(id: string, status: Reservation['status']) {
+  function openNewModal() {
+    setEditingReservation(null);
+    setNewRes({
+      nome: '',
+      data: selectedDate,
+      ora: '20:00',
+      persone: 2,
+      status: 'CONFERMATA',
+      note: ''
+    });
+    setIsModalOpen(true);
+  }
+
+  function openEditModal(res: Reservation) {
+    setEditingReservation(res);
+    setNewRes({ ...res });
+    setIsModalOpen(true);
+  }
+
+  function closeModal() {
+    setIsModalOpen(false);
+    setEditingReservation(null);
+  }
+
+  async function handleCheckIn(res: Reservation) {
     if (!supabase) return;
-    await supabase.from('prenotazioni').update({ status }).eq('id', id);
+    await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', res.id);
+    if (res.tavolo_id) {
+      await setTableStatus(res.tavolo_id, 'OCCUPATO', res.persone);
+    }
     fetchReservations();
   }
 
-  async function deleteReservation(id: string) {
+  async function handleCancel(res: Reservation) {
+    if (!confirm(`Annullare la prenotazione di ${res.nome}?`)) return;
     if (!supabase) return;
-    if (confirm('Eliminare questa prenotazione?')) {
-      await supabase.from('prenotazioni').delete().eq('id', id);
-      fetchReservations();
+    await supabase.from('prenotazioni').update({ status: 'ANNULLATA' }).eq('id', res.id);
+    if (res.tavolo_id) {
+      await setTableStatus(res.tavolo_id, 'LIBERO');
     }
+    fetchReservations();
+  }
+
+  async function handleDelete(res: Reservation) {
+    if (!confirm(`Eliminare la prenotazione di ${res.nome}?`)) return;
+    if (!supabase) return;
+    if (res.tavolo_id) {
+      await setTableStatus(res.tavolo_id, 'LIBERO');
+    }
+    await supabase.from('prenotazioni').delete().eq('id', res.id);
+    fetchReservations();
   }
 
   const changeDate = (days: number) => {
@@ -112,7 +172,7 @@ export default function ReservationsView() {
           </div>
 
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={openNewModal}
             className="bg-gold hover:bg-gold-hover text-black px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center gap-2 active:scale-95 transition-all"
           >
             <Plus size={20} /> Nuova Prenotazione
@@ -161,16 +221,31 @@ export default function ReservationsView() {
                     <div className="flex items-center gap-2 px-6 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-500 font-black text-xs uppercase tracking-widest">
                        <CheckCircle2 size={16} /> ARRIVATO
                     </div>
+                  ) : res.status === 'ANNULLATA' ? (
+                    <div className="flex items-center gap-2 px-6 py-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 font-black text-xs uppercase tracking-widest">
+                       ANNULLATO
+                    </div>
                   ) : (
-                    <button 
-                      onClick={() => updateStatus(res.id, 'ARRIVATA')}
-                      className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-                    >
-                      Check-in
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleCheckIn(res)}
+                        className="bg-emerald-500 text-black px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                      >
+                        Check-in
+                      </button>
+                      <button 
+                        onClick={() => handleCancel(res)}
+                        className="bg-rose-500/10 text-rose-500 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-widest border border-rose-500/20 active:scale-95 transition-all"
+                      >
+                        Annulla
+                      </button>
+                    </div>
                   )}
+                  <button onClick={() => openEditModal(res)} className="p-3 bg-charcoal hover:bg-gold/20 border border-surface-light rounded-2xl text-gray-600 hover:text-gold transition-all">
+                    <Edit3 size={18} />
+                  </button>
                   <button 
-                    onClick={() => deleteReservation(res.id)}
+                    onClick={() => handleDelete(res)}
                     className="p-3 bg-charcoal hover:bg-red-500/10 border border-surface-light rounded-2xl text-gray-600 hover:text-red-500 transition-all"
                   >
                     <Trash2 size={20} />
@@ -182,17 +257,17 @@ export default function ReservationsView() {
         )}
       </div>
 
-      {/* New Reservation Modal */}
+      {/* New/Edit Reservation Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[50px] shadow-2xl overflow-hidden">
             <div className="p-10">
               <div className="flex justify-between items-center mb-10">
                 <div>
-                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Nuova <span className="text-gold">Prenotazione</span></h2>
+                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">{editingReservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Inserimento dati cliente e tavolo</p>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-4 bg-charcoal rounded-3xl text-gray-500 hover:text-white border border-surface-light">
+                <button onClick={closeModal} className="p-4 bg-charcoal rounded-3xl text-gray-500 hover:text-white border border-surface-light">
                   <X size={28} />
                 </button>
               </div>
@@ -249,17 +324,27 @@ export default function ReservationsView() {
                   >
                     <option value="">Nessun tavolo assegnato</option>
                     {tables.map(t => (
-                      <option key={t.id} value={t.id}>{t.nome} ({t.sala})</option>
+                      <option key={t.id} value={t.id}>{t.nome} ({t.sala}) {t.status === 'OCCUPATO' ? '🔴' : t.status === 'PRENOTATO' ? '🟡' : '🟢'}</option>
                     ))}
                   </select>
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Note (Opzionale)</label>
+                  <textarea 
+                    placeholder="Es. allergie, richieste speciali..."
+                    value={newRes.note || ''}
+                    onChange={e => setNewRes({...newRes, note: e.target.value})}
+                    className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all h-20"
+                  />
+                </div>
+
                 <button 
-                  onClick={handleAddReservation}
+                  onClick={handleSaveReservation}
                   disabled={loading}
                   className="w-full bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-[32px] text-lg shadow-2xl shadow-gold/20 mt-8 active:scale-95 transition-all flex items-center justify-center gap-3"
                 >
-                  <Plus size={24} /> Conferma Prenotazione
+                  {editingReservation ? <Save size={24} /> : <Plus size={24} />} {editingReservation ? 'Salva Modifiche' : 'Conferma Prenotazione'}
                 </button>
               </div>
             </div>

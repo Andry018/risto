@@ -7,6 +7,7 @@ import TableMapView from './components/TableMapView';
 import AdminView from './components/AdminView';
 import POSView from './components/POSView';
 import TakeawayTabletView from './components/TakeawayTabletView';
+import PublicMenuView from './components/PublicMenuView';
 import StaffPinGuard from './components/StaffPinGuard';
 import { isTablet } from './lib/DeviceUtils';
 import DatabaseStatusGuard from './components/DatabaseStatusGuard';
@@ -21,6 +22,7 @@ export default function App() {
       <DatabaseStatusGuard>
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
+          <Route path="/menu" element={<PublicMenuView />} />
           <Route element={<StaffPinGuard />}>
             <Route path="/" element={<RootRoute />} />
             <Route path="/takeaway" element={<TakeawayTabletView />} />

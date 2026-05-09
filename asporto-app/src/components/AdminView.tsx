@@ -3,19 +3,20 @@ import { Link } from 'react-router-dom';
 import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
 import { completeKitchenOrder } from '../lib/tableOrderUtils';
-import { CheckCircle, Clock, LayoutGrid, List, ToggleLeft, ToggleRight, ChefHat, Bell, LayoutDashboard, Plus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
+import { CheckCircle, Clock, LayoutGrid, List, ToggleLeft, ToggleRight, ChefHat, Bell, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
 
 export default function AdminView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'ingredients'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'ingredients' | 'removals'>('orders');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     nome: '',
     prezzo: 0,
     categoria: 'Antipasti',
+    sottocategoria: '',
     disponibile: true,
     ingredienti: []
   });
@@ -23,6 +24,7 @@ export default function AdminView() {
   const [newIngredient, setNewIngredient] = useState<Partial<Ingredient>>({
     nome: '',
     prezzo: 1.5,
+    prezzo_rimozione: 0,
     disponibile: true
   });
 
@@ -79,9 +81,15 @@ export default function AdminView() {
       })
       .subscribe();
 
+    const ingredientsChannel = sb
+      .channel('public:ingredienti-admin')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients())
+      .subscribe();
+
     return () => {
       sb.removeChannel(ordersChannel);
       sb.removeChannel(productsChannel);
+      sb.removeChannel(ingredientsChannel);
     };
   }, []);
 
@@ -101,11 +109,13 @@ export default function AdminView() {
   };
 
   const toggleAvailability = async (id: string, currentStatus: boolean) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, disponibile: !currentStatus } : p));
     if (!supabase) return;
     await supabase.from('prodotti').update({ disponibile: !currentStatus }).eq('id', id);
   };
 
   const toggleIngredientAvailability = async (id: string, currentStatus: boolean) => {
+    setIngredients(prev => prev.map(i => i.id === id ? { ...i, disponibile: !currentStatus } : i));
     if (!supabase) return;
     await supabase.from('ingredienti').update({ disponibile: !currentStatus }).eq('id', id);
     fetchIngredients();
@@ -114,7 +124,7 @@ export default function AdminView() {
   const handleSaveProduct = async () => {
     if (!supabase) return;
     const productData = editingProduct || newProduct;
-    if (!productData.nome || !productData.prezzo) return;
+    if (!productData.nome || productData.prezzo === undefined || productData.prezzo === null) return;
 
     if (editingProduct && editingProduct.id) {
         await supabase.from('prodotti').update(productData).eq('id', editingProduct.id);
@@ -124,7 +134,7 @@ export default function AdminView() {
     
     setIsModalOpen(false);
     setEditingProduct(null);
-    setNewProduct({ nome: '', prezzo: 0, categoria: 'Antipasti', disponibile: true, ingredienti: [] });
+    setNewProduct({ nome: '', prezzo: 0, categoria: 'Antipasti', sottocategoria: '', disponibile: true, ingredienti: [] });
     fetchProducts();
   };
 
@@ -141,7 +151,7 @@ export default function AdminView() {
     
     setIsIngredientsModalOpen(false);
     setEditingIngredient(null);
-    setNewIngredient({ nome: '', prezzo: 1.5, disponibile: true });
+    setNewIngredient({ nome: '', prezzo: 1.5, prezzo_rimozione: 0, disponibile: true });
     fetchIngredients();
   };
 
@@ -229,6 +239,19 @@ export default function AdminView() {
               <div className="flex items-center gap-3 font-medium">
                 <Plus size={20} className={activeTab === 'ingredients' ? 'text-emerald-400' : ''} />
                 Gestione Aggiunte
+              </div>
+            </button>
+            <button 
+              onClick={() => setActiveTab('removals')} 
+              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+                activeTab === 'removals' 
+                ? 'bg-slate-800/80 text-white shadow-md border border-slate-700/50' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3 font-medium">
+                <Minus size={20} className={activeTab === 'removals' ? 'text-rose-400' : ''} />
+                Gestione Rimozioni
               </div>
             </button>
           </nav>
@@ -351,7 +374,7 @@ export default function AdminView() {
               </header>
 
               <div className="space-y-12">
-                {['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Speciali', 'Pizze Rosse', 'Pizze Bianche', 'Fritti'].map(cat => {
+                {['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Speciali', 'Pizze Rosse', 'Pizze Bianche', 'Fritti', 'Bevande', 'Caffè e Liquori', 'Dolci', 'EXTRA', 'Servizio'].map(cat => {
                   const filteredProducts = products.filter(p => 
                     p.categoria === cat && 
                     p.nome.toLowerCase().includes(menuSearch.toLowerCase())
@@ -366,6 +389,47 @@ export default function AdminView() {
                           {cat}
                           <div className="h-px bg-slate-800 flex-1"></div>
                       </h3>
+                      {filteredProducts.some(p => p.sottocategoria) ? (
+                        (() => {
+                          const subcats = [...new Set(filteredProducts.map(p => p.sottocategoria || 'Altro'))];
+                          return subcats.map(sub => {
+                            const subProducts = filteredProducts.filter(p => (p.sottocategoria || 'Altro') === sub);
+                            return (
+                              <div key={sub} className="mb-6">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4 ml-1">{sub}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {subProducts.map(product => (
+                                    <div key={product.id} className="group relative bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all">
+                                      <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                          <h4 className="font-bold text-white group-hover:text-indigo-400 transition-colors uppercase text-sm">{product.nome}</h4>
+                                          <p className="text-indigo-400 font-black mt-1">€{product.prezzo.toFixed(2)}</p>
+                                          {product.ingredienti.length > 0 && (
+                                            <p className="text-[9px] text-slate-500 mt-1.5">{product.ingredienti.join(', ')}</p>
+                                          )}
+                                        </div>
+                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Edit2 size={16} /></button>
+                                          <button onClick={() => deleteProduct(product.id)} className="p-2 bg-slate-800 rounded-lg text-rose-500/50 hover:text-rose-500"><Trash2 size={16} /></button>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
+                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${product.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                                          {product.disponibile ? 'Disponibile' : 'Esaurito'}
+                                        </span>
+                                        <button onClick={() => toggleAvailability(product.id, product.disponibile)}
+                                          className={`p-1 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}>
+                                          {product.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()
+                      ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {filteredProducts.map(product => (
                             <div key={product.id} className="group relative bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all">
@@ -373,6 +437,9 @@ export default function AdminView() {
                                 <div>
                                     <h4 className="font-bold text-white group-hover:text-indigo-400 transition-colors uppercase text-sm">{product.nome}</h4>
                                     <p className="text-indigo-400 font-black mt-1">€{product.prezzo.toFixed(2)}</p>
+                                    {product.ingredienti.length > 0 && (
+                                      <p className="text-[9px] text-slate-500 mt-1.5">{product.ingredienti.join(', ')}</p>
+                                    )}
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Edit2 size={16} /></button>
@@ -394,6 +461,7 @@ export default function AdminView() {
                           </div>
                         ))}
                     </div>
+                      )}
                     </section>
                   );
                 })}
@@ -461,6 +529,66 @@ export default function AdminView() {
             </div>
           )}
 
+          {activeTab === 'removals' && (
+            <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <header className="mb-8 flex justify-between items-center">
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-2">Gestione Rimozioni</h2>
+                  <p className="text-slate-400">Imposta lo sconto per la rimozione di ogni ingrediente.</p>
+                </div>
+                <div className="relative w-64">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="Cerca ingrediente..."
+                    value={ingredientSearch}
+                    onChange={e => setIngredientSearch(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none focus:border-rose-500 transition-all text-sm"
+                  />
+                </div>
+              </header>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {ingredients
+                    .filter(ing => ing.nome.toLowerCase().includes(ingredientSearch.toLowerCase()))
+                    .map(ing => (
+                    <div key={ing.id} className="group relative bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all">
+                       <div className="flex justify-between items-start mb-4">
+                          <div>
+                              <h4 className="font-bold text-white group-hover:text-rose-400 transition-colors uppercase text-sm">{ing.nome}</h4>
+                              <p className="text-rose-400 font-black mt-1">-€{(ing.prezzo_rimozione || 0).toFixed(2)}</p>
+                          </div>
+                       </div>
+                       
+                       <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">Riduzione</span>
+                            <input 
+                              type="number"
+                              step="0.50"
+                              min="0"
+                              value={ing.prezzo_rimozione ?? 0}
+                              onChange={e => {
+                                const raw = e.target.value.replace(',', '.');
+                                const val = parseFloat(raw);
+                                if (!isNaN(val) && val >= 0) {
+                                  supabase?.from('ingredienti').update({ prezzo_rimozione: val }).eq('id', ing.id).then(() => fetchIngredients());
+                                }
+                              }}
+                              className="w-20 bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none focus:border-rose-500 transition-all"
+                            />
+                            <span className="text-[10px] font-black text-slate-500">€</span>
+                          </div>
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                              {ing.disponibile ? 'Disponibile' : 'Esaurito'}
+                          </span>
+                       </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* New/Edit Product Modal */}
           {isModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -487,27 +615,75 @@ export default function AdminView() {
                           <div className="grid grid-cols-2 gap-4">
                               <div>
                                   <label className="block text-xs font-black text-slate-500 uppercase mb-2">Prezzo (€)</label>
-                                  <input 
-                                    type="number" 
-                                    step="0.5"
-                                    value={editingProduct ? editingProduct.prezzo : newProduct.prezzo}
-                                    onChange={e => editingProduct ? setEditingProduct({...editingProduct, prezzo: parseFloat(e.target.value)}) : setNewProduct({...newProduct, prezzo: parseFloat(e.target.value)})}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none"
-                                  />
+                                   <input 
+                                     type="number"
+                                     step="0.50"
+                                     min="0"
+                                     value={(editingProduct ? editingProduct.prezzo : newProduct.prezzo) ?? 0}
+                                     onChange={e => {
+                                       const raw = e.target.value.replace(',', '.');
+                                       const val = parseFloat(raw);
+                                       if (!isNaN(val) && val >= 0) {
+                                         editingProduct ? setEditingProduct({...editingProduct, prezzo: val}) : setNewProduct({...newProduct, prezzo: val});
+                                       }
+                                     }}
+                                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none"
+                                   />
                               </div>
                               <div>
                                   <label className="block text-xs font-black text-slate-500 uppercase mb-2">Categoria</label>
                                   <select 
                                     value={editingProduct ? editingProduct.categoria : newProduct.categoria}
-                                    onChange={e => editingProduct ? setEditingProduct({...editingProduct, categoria: e.target.value}) : setNewProduct({...newProduct, categoria: e.target.value})}
+                                    onChange={e => {
+                                      const cat = e.target.value;
+                                      const hasSub = cat === 'Bevande' || cat === 'Caffè e Liquori';
+                                      if (editingProduct) {
+                                        setEditingProduct({...editingProduct, categoria: cat, sottocategoria: hasSub ? editingProduct.sottocategoria || '' : ''});
+                                      } else {
+                                        setNewProduct({...newProduct, categoria: cat, sottocategoria: hasSub ? newProduct.sottocategoria || '' : ''});
+                                      }
+                                    }}
                                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none appearance-none"
                                   >
-                                      {['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Fritti', 'Bibite'].map(c => (
+                                      {['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Fritti', 'Bevande', 'Caffè e Liquori', 'Dolci', 'EXTRA', 'Servizio'].map(c => (
                                           <option key={c} value={c}>{c}</option>
                                       ))}
                                   </select>
                               </div>
                           </div>
+
+                          {['Bevande', 'Caffè e Liquori'].includes(editingProduct ? editingProduct.categoria : newProduct.categoria) && (
+                            <div>
+                              <label className="block text-xs font-black text-slate-500 uppercase mb-2">Sotto-Categoria</label>
+                              <select
+                                value={editingProduct ? editingProduct.sottocategoria || '' : newProduct.sottocategoria || ''}
+                                onChange={e => {
+                                  const sub = e.target.value;
+                                  editingProduct ? setEditingProduct({...editingProduct, sottocategoria: sub}) : setNewProduct({...newProduct, sottocategoria: sub});
+                                }}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none appearance-none"
+                              >
+                                <option value="">Nessuna</option>
+                                {(editingProduct ? editingProduct.categoria : newProduct.categoria) === 'Bevande' ? (
+                                  <>
+                                    <option value="Acqua">Acqua</option>
+                                    <option value="Bibite">Bibite</option>
+                                    <option value="Vini della Casa">Vini della Casa</option>
+                                    <option value="Birra alla Spina">Birra alla Spina</option>
+                                    <option value="Birra in Vetro">Birra in Vetro</option>
+                                    <option value="Senza Glutine">Senza Glutine</option>
+                                    <option value="Analcolica">Analcolica</option>
+                                    <option value="Vini Bottiglia">Vini Bottiglia</option>
+                                  </>
+                                ) : (
+                                  <>
+                                    <option value="Caffè">Caffè</option>
+                                    <option value="Amari e Liquori">Amari e Liquori</option>
+                                  </>
+                                )}
+                              </select>
+                            </div>
+                          )}
 
                           <div>
                               <label className="block text-xs font-black text-slate-500 uppercase mb-2">Ingredienti (separati da virgola)</label>
@@ -525,6 +701,7 @@ export default function AdminView() {
                                 placeholder="Pomodoro, Mozzarella, Basilico..."
                               />
                           </div>
+
                       </div>
 
                       <div className="p-8 bg-slate-800/20 border-t border-slate-800 flex flex-col gap-3">
@@ -563,12 +740,19 @@ export default function AdminView() {
                           </div>
 
                           <div>
-                              <label className="block text-xs font-black text-slate-500 uppercase mb-2">Prezzo Extra (€)</label>
+                               <label className="block text-xs font-black text-slate-500 uppercase mb-2">Prezzo Extra (€)</label>
                               <input 
-                                type="number" 
-                                step="0.5"
-                                value={editingIngredient ? editingIngredient.prezzo : newIngredient.prezzo}
-                               onChange={e => editingIngredient ? setEditingIngredient({...editingIngredient, prezzo: parseFloat(e.target.value) || 0}) : setNewIngredient({...newIngredient, prezzo: parseFloat(e.target.value) || 0})}
+                                type="number"
+                                step="0.50"
+                                min="0"
+                                value={(editingIngredient ? editingIngredient.prezzo : newIngredient.prezzo) ?? 0}
+                                onChange={e => {
+                                  const raw = e.target.value.replace(',', '.');
+                                  const val = parseFloat(raw);
+                                  if (!isNaN(val) && val >= 0) {
+                                    editingIngredient ? setEditingIngredient({...editingIngredient, prezzo: val}) : setNewIngredient({...newIngredient, prezzo: val});
+                                  }
+                                }}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-emerald-500 outline-none"
                               />
                           </div>

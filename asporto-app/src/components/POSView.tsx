@@ -8,6 +8,7 @@ import BillsHistoryModal from './BillsHistoryModal';
 import { syncManager } from '../lib/OfflineSync';
 import {
   addedIngredientsFromStoredOrderLine,
+  calculateRemovalsPrice,
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
 
@@ -122,11 +123,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       const mappedCart = (order.carrello || []).map((item: OrderCarrelloItem) => {
         const product = findProductForOrderLine(prods, item.nome);
         const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
+        const rimozioni = item.modifiche?.rimozioni || [];
+        const removalsPrice = calculateRemovalsPrice(rimozioni, ings);
         return {
           ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
           quantity: item.quantity,
-          addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo),
-          removedIngredients: item.modifiche?.rimozioni || [],
+          addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo, removalsPrice),
+          removedIngredients: rimozioni,
           notes: item.modifiche?.note || '',
           uniqueId: newUniqueId()
         };
@@ -308,7 +311,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const calculateItemPrice = (item: CustomizedItem) => {
     const extrasPrice = item.addedIngredients.reduce((sum, ing) => sum + ing.prezzo, 0);
-    return (item.prezzo + extrasPrice) * item.quantity;
+    const removalsPrice = item.removedIngredients.reduce((sum, rName) => {
+      const ing = ingredients.find(i => i.nome.toLowerCase() === rName.toLowerCase());
+      return sum + (ing?.prezzo_rimozione || 0);
+    }, 0);
+    return Math.max(0, (item.prezzo + extrasPrice - removalsPrice)) * item.quantity;
   };
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
@@ -323,16 +330,23 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         totale: total,
         status: 'COMPLETATO' as const,
-        carrello: cart.map(i => ({
-          nome: i.nome,
-          quantity: i.quantity,
-          prezzo_unitario: i.prezzo + i.addedIngredients.reduce((s, a) => s + a.prezzo, 0),
-          modifiche: {
-            aggiunte: i.addedIngredients.map(a => a.nome),
-            rimozioni: i.removedIngredients,
-            note: i.notes
-          }
-        }))
+        carrello: cart.map(i => {
+          const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+          const removals = i.removedIngredients.reduce((s, rName) => {
+            const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
+            return s + (ing?.prezzo_rimozione || 0);
+          }, 0);
+          return {
+            nome: i.nome,
+            quantity: i.quantity,
+            prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            modifiche: {
+              aggiunte: i.addedIngredients.map(a => a.nome),
+              rimozioni: i.removedIngredients,
+              note: i.notes
+            }
+          };
+        })
       };
 
       if (activeOrderId) {
@@ -368,24 +382,28 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         totale: total,
         status: 'IN_ATTESA' as const,
-        carrello: cart.map(i => ({
-          nome: i.nome,
-          quantity: i.quantity,
-          prezzo_unitario: i.prezzo + i.addedIngredients.reduce((s, a) => s + a.prezzo, 0),
-          modifiche: {
-            aggiunte: i.addedIngredients.map(a => a.nome),
-            rimozioni: i.removedIngredients,
-            note: i.notes
-          }
-        }))
+        carrello: cart.map(i => {
+          const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+          const removals = i.removedIngredients.reduce((s, rName) => {
+            const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
+            return s + (ing?.prezzo_rimozione || 0);
+          }, 0);
+          return {
+            nome: i.nome,
+            quantity: i.quantity,
+            prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            modifiche: {
+              aggiunte: i.addedIngredients.map(a => a.nome),
+              rimozioni: i.removedIngredients,
+              note: i.notes
+            }
+          };
+        })
       };
 
       if (activeOrderId) {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
-        // For new orders, we still need an ID to update later
-        // But the syncManager handles the insert. 
-        // For simplicity in offline mode, we push as INSERT.
         await syncManager.pushOrder(orderData);
         await syncManager.pushTableUpdate(tableId, { status: 'OCCUPATO' });
       }
@@ -484,13 +502,40 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
         {/* Product Grid */}
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-12">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 xxl:grid-cols-5 gap-4">
-            {filteredProducts.map(product => {
+          {(() => {
+            const showSub = activeCategory === 'Bevande' || (!activeCategory && filteredProducts.some(p => p.categoria === 'Bevande'));
+            const gridClass = 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 xxl:grid-cols-5 gap-4';
+            
+            if (showSub) {
+              const bevande = filteredProducts.filter(p => p.categoria === 'Bevande');
+              const other = filteredProducts.filter(p => p.categoria !== 'Bevande');
+              const subcats = [...new Set(bevande.map(p => p.sottocategoria || 'Altro'))];
+              return (
+                <>
+                  {other.length > 0 && (
+                    <div className={gridClass}>
+                      {other.map(p => renderProductCard(p))}
+                    </div>
+                  )}
+                  {subcats.map(sub => (
+                    <div key={sub}>
+                      <div className="text-[10px] font-black text-gold uppercase tracking-widest py-3 mb-2 border-b border-surface-light">{sub}</div>
+                      <div className={gridClass}>
+                        {bevande.filter(p => (p.sottocategoria || 'Altro') === sub).map(p => renderProductCard(p))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              );
+            }
+            
+            return <div className={gridClass}>{filteredProducts.map(p => renderProductCard(p))}</div>;
+
+            function renderProductCard(product: Product) {
               const missingIngredients = product.ingredienti?.filter(ingName => {
                 const ingredient = ingredients.find(i => i.nome === ingName);
                 return ingredient && !ingredient.disponibile;
               }) || [];
-
               const isTrulyAvailable = product.disponibile && missingIngredients.length === 0;
 
               return (
@@ -511,23 +556,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     <span className={`text-xl font-black ${isTrulyAvailable ? 'text-white' : 'text-gray-500'}`}>€{product.prezzo.toFixed(2)}</span>
                     <div className="flex items-center gap-2">
                       <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isTrulyAvailable) openCustomization(product);
-                        }}
-                        className={`p-2 rounded-xl border transition-all active:scale-95 ${
-                          isTrulyAvailable 
-                            ? 'bg-charcoal border-surface-light text-gold hover:bg-surface-light' 
-                            : 'opacity-50'
-                        }`}
+                        onClick={(e) => { e.stopPropagation(); if (isTrulyAvailable) openCustomization(product); }}
+                        className={`p-2 rounded-xl border transition-all active:scale-95 ${isTrulyAvailable ? 'bg-charcoal border-surface-light text-gold hover:bg-surface-light' : 'opacity-50'}`}
                       >
                         <Edit3 size={16} />
                       </button>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${
-                        isTrulyAvailable 
-                          ? 'bg-charcoal border-surface-light text-gold group-hover:bg-gold group-hover:text-black' 
-                          : 'bg-red-500/10 border-red-500/20 text-red-500'
-                      }`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${isTrulyAvailable ? 'bg-charcoal border-surface-light text-gold group-hover:bg-gold group-hover:text-black' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
                         {isTrulyAvailable ? <Plus size={20} /> : <AlertTriangle size={20} />}
                       </div>
                     </div>
@@ -539,8 +573,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   )}
                 </div>
               );
-            })}
-          </div>
+            }
+          })()}
         </div>
       </div>
 
@@ -753,6 +787,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                         <div className="grid grid-cols-2 gap-2">
                             {editingItem.ingredienti?.map(ing => {
                                const isRemoved = editingItem.removedIngredients.includes(ing);
+                               const removalPrice = ingredients.find(i => i.nome.toLowerCase() === ing.toLowerCase())?.prezzo_rimozione || 0;
                                return (
                                  <button
                                     key={ing}
@@ -762,7 +797,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                                     }}
                                     className={`px-4 py-3 rounded-2xl font-bold text-[10px] border transition-all text-center ${isRemoved ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-charcoal border-surface-light text-gray-400 hover:border-surface-light-hover'}`}
                                  >
-                                    {isRemoved ? `NO ${ing.toUpperCase()}` : ing.toUpperCase()}
+                                    {isRemoved ? `NO ${ing.toUpperCase()} -€${removalPrice.toFixed(2)}` : ing.toUpperCase()}
                                  </button>
                                )
                             })}
@@ -850,12 +885,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                                 key={ing.id}
                                 onClick={() => {
                                   if (isAdded) setEditingItem({...editingItem, addedIngredients: editingItem.addedIngredients.filter(a => a.nome !== ing.nome)});
-                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo || 1.5 }]});
+                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo ?? 0 }]});
                                 }}
                                 className={`p-4 rounded-2xl font-bold text-[10px] border transition-all text-left flex flex-col gap-1 ${isAdded ? 'bg-emerald-500 border-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-charcoal border-surface-light text-gray-500 hover:border-surface-light-hover'}`}
                              >
                                 <span className={isAdded ? 'text-black' : 'text-white'}>{ing.nome.toUpperCase()}</span>
-                                <span className={isAdded ? 'text-black/60 font-black' : 'text-emerald-500 font-black'}>+ €{(ing.prezzo || 1.5).toFixed(2)}</span>
+                                <span className={isAdded ? 'text-black/60 font-black' : 'text-emerald-500 font-black'}>+ €{(ing.prezzo ?? 0).toFixed(2)}</span>
                              </button>
                            )
                         })}

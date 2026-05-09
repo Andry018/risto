@@ -202,8 +202,8 @@ export default function TabletDashboardView() {
                            <p className="text-gray-500 text-[10px] font-bold uppercase">{product.categoria}</p>
                            <button 
                              onClick={() => {
-                               const p = prompt('Nuovo prezzo per ' + product.nome, product.prezzo?.toString() || '0');
-                               if (p) updateProductPrice(product.id, parseFloat(p));
+                               const p = prompt('Nuovo prezzo per ' + product.nome, product.prezzo?.toString().replace('.', ',') || '0');
+                               if (p) updateProductPrice(product.id, parseFloat(p.replace(',', '.')));
                              }}
                              className="text-gold text-xs font-black bg-gold/10 px-2 py-0.5 rounded border border-gold/20 hover:bg-gold hover:text-black transition-all"
                            >
@@ -236,11 +236,11 @@ export default function TabletDashboardView() {
                         </button>
                       </div>
                       <h3 className={`font-black text-xl uppercase ${ing.disponibile ? 'text-white' : 'text-red-500'}`}>{ing.nome}</h3>
-                      <button 
-                         onClick={() => {
-                           const p = prompt('Nuovo prezzo per extra ' + ing.nome, ing.prezzo?.toString() || '0');
-                           if (p) updateIngredientPrice(ing.id, parseFloat(p));
-                         }}
+                       <button 
+                          onClick={() => {
+                            const p = prompt('Nuovo prezzo per extra ' + ing.nome, ing.prezzo?.toString().replace('.', ',') || '0');
+                            if (p) updateIngredientPrice(ing.id, parseFloat(p.replace(',', '.')));
+                          }}
                          className="text-gold text-[10px] font-black mt-1"
                        >
                          Extra: €{typeof ing.prezzo === 'number' ? ing.prezzo.toFixed(2) : '0.00'}
