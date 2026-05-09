@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Users } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, AlertCircle, Users, Receipt } from 'lucide-react';
+import BillsHistoryModal from './BillsHistoryModal';
 import { syncManager } from '../lib/OfflineSync';
+import {
+  addedIngredientsFromStoredOrderLine,
+  findProductForOrderLine,
+} from '../lib/orderCarrelloMap';
 
 type CustomizedItem = Product & {
   quantity: number;
@@ -31,11 +36,19 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [billsDayOpen, setBillsDayOpen] = useState(false);
+  const [billsTableOpen, setBillsTableOpen] = useState(false);
+  const [finishingOrder, setFinishingOrder] = useState(false);
   
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ingSearch, setIngSearch] = useState('');
+
+  const productsRef = useRef(products);
+  const ingredientsRef = useRef(ingredients);
+  productsRef.current = products;
+  ingredientsRef.current = ingredients;
 
   useEffect(() => {
     const handleSyncChange = () => setPendingSyncCount(syncManager.getPendingCount());
@@ -104,15 +117,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     
     if (order) {
       setActiveOrderId(order.id);
+      const prods = productsRef.current;
+      const ings = ingredientsRef.current;
       const mappedCart = (order.carrello || []).map((item: OrderCarrelloItem) => {
-        const product = products.find(p => p.nome === item.nome);
+        const product = findProductForOrderLine(prods, item.nome);
+        const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
         return {
-          ...(product || { id: newUniqueId(), nome: item.nome, prezzo: item.prezzo_unitario ?? 0, categoria: 'Generale', disponibile: true, ingredienti: [] }),
+          ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
           quantity: item.quantity,
-          addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
-            const ing = ingredients.find(i => i.nome === name);
-            return { nome: name, prezzo: ing?.prezzo || 0 };
-          }) || [],
+          addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo),
           removedIngredients: item.modifiche?.rimozioni || [],
           notes: item.modifiche?.note || '',
           uniqueId: newUniqueId()
@@ -165,6 +178,55 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       void fetchExistingOrder();
     }
   }, [tableId, products.length]);
+
+  /** Sync conto tavolo da altri dispositivi (es. telefono cameriere) senza ricaricare. */
+  useEffect(() => {
+    if (IS_DEMO_MODE || !supabase || !tableName) return;
+    const sb = supabase;
+
+    const ordiniCh = sb
+      .channel(`pos-realtime-ordini-${tableId ?? tableName}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ordini',
+          filter: `nome_cliente=eq.${tableName}`,
+        },
+        () => {
+          void fetchExistingOrder();
+        }
+      )
+      .subscribe();
+
+    const channels: ReturnType<typeof sb.channel>[] = [ordiniCh];
+
+    if (tableId) {
+      const tavoliCh = sb
+        .channel(`pos-realtime-tavoli-${tableId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tavoli',
+            filter: `id=eq.${tableId}`,
+          },
+          () => {
+            void fetchExistingOrder();
+          }
+        )
+        .subscribe();
+      channels.push(tavoliCh);
+    }
+
+    return () => {
+      channels.forEach((ch) => {
+        sb.removeChannel(ch);
+      });
+    };
+  }, [tableId, tableName]);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -252,8 +314,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
 
   const handleFinishOrder = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || finishingOrder) return;
 
+    setFinishingOrder(true);
     try {
       const orderData = {
         nome_cliente: tableName || 'POS VENDITA',
@@ -282,6 +345,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
       }
 
+      setActiveOrderId(null);
       setOrderSuccess(true);
       setCart([]);
       setTimeout(() => {
@@ -291,6 +355,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     } catch (error) {
       console.error('Error submitting POS order:', error);
       alert('Errore durante la chiusura dell\'ordine.');
+    } finally {
+      setFinishingOrder(false);
     }
   };
 
@@ -342,10 +408,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   return (
     <>
-      <div className="h-screen flex bg-charcoal text-white overflow-hidden">
+      <div className="h-[100dvh] flex bg-charcoal text-white overflow-hidden">
       
       {/* Left Column: Menu */}
-      <div className="flex-1 flex flex-col min-w-0 p-8">
+      <div className="flex-1 flex flex-col min-w-0 p-4 md:p-6 lg:p-8 min-h-0">
         <header className="mb-8 flex flex-col gap-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
@@ -362,6 +428,24 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   )}
                 </div>
                 <h1 className="text-4xl font-black text-white mt-1">POS <span className="text-gold italic">TERMINAL</span></h1>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setBillsDayOpen(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
+                  >
+                    <Receipt size={14} /> Conti oggi
+                  </button>
+                  {tableName && (
+                    <button
+                      type="button"
+                      onClick={() => setBillsTableOpen(true)}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
+                    >
+                      <Receipt size={14} /> Storico tavolo
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             
@@ -461,7 +545,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       </div>
 
       {/* Right Column: Calculator/Cart */}
-      <aside className="w-[450px] bg-surface flex flex-col border-l border-surface-light shadow-2xl relative overflow-hidden">
+      <aside className="w-full max-w-[450px] shrink-0 md:w-[420px] lg:w-[450px] bg-surface flex flex-col min-h-0 border-l border-surface-light shadow-2xl relative overflow-hidden">
         {/* Decor */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 blur-3xl pointer-events-none" />
 
@@ -535,7 +619,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => setIsSplitModalOpen(true)}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || finishingOrder}
                 className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-4 rounded-2xl border border-dashed border-gold/30 mb-2 transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 <Users size={16} /> DIVISIONE CONTO
@@ -544,7 +628,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               {tableId && (
                 <button
                   onClick={handleUpdateBill}
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || finishingOrder}
                   className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-lg py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
                 >
                   Salva solo Comanda <Save size={20} />
@@ -552,10 +636,16 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               )}
               <button
                 onClick={handleFinishOrder}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || finishingOrder}
                 className="w-full bg-gold hover:bg-gold-hover text-black font-black text-2xl py-6 rounded-3xl shadow-2xl shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale"
               >
-                Chiudi Conto <CheckCircle size={28} />
+                {finishingOrder ? (
+                  <>Attendi…</>
+                ) : (
+                  <>
+                    Chiudi Conto <CheckCircle size={28} />
+                  </>
+                )}
               </button>
             </div>
           )}
@@ -620,10 +710,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               onClick={() => {
                 const parts = splitType === 'EQUAL' ? 2 : splitType === 'GUESTS' ? (MOCK_TABLES.find(t => t.id === tableId)?.clienti || 1) : customSplitCount;
                 alert(`SIMULAZIONE: Avvio pagamento diviso in ${parts} quote da €${(total / parts).toFixed(2)} ciascuna.`);
-                handleFinishOrder();
+                void handleFinishOrder();
                 setIsSplitModalOpen(false);
               }}
-              disabled={splitType === 'NONE'}
+              disabled={splitType === 'NONE' || finishingOrder}
               className="w-full bg-gold hover:bg-gold-hover text-black font-black py-6 rounded-3xl text-xl shadow-2xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30"
             >
               PROCEDI AL PAGAMENTO DIVISO
@@ -797,6 +887,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           </div>
         </div>
       )}
+
+      <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" />
+      <BillsHistoryModal
+        open={billsTableOpen}
+        onClose={() => setBillsTableOpen(false)}
+        variant="table"
+        tableName={tableName}
+      />
     </>
   );
 }

@@ -138,10 +138,10 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
   });
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-charcoal text-white overflow-hidden p-8">
+    <div className="h-[100dvh] min-h-0 flex flex-col bg-charcoal text-white overflow-hidden p-3 sm:p-5 lg:p-8">
 
       {/* View Header & Toggles */}
-      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
+      <header className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start shrink-0 mb-3 sm:mb-4">
         <div className="flex gap-4">
           <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
              <LayoutDashboard size={24} />
@@ -165,38 +165,38 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
           ))}
         </div>
 
-        <div className="flex items-center gap-4 bg-surface p-1.5 rounded-2xl border border-surface-light shadow-xl">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-surface p-1.5 rounded-2xl border border-surface-light shadow-xl w-full lg:w-auto justify-center lg:justify-end">
           <button
             onClick={() => setViewMode('MAP')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${viewMode === 'MAP' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-sm transition-all ${viewMode === 'MAP' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
           >
-            <MapIcon size={20} /> MAPPA
+            <MapIcon size={18} /> MAPPA
           </button>
           <button
             onClick={() => setViewMode('LIST')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all ${viewMode === 'LIST' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-sm transition-all ${viewMode === 'LIST' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
           >
-            <List size={20} /> LISTA
+            <List size={18} /> LISTA
           </button>
-          <div className="w-px h-8 bg-surface-light mx-2" />
+          <div className="hidden sm:block w-px h-8 bg-surface-light mx-1" />
           <button
             onClick={() => setIsEditLayoutMode(!isEditLayoutMode)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all border ${isEditLayoutMode ? 'bg-gold text-black border-gold shadow-lg shadow-gold/20' : 'bg-charcoal text-gray-500 border-surface-light'}`}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-sm transition-all border ${isEditLayoutMode ? 'bg-gold text-black border-gold shadow-lg shadow-gold/20' : 'bg-charcoal text-gray-500 border-surface-light'}`}
           >
-            {isEditLayoutMode ? <Save size={18} /> : <Edit2 size={18} />} 
-            {isEditLayoutMode ? 'SALVA' : 'LAYOUT'}
+            {isEditLayoutMode ? <Save size={16} /> : <Edit2 size={16} />} 
+            <span className="hidden sm:inline">{isEditLayoutMode ? 'SALVA' : 'LAYOUT'}</span>
           </button>
           <button
             onClick={() => setIsReservationsOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-surface border border-surface-light text-gold rounded-xl font-bold transition-all shadow-lg active:scale-95"
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-surface border border-surface-light text-gold rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95"
           >
-            <BookOpen size={20} /> PRENOTAZIONI
+            <BookOpen size={18} /> <span className="hidden sm:inline">PRENOTAZIONI</span>
           </button>
           <button
             onClick={addTable}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-lg active:scale-95"
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95"
           >
-            <Plus size={20} /> AGGIUNGI
+            <Plus size={18} /> <span className="hidden sm:inline">AGGIUNGI</span>
           </button>
         </div>
       </header>
@@ -217,18 +217,16 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
         </div>
       )}
 
-      {/* Main View Area */}
-      <div className="flex-1 relative bg-surface/50 rounded-[40px] border border-surface-light overflow-hidden shadow-inner flex flex-col">
+      {/* Main View Area — adatta al viewport tablet senza doppio scroll */}
+      <div className="flex-1 min-h-0 relative bg-surface/50 rounded-[24px] lg:rounded-[40px] border border-surface-light overflow-hidden shadow-inner flex flex-col">
         
         {viewMode === 'MAP' ? (
-          <div className="flex-1 overflow-auto custom-scrollbar p-10 flex items-center justify-center min-h-0">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
             <div 
               ref={mapRef}
               onPointerMove={handlePointerMove}
-              className="relative touch-none shadow-2xl rounded-[20px] bg-charcoal/50 flex-shrink-0"
+              className="relative touch-none shadow-2xl rounded-[16px] sm:rounded-[20px] bg-charcoal/50 w-full max-w-[1600px] aspect-[12/7] max-h-[min(calc(100dvh-13rem),78vh)]"
               style={{ 
-                width: '1200px',
-                height: '700px',
                 backgroundImage: 'radial-gradient(#2A2A2A 1.5px, transparent 0)',
                 backgroundSize: '40px 40px',
                 border: '1px solid rgba(207, 160, 85, 0.1)'
@@ -312,8 +310,8 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
             </div>
           </div>
         ) : (
-          <div className="p-8 h-full overflow-y-auto custom-scrollbar">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
               {filteredTavoli.map(tavolo => (
                 <div key={tavolo.id} className="bg-surface border border-surface-light p-6 rounded-3xl flex items-center justify-between hover:border-gold/30 transition-all shadow-xl group">
                   <div className="flex items-center gap-6">

@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut, Receipt } from 'lucide-react';
+import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
+import {
+  addedIngredientsFromStoredOrderLine,
+  findProductForOrderLine,
+} from '../lib/orderCarrelloMap';
 import SyncStatusIndicator from './SyncStatusIndicator';
 
 type CustomizedItem = Product & {
@@ -36,6 +41,54 @@ export default function WaiterMobileView() {
   const [isCoversModalOpen, setIsCoversModalOpen] = useState(false);
   const [tempCovers, setTempCovers] = useState(2);
   const [ingSearch, setIngSearch] = useState('');
+  const [billsDayOpen, setBillsDayOpen] = useState(false);
+  const [billsTableOpen, setBillsTableOpen] = useState(false);
+  const [orderActionBusy, setOrderActionBusy] = useState(false);
+
+  const productsRef = useRef(products);
+  const ingredientsRef = useRef(ingredients);
+  const selectedTableRef = useRef(selectedTable);
+  productsRef.current = products;
+  ingredientsRef.current = ingredients;
+  selectedTableRef.current = selectedTable;
+
+  /** Carica ordine IN_ATTESA dal DB e aggiorna carrello (anche da eventi Realtime). */
+  async function loadOpenOrderForTable(table: Tavolo) {
+    if (IS_DEMO_MODE || !supabase) return;
+    const prods = productsRef.current;
+    const ings = ingredientsRef.current;
+
+    const { data } = await supabase
+      .from('ordini')
+      .select('*')
+      .eq('nome_cliente', table.nome)
+      .eq('status', 'IN_ATTESA')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data) {
+      setActiveOrderId(data.id);
+      const mappedCart = (data.carrello || []).map((item: OrderCarrelloItem) => {
+        const product = findProductForOrderLine(prods, item.nome);
+        const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
+        return {
+          ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
+          quantity: item.quantity,
+          addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo),
+          removedIngredients: item.modifiche?.rimozioni || [],
+          notes: item.modifiche?.note || '',
+          uniqueId: newUniqueId()
+        };
+      });
+      setCart(mappedCart);
+      setActiveTab('RIEPILOGO');
+    } else {
+      setActiveOrderId(null);
+      setCart([]);
+      setActiveTab('MENU');
+    }
+  }
 
   async function fetchTables() {
     if (IS_DEMO_MODE) {
@@ -80,6 +133,59 @@ export default function WaiterMobileView() {
     return () => { sb.removeChannel(tablesChannel); };
   }, []);
 
+  /** Tavolo occupato: aggiorna carrello se ordine o riga tavolo cambiano (es. da tablet POS). */
+  useEffect(() => {
+    if (!selectedTable || IS_DEMO_MODE || !supabase) return;
+    if (selectedTable.status !== 'OCCUPATO') return;
+
+    const sb = supabase;
+    const t = selectedTable;
+
+    const ordiniCh = sb
+      .channel(`waiter-realtime-ordini-${t.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ordini',
+          filter: `nome_cliente=eq.${t.nome}`,
+        },
+        () => {
+          const cur = selectedTableRef.current;
+          if (cur?.id === t.id && cur.status === 'OCCUPATO') {
+            void loadOpenOrderForTable(cur);
+          }
+        }
+      )
+      .subscribe();
+
+    const tavoliCh = sb
+      .channel(`waiter-realtime-tavoli-${t.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tavoli',
+          filter: `id=eq.${t.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Partial<Tavolo> & { id?: string };
+          if (!row?.id) return;
+          const merged = { ...t, ...row } as Tavolo;
+          setSelectedTable((prev) => (prev && prev.id === row.id ? { ...prev, ...row } as Tavolo : prev));
+          void loadOpenOrderForTable(merged);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      sb.removeChannel(ordiniCh);
+      sb.removeChannel(tavoliCh);
+    };
+  }, [selectedTable?.id, selectedTable?.nome, selectedTable?.status]);
+
   const selectTable = async (table: Tavolo) => {
     if (table.status === 'LIBERO') {
       setSelectedTable(table);
@@ -94,37 +200,7 @@ export default function WaiterMobileView() {
 
     if (IS_DEMO_MODE || !supabase) return;
 
-    // Fetch existing order
-    const { data } = await supabase
-      .from('ordini')
-      .select('*')
-      .eq('nome_cliente', table.nome)
-      .eq('status', 'IN_ATTESA')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    
-    if (data) {
-      setActiveOrderId(data.id);
-      const mappedCart = (data.carrello || []).map((item: OrderCarrelloItem) => {
-        const product = products.find(p => p.nome === item.nome);
-        return {
-          ...(product || { id: newUniqueId(), nome: item.nome, prezzo: item.prezzo_unitario ?? 0, categoria: 'Generale', disponibile: true, ingredienti: [] }),
-          quantity: item.quantity,
-          addedIngredients: item.modifiche?.aggiunte?.map((name: string) => {
-            const ing = ingredients.find(i => i.nome === name);
-            return { nome: name, prezzo: ing?.prezzo || 0 };
-          }) || [],
-          removedIngredients: item.modifiche?.rimozioni || [],
-          notes: item.modifiche?.note || '',
-          uniqueId: newUniqueId()
-        };
-      });
-      setCart(mappedCart);
-      setActiveTab('RIEPILOGO');
-    } else {
-      setActiveTab('MENU');
-    }
+    await loadOpenOrderForTable(table);
   };
 
   const confirmCovers = async () => {
@@ -210,7 +286,7 @@ export default function WaiterMobileView() {
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
 
   const saveOrder = async (isClosing: boolean = false) => {
-    if (!selectedTable || cart.length === 0) return;
+    if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
     if (IS_DEMO_MODE) {
       alert('SIMULAZIONE: Comanda inviata al sistema (Modalità Demo)');
@@ -219,6 +295,7 @@ export default function WaiterMobileView() {
       return;
     }
 
+    setOrderActionBusy(true);
     try {
       const orderData = {
         nome_cliente: selectedTable.nome,
@@ -249,6 +326,7 @@ export default function WaiterMobileView() {
 
       if (isClosing) {
         await syncManager.pushTableUpdate(selectedTable.id, { status: 'LIBERO', clienti: 0 });
+        setActiveOrderId(null);
         setSelectedTable(null);
       }
 
@@ -256,6 +334,8 @@ export default function WaiterMobileView() {
       setTimeout(() => setSuccess(false), 2000);
     } catch {
       alert('Errore nel salvataggio');
+    } finally {
+      setOrderActionBusy(false);
     }
   };
 
@@ -449,6 +529,24 @@ export default function WaiterMobileView() {
             /* Summary View - Scrollable */
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-40">
               <div className="bg-surface/50 rounded-3xl p-6 border border-surface-light mb-4">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setBillsDayOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-charcoal border border-surface-light text-[9px] font-black uppercase text-gray-400 hover:text-gold"
+                  >
+                    <Receipt size={12} /> Conti oggi
+                  </button>
+                  {selectedTable && (
+                    <button
+                      type="button"
+                      onClick={() => setBillsTableOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-charcoal border border-surface-light text-[9px] font-black uppercase text-gray-400 hover:text-gold"
+                    >
+                      <Receipt size={12} /> Storico tavolo
+                    </button>
+                  )}
+                </div>
                 <div className="flex justify-between items-end mb-6">
                   <div>
                     <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Stato Tavolo</h3>
@@ -510,21 +608,21 @@ export default function WaiterMobileView() {
             <div className="flex gap-3">
               <button 
                 onClick={() => saveOrder(false)}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || orderActionBusy}
                 className={`flex-[2] py-4 rounded-2xl border font-black flex items-center justify-center gap-2 transition-all active:scale-95 ${
                   success 
                     ? 'bg-emerald-500 border-emerald-500 text-black' 
                     : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
                 } disabled:opacity-30`}
               >
-                {success ? 'INVIATO!' : 'AGGIORNA'} <Save size={18} />
+                {orderActionBusy ? '…' : success ? 'INVIATO!' : 'AGGIORNA'} <Save size={18} />
               </button>
               <button 
                 onClick={() => saveOrder(true)}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || orderActionBusy}
                 className="flex-[3] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl shadow-2xl shadow-gold/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-30"
               >
-                PAGA & CHIUDI <CreditCard size={18} />
+                {orderActionBusy ? 'Attendi…' : <>PAGA & CHIUDI <CreditCard size={18} /></>}
               </button>
             </div>
             {IS_DEMO_MODE && (
@@ -718,6 +816,14 @@ export default function WaiterMobileView() {
           </div>
         </div>
       )}
+
+      <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" />
+      <BillsHistoryModal
+        open={billsTableOpen}
+        onClose={() => setBillsTableOpen(false)}
+        variant="table"
+        tableName={selectedTable?.nome}
+      />
     </div>
   );
 }
