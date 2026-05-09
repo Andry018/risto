@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase, type Product } from '../lib/supabase';
 import { translateBatch } from '../lib/translate';
-import { UtensilsCrossed, Sparkles, Sun, Soup, Pizza, Wine, Leaf, Cookie, Coffee, Languages } from 'lucide-react';
+import { UtensilsCrossed, Sparkles, Sun, Soup, Pizza, Wine, Cookie, Coffee, Languages } from 'lucide-react';
 
 const CATEGORY_ORDER = ['Antipasti', 'Fritti', 'Primi', 'Secondi', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Dolci', 'Caffè e Liquori', 'Bevande'];
 
-const categoryIcons: Record<string, JSX.Element> = {
+const categoryIcons: Record<string, React.ReactNode> = {
   'Antipasti': <Sun size={16} />,
   'Fritti': <Sparkles size={16} />,
   'Primi': <Soup size={16} />,

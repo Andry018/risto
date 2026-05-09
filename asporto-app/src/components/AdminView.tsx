@@ -652,7 +652,7 @@ export default function AdminView() {
                               </div>
                           </div>
 
-                          {['Bevande', 'Caffè e Liquori'].includes(editingProduct ? editingProduct.categoria : newProduct.categoria) && (
+                          {['Bevande', 'Caffè e Liquori'].includes(editingProduct ? editingProduct.categoria ?? '' : newProduct.categoria ?? '') && (
                             <div>
                               <label className="block text-xs font-black text-slate-500 uppercase mb-2">Sotto-Categoria</label>
                               <select
