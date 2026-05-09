@@ -47,6 +47,13 @@ export default function WaiterMobileView() {
   const [orderActionBusy, setOrderActionBusy] = useState(false);
   const [lastOrderForTable, setLastOrderForTable] = useState<Order | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const handleSyncChange = () => setPendingSyncCount(syncManager.getPendingCount());
@@ -108,7 +115,24 @@ export default function WaiterMobileView() {
     }
     if (!supabase) return;
     const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
-    if (data) setTables(data);
+    if (data) {
+      setTables(data);
+      const aperturaMap: Record<string, string> = {};
+      await Promise.all(data.map(async (t) => {
+        if (t.status === 'OCCUPATO') {
+          const { data: ord } = await supabase
+            .from('ordini')
+            .select('created_at')
+            .eq('nome_cliente', t.nome)
+            .eq('status', 'IN_ATTESA')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (ord?.created_at) aperturaMap[t.id] = ord.created_at;
+        }
+      }));
+      setTableApertura(prev => ({ ...prev, ...aperturaMap }));
+    }
   }
 
   async function fetchProducts() {
@@ -289,6 +313,7 @@ export default function WaiterMobileView() {
         uniqueId: 'initial-coperto'
       }]);
     }
+    setActiveTab('RIEPILOGO');
   };
 
   const addToCart = (product: Product) => {
@@ -355,6 +380,18 @@ export default function WaiterMobileView() {
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
 
+  const elapsedStr = (t: Tavolo): string | null => {
+    const a = tableApertura[t.id];
+    if (!a) return null;
+    const diff = now - new Date(a).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'ora';
+    if (mins < 60) return `${mins}min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h}h ${m}min`;
+  };
+
   const saveOrder = async (isClosing: boolean = false) => {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
@@ -394,10 +431,11 @@ export default function WaiterMobileView() {
       if (activeOrderId) {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
+        const nowISO = new Date().toISOString();
         await syncManager.pushOrder(orderData);
-        // Il tavolo è già OCCUPATO da conferma coperti; in chiusura diretta non serve marcarlo di nuovo.
         if (!isClosing) {
           await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO' });
+          setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
         }
       }
 
@@ -493,6 +531,9 @@ export default function WaiterMobileView() {
                   <div className="text-2xl font-black">{table.nome.match(/\d+/)?.[0] || 'T'}</div>
                   <div className="text-[10px] uppercase font-black tracking-widest opacity-60">{table.status}</div>
                   <div className="flex items-center gap-1 text-xs"><Users size={10} /> {table.clienti}</div>
+                  {table.status === 'OCCUPATO' && elapsedStr(table) && (
+                    <div className="text-[8px] font-black text-gold/70 uppercase tracking-widest mt-1">{elapsedStr(table)}</div>
+                  )}
                 </button>
               ))}
           </div>

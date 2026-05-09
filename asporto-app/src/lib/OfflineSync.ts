@@ -55,6 +55,7 @@ class OfflineSync {
       while (this.queue.length > 0) {
         const item = this.queue[0];
         let success = false;
+        let isTableUpdate = false;
         try {
           if (item.type === 'INSERT') {
             const payload = { ...item.data };
@@ -68,19 +69,19 @@ class OfflineSync {
             if (!error) success = true;
             else console.error('Supabase Sync Error (update ordine):', error);
           } else if (item.type === 'TABLE_UPDATE' && item.tableId) {
+            isTableUpdate = true;
             const { error } = await supabase.from('tavoli').update(item.tableUpdates!).eq('id', item.tableId);
             if (!error) success = true;
             else console.error('Supabase Sync Error (update tavolo):', error);
           }
-
-          if (success) {
-            this.queue = this.queue.filter((q) => q.id !== item.id);
-            this.saveQueue();
-          } else {
-            break;
-          }
         } catch (e) {
           console.error('OfflineSync: Sync failed for item', item.id, e);
+        }
+
+        if (success || isTableUpdate) {
+          this.queue = this.queue.filter((q) => q.id !== item.id);
+          this.saveQueue();
+        } else {
           break;
         }
       }

@@ -45,7 +45,7 @@ export const MOCK_PRODUCTS: Product[] = [
   // Analcolica
   { id: 'p13d', nome: 'CHINOTTO VETRO', prezzo: 3.0, categoria: 'Bevande', sottocategoria: 'Analcolica', disponibile: true, ingredienti: [] },
   { id: 'p13e', nome: 'SAN PELLEGRINO LATTINA', prezzo: 2.5, categoria: 'Bevande', sottocategoria: 'Analcolica', disponibile: true, ingredienti: [] },
-  { id: 'p19', nome: 'COPERTO', prezzo: 2.0, categoria: 'Servizio', disponibile: true, ingredienti: [] },
+  { id: 'p19', nome: 'COPERTO', prezzo: 1.5, categoria: 'Servizio', disponibile: true, ingredienti: [] },
   // Dolci
   { id: 'p20', nome: 'TIRAMISÙ', prezzo: 5.0, categoria: 'Dolci', disponibile: true, ingredienti: [] },
   { id: 'p21', nome: 'PASTIERA NAPOLETANA', prezzo: 5.0, categoria: 'Dolci', disponibile: true, ingredienti: [] },

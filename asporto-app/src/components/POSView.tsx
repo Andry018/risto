@@ -40,7 +40,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [billsDayOpen, setBillsDayOpen] = useState(false);
   const [billsTableOpen, setBillsTableOpen] = useState(false);
   const [finishingOrder, setFinishingOrder] = useState(false);
-  
+  const [tableClienti, setTableClienti] = useState(0);
+  const [splitResult, setSplitResult] = useState<{ parts: number; eachAmount: number } | null>(null);
+
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -91,17 +93,20 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   async function fetchExistingOrder() {
     if (IS_DEMO_MODE) {
       const mockTable = MOCK_TABLES.find(t => t.id === tableId || t.nome === tableName);
-      if (mockTable && mockTable.clienti > 0) {
-        const copertoProd = MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
-        if (copertoProd) {
-          setCart([{
-            ...copertoProd,
-            quantity: mockTable.clienti,
-            addedIngredients: [],
-            removedIngredients: [],
-            notes: '',
-            uniqueId: 'initial-coperto'
-          }]);
+      if (mockTable) {
+        setTableClienti(mockTable.clienti || 0);
+        if (mockTable.clienti > 0) {
+          const copertoProd = MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+          if (copertoProd) {
+            setCart([{
+              ...copertoProd,
+              quantity: mockTable.clienti,
+              addedIngredients: [],
+              removedIngredients: [],
+              notes: '',
+              uniqueId: 'initial-coperto'
+            }]);
+          }
         }
       }
       return;
@@ -137,19 +142,22 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       setCart(mappedCart);
     } else if (tableId) {
       const { data: table } = await supabase.from('tavoli').select('clienti').eq('id', tableId).single();
-      if (table && table.clienti > 0) {
-        const { data: prods } = await supabase.from('prodotti').select('*').eq('nome', 'COPERTO').maybeSingle();
-        const copertoProd = prods || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
-        
-        if (copertoProd) {
-          setCart([{
-            ...copertoProd,
-            quantity: table.clienti,
-            addedIngredients: [],
-            removedIngredients: [],
-            notes: '',
-            uniqueId: 'initial-coperto'
-          }]);
+      if (table) {
+        setTableClienti(table.clienti || 0);
+        if (table.clienti > 0) {
+          const { data: prods } = await supabase.from('prodotti').select('*').eq('nome', 'COPERTO').maybeSingle();
+          const copertoProd = prods || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+
+          if (copertoProd) {
+            setCart([{
+              ...copertoProd,
+              quantity: table.clienti,
+              addedIngredients: [],
+              removedIngredients: [],
+              notes: '',
+              uniqueId: 'initial-coperto'
+            }]);
+          }
         }
       }
     }
@@ -718,7 +726,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 <Users size={32} />
                 <div className="text-center">
                   <div className="text-xs font-black uppercase tracking-widest">Per Coperti</div>
-                  <div className="text-[10px] opacity-60 mt-1">Diviso {MOCK_TABLES.find(t => t.id === tableId)?.clienti || 1} persone</div>
+                  <div className="text-[10px] opacity-60 mt-1">Diviso {tableClienti || 1} persone</div>
                 </div>
               </button>
 
@@ -742,16 +750,55 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
             <button 
               onClick={() => {
-                const parts = splitType === 'EQUAL' ? 2 : splitType === 'GUESTS' ? (MOCK_TABLES.find(t => t.id === tableId)?.clienti || 1) : customSplitCount;
-                alert(`SIMULAZIONE: Avvio pagamento diviso in ${parts} quote da €${(total / parts).toFixed(2)} ciascuna.`);
-                void handleFinishOrder();
-                setIsSplitModalOpen(false);
+                const parts = splitType === 'EQUAL' ? 2 : splitType === 'GUESTS' ? (tableClienti || 1) : customSplitCount;
+                setSplitResult({ parts, eachAmount: total / parts });
               }}
               disabled={splitType === 'NONE' || finishingOrder}
               className="w-full bg-gold hover:bg-gold-hover text-black font-black py-6 rounded-3xl text-xl shadow-2xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30"
             >
               PROCEDI AL PAGAMENTO DIVISO
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Split Result Confirmation */}
+      {splitResult && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden p-10 text-center">
+            <div className="w-16 h-16 rounded-full bg-gold/20 flex items-center justify-center mx-auto mb-6">
+              <Calculator size={32} className="text-gold" />
+            </div>
+            <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter mb-2">Conto Diviso</h2>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-8">
+              {splitResult.parts} quote da €{total.toFixed(2)}
+            </p>
+
+            <div className="bg-charcoal border border-surface-light rounded-3xl p-6 mb-8">
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Importo per quota</p>
+              <p className="text-5xl font-black italic text-gold">€{splitResult.eachAmount.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-2">× {splitResult.parts} persone</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setSplitResult(null)}
+                className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-5 rounded-2xl text-sm uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
+              >
+                INDIETRO
+              </button>
+              <button
+                onClick={() => {
+                  setSplitResult(null);
+                  setIsSplitModalOpen(false);
+                  void handleFinishOrder();
+                }}
+                disabled={finishingOrder}
+                className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
+              >
+                {finishingOrder ? '…' : 'CONFERMA E CHIUDI CONTO'}
+              </button>
+            </div>
           </div>
         </div>
       )}
