@@ -113,14 +113,15 @@ export default function WaiterMobileView() {
       setTables(MOCK_TABLES);
       return;
     }
-    if (!supabase) return;
-    const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
+    const sb = supabase;
+    if (!sb) return;
+    const { data } = await sb.from('tavoli').select('*').order('nome', { ascending: true });
     if (data) {
       setTables(data);
       const aperturaMap: Record<string, string> = {};
       await Promise.all(data.map(async (t) => {
         if (t.status === 'OCCUPATO') {
-          const { data: ord } = await supabase
+          const { data: ord } = await sb
             .from('ordini')
             .select('created_at')
             .eq('nome_cliente', t.nome)
