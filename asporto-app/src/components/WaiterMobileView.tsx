@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, type Order, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut, Receipt, WifiOff } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut, Receipt, WifiOff, RotateCcw } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
@@ -45,6 +45,7 @@ export default function WaiterMobileView() {
   const [billsDayOpen, setBillsDayOpen] = useState(false);
   const [billsTableOpen, setBillsTableOpen] = useState(false);
   const [orderActionBusy, setOrderActionBusy] = useState(false);
+  const [lastOrderForTable, setLastOrderForTable] = useState<Order | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   useEffect(() => {
@@ -206,6 +207,18 @@ export default function WaiterMobileView() {
     if (table.status === 'LIBERO') {
       setSelectedTable(table);
       setTempCovers(2);
+      setLastOrderForTable(null);
+      if (!IS_DEMO_MODE && supabase) {
+        const { data } = await supabase
+          .from('ordini')
+          .select('*')
+          .eq('nome_cliente', table.nome)
+          .eq('status', 'COMPLETATO')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) setLastOrderForTable(data as Order);
+      }
       setIsCoversModalOpen(true);
       return;
     }
@@ -217,6 +230,38 @@ export default function WaiterMobileView() {
     if (IS_DEMO_MODE || !supabase) return;
 
     await loadOpenOrderForTable(table);
+  };
+
+  const loadLastOrder = async () => {
+    if (!selectedTable || !lastOrderForTable || IS_DEMO_MODE || !supabase) return;
+    const prods = productsRef.current;
+    const ings = ingredientsRef.current;
+    const data = lastOrderForTable;
+    const mappedCart = (data.carrello || []).map((item: OrderCarrelloItem) => {
+      const product = findProductForOrderLine(prods, item.nome);
+      const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
+      const rimozioni = item.modifiche?.rimozioni || [];
+      const removalsPrice = calculateRemovalsPrice(rimozioni, ings);
+      return {
+        ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
+        quantity: item.quantity,
+        addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo, removalsPrice),
+        removedIngredients: rimozioni,
+        notes: item.modifiche?.note || '',
+        uniqueId: newUniqueId()
+      };
+    });
+    setCart(mappedCart);
+    setActiveOrderId(null);
+    setActiveTab('RIEPILOGO');
+    setIsCoversModalOpen(false);
+    setLastOrderForTable(null);
+    // mark table as occupied
+    const covers = selectedTable.clienti || tempCovers;
+    const updatedTable = { ...selectedTable, status: 'OCCUPATO' as const, clienti: covers };
+    setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
+    setSelectedTable(updatedTable);
+    await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', clienti: covers });
   };
 
   const confirmCovers = async () => {
@@ -744,6 +789,14 @@ export default function WaiterMobileView() {
             >
               INIZIA ORDINE
             </button>
+            {lastOrderForTable && (
+              <button 
+                onClick={loadLastOrder}
+                className="w-full mt-3 bg-charcoal border border-gold/40 text-gold font-bold py-4 rounded-2xl text-sm uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
+              >
+                <RotateCcw size={14} className="inline mr-2" />PRENDI ULTIMA COMANDA
+              </button>
+            )}
             <button 
               onClick={() => { setSelectedTable(null); setIsCoversModalOpen(false); }}
               className="w-full mt-4 text-gray-500 font-bold uppercase text-[10px] tracking-widest hover:text-white"
