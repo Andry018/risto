@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut, Receipt } from 'lucide-react';
+import { Plus, Minus, Search, Save, CreditCard, Users, ChevronLeft, AlertTriangle, LayoutDashboard, Edit3, X, AlertCircle, Trash2, LogOut, Receipt, WifiOff } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
@@ -45,6 +45,13 @@ export default function WaiterMobileView() {
   const [billsDayOpen, setBillsDayOpen] = useState(false);
   const [billsTableOpen, setBillsTableOpen] = useState(false);
   const [orderActionBusy, setOrderActionBusy] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+  useEffect(() => {
+    const handleSyncChange = () => setPendingSyncCount(syncManager.getPendingCount());
+    window.addEventListener('sync-status-changed', handleSyncChange);
+    return () => window.removeEventListener('sync-status-changed', handleSyncChange);
+  }, []);
 
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
@@ -240,15 +247,20 @@ export default function WaiterMobileView() {
   };
 
   const addToCart = (product: Product) => {
-    const newItem: CustomizedItem = {
-      ...product,
-      quantity: 1,
-      addedIngredients: [],
-      removedIngredients: [],
-      notes: '',
-      uniqueId: newUniqueId()
-    };
-    setCart(prev => [...prev, newItem]);
+    setCart(prev => {
+      const existingIdx = prev.findIndex(item =>
+        item.id === product.id &&
+        item.addedIngredients.length === 0 &&
+        item.removedIngredients.length === 0 &&
+        !item.notes
+      );
+      if (existingIdx > -1) {
+        const newCart = [...prev];
+        newCart[existingIdx] = { ...newCart[existingIdx], quantity: newCart[existingIdx].quantity + 1 };
+        return newCart;
+      }
+      return [...prev, { ...product, quantity: 1, addedIngredients: [], removedIngredients: [], notes: '', uniqueId: newUniqueId() }];
+    });
   };
 
   const openCustomization = (product: Product) => {
@@ -359,7 +371,16 @@ export default function WaiterMobileView() {
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-charcoal flex items-center justify-center text-gold">Caricamento...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-charcoal flex items-center justify-center">
+      <div className="relative">
+        <div className="w-12 h-12 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-2 h-2 bg-gold rounded-full animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-screen overflow-hidden bg-charcoal text-white font-sans flex flex-col max-w-md mx-auto relative border-x border-surface">
@@ -367,24 +388,29 @@ export default function WaiterMobileView() {
       {!selectedTable ? (
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-6 pb-2 space-y-4">
-            <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm('Uscire? Dovrai reinserire il PIN.')) staffLogout();
-                  }}
-                  className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
-                  title="Esci staff"
-                >
-                  <LogOut size={20} />
-                </button>
-                <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
-                  <LayoutDashboard size={20} />
-                </Link>
+              <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
+                <div className="flex items-center gap-2">
+                  {pendingSyncCount > 0 && (
+                    <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider">
+                      <WifiOff size={10} /> {pendingSyncCount}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Uscire? Dovrai reinserire il PIN.')) staffLogout();
+                    }}
+                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
+                    title="Esci staff"
+                  >
+                    <LogOut size={20} />
+                  </button>
+                  <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
+                    <LayoutDashboard size={20} />
+                  </Link>
+                </div>
               </div>
-            </div>
             
             {/* Room Slider */}
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
@@ -497,9 +523,8 @@ export default function WaiterMobileView() {
               <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-40">
                 {(() => {
                   const filtered = products.filter(p => {
-                    const search = searchQuery.toLowerCase().split('').join('.*');
-                    const regex = new RegExp(search);
-                    return (!searchQuery || regex.test(p.nome.toLowerCase())) && (!activeCategory || p.categoria === activeCategory);
+                    const q = searchQuery.toLowerCase();
+                    return (!q || p.nome.toLowerCase().includes(q)) && (!activeCategory || p.categoria === activeCategory);
                   });
 
                   const showSub = activeCategory === 'Bevande' || (!activeCategory && filtered.some(p => p.categoria === 'Bevande'));
@@ -605,7 +630,14 @@ export default function WaiterMobileView() {
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-surface-light pb-2">Articoli Comandati</h4>
+                  <div className="flex items-center justify-between border-b border-surface-light pb-2">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Articoli Comandati</h4>
+                    {cart.length > 1 && (
+                      <button onClick={() => { if (confirm('Svuotare tutto il carrello?')) setCart([]); }} className="text-[9px] font-black uppercase text-red-500/70 hover:text-red-500 flex items-center gap-1">
+                        <Trash2 size={12} /> Svuota
+                      </button>
+                    )}
+                  </div>
                   {cart.length === 0 ? (
                     <div className="py-8 text-center text-gray-500 italic text-sm">Nessun articolo aggiunto</div>
                   ) : (
@@ -623,12 +655,17 @@ export default function WaiterMobileView() {
                               {item.notes && <span className="italic">({item.notes})</span>}
                             </p>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-black text-white text-xs">€{calculateItemPrice(item).toFixed(1)}</span>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => editCartItem(item)} className="p-2 bg-charcoal rounded-lg text-gray-500"><Edit3 size={12} /></button>
-                              <button onClick={() => removeFromCart(item.uniqueId)} className="p-2 bg-charcoal rounded-lg text-red-500/50"><Trash2 size={12} /></button>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => {
+                                if (item.quantity <= 1) { removeFromCart(item.uniqueId); return; }
+                                setCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity - 1 } : i));
+                              }} className="w-7 h-7 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-lg text-gray-500 transition-all active:scale-90"><Minus size={12} /></button>
+                              <span className="w-5 text-center font-black text-gold text-xs">{item.quantity}</span>
+                              <button onClick={() => setCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity + 1 } : i))} className="w-7 h-7 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-lg text-gray-500 transition-all active:scale-90"><Plus size={12} /></button>
                             </div>
+                            <span className="font-black text-white text-xs min-w-[3rem] text-right">€{calculateItemPrice(item).toFixed(1)}</span>
+                            <button onClick={() => removeFromCart(item.uniqueId)} className="p-1.5 bg-charcoal rounded-lg text-red-500/50 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
                           </div>
                         </div>
                       ))}
@@ -661,7 +698,7 @@ export default function WaiterMobileView() {
                 {orderActionBusy ? '…' : success ? 'INVIATO!' : 'AGGIORNA'} <Save size={18} />
               </button>
               <button 
-                onClick={() => saveOrder(true)}
+                onClick={() => { if (confirm('Confermi la chiusura del conto?')) saveOrder(true); }}
                 disabled={cart.length === 0 || orderActionBusy}
                 className="flex-[3] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl shadow-2xl shadow-gold/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-30"
               >
@@ -794,7 +831,7 @@ export default function WaiterMobileView() {
                   <AlertCircle size={12} className="text-gold" /> VARIANTI RAPIDE
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {['Rosè', 'Bianca', 'Rossa', 'Senza Glutine', 'Senza Lattosio', 'Ben Cotta'].map(variant => {
+                  {['Rosè', 'Bianca', 'Rossa', 'Cottura ++', 'Senza Glutine', 'Senza Lattosio'].map(variant => {
                     const isActive = editingItem.notes.includes(variant);
                     return (
                       <button
@@ -803,7 +840,7 @@ export default function WaiterMobileView() {
                           let newNotes = editingItem.notes;
                           let newAdded = [...editingItem.addedIngredients];
                           const pricedVariants: Record<string, number> = {
-                            'Senza Glutine': 2.0,
+                            'Senza Glutine': 5.0,
                             'Senza Lattosio': 1.5
                           };
 
