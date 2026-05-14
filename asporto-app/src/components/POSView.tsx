@@ -1083,7 +1083,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         variant="desktop"
         onClose={() => setIsModalOpen(false)}
         onSave={saveCustomization}
-        onDuettoSave={(item, pairedId, pairedName) => {
+         onDuettoSave={(item, pairedId) => {
           const product = products.find(p => p.id === pairedId);
           if (product) {
             const pairedItem: CustomizedItem = {

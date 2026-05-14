@@ -1030,7 +1030,7 @@ export default function WaiterMobileView() {
         variant="mobile"
         onClose={() => setIsModalOpen(false)}
         onSave={saveCustomization}
-        onDuettoSave={(item, pairedId, pairedName) => {
+         onDuettoSave={(item, pairedId) => {
           const product = products.find(p => p.id === pairedId);
           if (product) {
             const pairedItem: CustomizedItem = {
