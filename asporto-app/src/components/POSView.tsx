@@ -911,57 +911,59 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         </div>
 
         {/* Total & Checkout */}
-        <div className="p-8 border-t border-surface-light bg-surface-light/10 relative z-10">
+        <div className="p-4 border-t border-surface-light bg-surface-light/10 relative z-10">
 
-          <div className="flex justify-between items-end mb-8">
+          <div className="flex justify-between items-end mb-3">
             <span className="text-[10px] font-black text-gray-400 uppercase tracking-[.3em]">Totale</span>
-            <span className="text-6xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{total.toFixed(2)}</span></span>
+            <span className="text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{total.toFixed(2)}</span></span>
           </div>
 
           {orderSuccess ? (
-            <div className="w-full bg-emerald-500 text-black font-black text-xl py-6 rounded-3xl flex items-center justify-center gap-3 animate-in zoom-in">
-              <CheckCircle size={24} /> OPERAZIONE COMPLETATA!
+            <div className="w-full bg-emerald-500 text-black font-black text-lg py-4 rounded-2xl flex items-center justify-center gap-3 animate-in zoom-in">
+              <CheckCircle size={20} /> OPERAZIONE COMPLETATA!
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => setIsSplitModalOpen(true)}
-                disabled={cart.length === 0 || finishingOrder}
-                className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-4 rounded-2xl border border-dashed border-gold/30 mb-2 transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Users size={16} /> DIVISIONE CONTO
-              </button>
-              
-              <button
-                onClick={() => setReceiptOpen(true)}
-                disabled={cart.length === 0}
-                className="w-full bg-charcoal hover:bg-surface-light text-gray-400 hover:text-white font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Receipt size={16} /> ANTEPRIMA RICEVUTA
-              </button>
-              
-              {tableId && (
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={handleUpdateBill}
+                  onClick={() => setIsSplitModalOpen(true)}
                   disabled={cart.length === 0 || finishingOrder}
-                  className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-lg py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
+                  className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-3 rounded-2xl border border-dashed border-gold/30 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
-                  Salva solo Comanda <Save size={20} />
+                  <Users size={14} /> DIVISIONE CONTO
                 </button>
-              )}
-              <button
-                onClick={handleFinishOrder}
-                disabled={cart.length === 0 || finishingOrder}
-                className="w-full bg-gold hover:bg-gold-hover text-black font-black text-2xl py-6 rounded-3xl shadow-2xl shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale"
-              >
-                {finishingOrder ? (
-                  <>Attendi…</>
-                ) : (
+                <button
+                  onClick={() => setReceiptOpen(true)}
+                  disabled={cart.length === 0}
+                  className="w-full bg-charcoal hover:bg-surface-light text-gray-400 hover:text-white font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Receipt size={14} /> ANTEPRIMA RICEVUTA
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {tableId && (
+                  <button
+                    onClick={handleUpdateBill}
+                    disabled={cart.length === 0 || finishingOrder}
+                    className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-base py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    Salva Comanda <Save size={16} />
+                  </button>
+                )}
+                <button
+                  onClick={handleFinishOrder}
+                  disabled={cart.length === 0 || finishingOrder}
+                  className={`w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale ${tableId ? '' : 'col-span-2'}`}
+                >
+                  {finishingOrder ? (
+                    <>Attendi…</>
+                  ) : (
                   <>
-                    Chiudi Conto <CheckCircle size={28} />
+                    Chiudi Conto <CheckCircle size={20} />
                   </>
                 )}
-              </button>
+                </button>
+              </div>
             </div>
           )}
         </div>
