@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
-import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
-import { completeKitchenOrder } from '../lib/tableOrderUtils';
-import { CheckCircle, Clock, LayoutGrid, List, ToggleLeft, ToggleRight, ChefHat, Bell, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
+import { supabase, type Product, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
+import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
+import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search } from 'lucide-react';
 
 export default function AdminView() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const navigate = useNavigate();
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (user && !['kitchen', 'admin'].includes(user.role)) {
+      navigate(getDefaultRouteForRole(user.role), { replace: true });
+    }
+  }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'ingredients' | 'removals'>('orders');
+  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals'>('menu');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -29,14 +35,17 @@ export default function AdminView() {
   });
 
   const [menuSearch, setMenuSearch] = useState('');
+  const [menuCategory, setMenuCategory] = useState<string | null>(null);
+  const [showNewCatInput, setShowNewCatInput] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [extraCategories, setExtraCategories] = useState<string[]>([]);
+  const menuCategories = [...new Set(products.map(p => p.categoria).filter(Boolean))].sort((a, b) => {
+    const order = ['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Fritti', 'Bevande', 'Caffè e Liquori', 'Dolci', 'EXTRA', 'Servizio'];
+    return order.indexOf(a) - order.indexOf(b);
+  });
+  const allCategories = [...new Set([...menuCategories, ...extraCategories])];
   const [ingredientSearch, setIngredientSearch] = useState('');
   const [isIngredientsModalOpen, setIsIngredientsModalOpen] = useState(false);
-
-  async function fetchOrders() {
-    if (!supabase) return;
-    const { data } = await supabase.from('ordini').select('*').order('created_at', { ascending: false });
-    if (data) setOrders(data);
-  }
 
   async function fetchProducts() {
     if (!supabase) return;
@@ -52,26 +61,14 @@ export default function AdminView() {
 
   useEffect(() => {
     if (IS_DEMO_MODE) {
-      setOrders(MOCK_ORDERS);
       setProducts(MOCK_PRODUCTS);
       setIngredients(MOCK_INGREDIENTS);
       return;
     }
     if (!supabase) return;
     const sb = supabase;
-    void fetchOrders();
     void fetchProducts();
     void fetchIngredients();
-
-    const ordersChannel = sb
-      .channel('public:ordini')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, (payload: { new: Record<string, unknown> }) => {
-        setOrders(current => [payload.new as Order, ...current]);
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ordini' }, (payload: { new: Record<string, unknown> }) => {
-        setOrders(current => current.map(o => o.id === (payload.new as Order).id ? payload.new as Order : o));
-      })
-      .subscribe();
 
     const productsChannel = sb
       .channel('public:prodotti')
@@ -87,26 +84,10 @@ export default function AdminView() {
       .subscribe();
 
     return () => {
-      sb.removeChannel(ordersChannel);
       sb.removeChannel(productsChannel);
       sb.removeChannel(ingredientsChannel);
     };
   }, []);
-
-  const markAsReady = async (id: string) => {
-    if (IS_DEMO_MODE) {
-      setOrders(prev => prev.map(o => (o.id === id ? { ...o, status: 'COMPLETATO' as const } : o)));
-      return;
-    }
-    if (!supabase) return;
-    try {
-      await completeKitchenOrder(supabase, id);
-      void fetchOrders();
-    } catch (e) {
-      console.error(e);
-      alert('Errore aggiornamento ordine');
-    }
-  };
 
   const toggleAvailability = async (id: string, currentStatus: boolean) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, disponibile: !currentStatus } : p));
@@ -171,8 +152,6 @@ export default function AdminView() {
     }
   };
 
-  const pendingOrders = orders.filter(o => o.status === 'IN_ATTESA').length;
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-300 font-sans selection:bg-indigo-500/30">
       
@@ -197,24 +176,6 @@ export default function AdminView() {
               Dashboard Principale
             </Link>
             <div className="h-px bg-slate-800/50 my-2" />
-            <button 
-              onClick={() => setActiveTab('orders')} 
-              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'orders' 
-                ? 'bg-slate-800/80 text-white shadow-md border border-slate-700/50' 
-                : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-                <LayoutGrid size={20} className={activeTab === 'orders' ? 'text-indigo-400' : ''} />
-                Gestione Ordini
-              </div>
-              {pendingOrders > 0 && (
-                <span className="bg-rose-500 text-white text-xs font-bold px-2 py-1 rounded-full animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.4)]">
-                  {pendingOrders}
-                </span>
-              )}
-            </button>
             <button 
               onClick={() => setActiveTab('menu')} 
               className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
@@ -266,86 +227,6 @@ export default function AdminView() {
         {/* Dashboard Content */}
         <main className="flex-1 p-6 md:p-10 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-slate-950">
           
-          {activeTab === 'orders' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <header className="flex justify-between items-end mb-8">
-                <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Code Ordini</h2>
-                  <p className="text-slate-400">Gestisci le preparazioni in tempo reale.</p>
-                </div>
-              </header>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {orders.length === 0 && (
-                  <div className="col-span-full py-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-3xl backdrop-blur-sm bg-slate-900/50">
-                     <Bell size={48} className="text-slate-700 mb-4" />
-                     <p className="text-xl font-medium text-slate-500">In attesa del prossimo ordine...</p>
-                  </div>
-                )}
-                
-                {orders.map(order => (
-                  <div 
-                    key={order.id} 
-                    className={`relative bg-slate-900 rounded-2xl border transition-all duration-300 flex flex-col ${
-                      order.status === 'IN_ATTESA' 
-                      ? 'border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.05)] hover:border-indigo-500/60' 
-                      : 'border-emerald-500/20 opacity-60 grayscale hover:grayscale-0'
-                    }`}
-                  >
-                    {order.status === 'IN_ATTESA' && (
-                       <div className="absolute -top-3 -right-3 w-6 h-6 bg-indigo-500 rounded-full border-4 border-slate-900 shadow-lg"></div>
-                    )}
-                    
-                    <div className="p-5 border-b border-slate-800 bg-slate-800/30 rounded-t-2xl flex justify-between items-center">
-                      <div>
-                        <h3 className="font-bold text-xl text-white">{order.nome_cliente}</h3>
-                        <p className="text-sm text-indigo-300 flex items-center gap-1.5 mt-1 font-medium bg-indigo-500/10 w-fit px-2.5 py-1 rounded-md">
-                          <Clock size={14} /> {order.orario_ritiro}
-                        </p>
-                      </div>
-                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider ${
-                        order.status === 'IN_ATTESA' 
-                        ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' 
-                        : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      }`}>
-                        {order.status === 'IN_ATTESA' ? 'In Coda' : 'Completato'}
-                      </span>
-                    </div>
-                    
-                    <div className="p-6 flex-1 flex flex-col">
-                      <ul className="space-y-3 mb-6 flex-1">
-                        {order.carrello.map((item: OrderCarrelloItem, idx: number) => (
-                          <li key={idx} className="flex justify-between items-center text-slate-300 bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50">
-                            <span className="font-medium text-white line-clamp-1">{item.nome}</span>
-                            <span className="font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded text-sm">x{item.quantity}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      
-                      <div className="flex justify-between items-center py-4 border-t border-slate-800 mb-4">
-                        <span className="text-slate-500 font-medium">Totale Da Incassare</span>
-                        <span className="font-bold text-2xl text-white">€{order.totale.toFixed(2)}</span>
-                      </div>
-                      
-                      {order.status === 'IN_ATTESA' ? (
-                        <button 
-                          onClick={() => markAsReady(order.id)}
-                          className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transform hover:-translate-y-0.5"
-                        >
-                          <CheckCircle size={20} /> Segna Pronto per Ritiro
-                        </button>
-                      ) : (
-                        <button disabled className="w-full border border-slate-700/50 text-slate-500 font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 bg-slate-800/30">
-                          Ritiro Effettuato
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {activeTab === 'menu' && (
             <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
               <header className="mb-8 flex justify-between items-center">
@@ -365,7 +246,7 @@ export default function AdminView() {
                     />
                   </div>
                   <button 
-                      onClick={() => { setEditingProduct(null); setIsModalOpen(true); }}
+                      onClick={() => { setEditingProduct(null); setNewProduct(prev => ({ ...prev, categoria: menuCategory || prev.categoria })); setIsModalOpen(true); }}
                       className="bg-indigo-500 hover:bg-indigo-400 text-white font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
                   >
                       <Plus size={20} /> Nuovo Piatto
@@ -373,8 +254,94 @@ export default function AdminView() {
                 </div>
               </header>
 
+              {/* Category filter bar */}
+              <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900">
+                <button
+                  onClick={() => setMenuCategory(null)}
+                  className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                    !menuCategory
+                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Tutte
+                </button>
+                {allCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setMenuCategory(menuCategory === cat ? null : cat)}
+                    className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                      menuCategory === cat
+                        ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                {showNewCatInput ? (
+                  <div className="shrink-0 flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && newCatName.trim()) {
+                          const name = newCatName.trim();
+                          if (!allCategories.includes(name)) {
+                            setExtraCategories(prev => [...prev, name]);
+                          }
+                          setNewProduct({ ...newProduct, categoria: name });
+                          setMenuCategory(name);
+                          setShowNewCatInput(false);
+                          setNewCatName('');
+                        }
+                        if (e.key === 'Escape') {
+                          setShowNewCatInput(false);
+                          setNewCatName('');
+                        }
+                      }}
+                      placeholder="Nome categoria..."
+                      className="w-40 bg-slate-950 border border-indigo-500/50 rounded-xl py-2 px-3 text-white text-sm outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => {
+                        if (newCatName.trim()) {
+                          const name = newCatName.trim();
+                          if (!allCategories.includes(name)) {
+                            setExtraCategories(prev => [...prev, name]);
+                          }
+                          setNewProduct({ ...newProduct, categoria: name });
+                          setMenuCategory(name);
+                          setShowNewCatInput(false);
+                          setNewCatName('');
+                        }
+                      }}
+                      className="p-2 bg-indigo-500 rounded-lg text-white"
+                    >
+                      <Plus size={16} />
+                    </button>
+                    <button
+                      onClick={() => { setShowNewCatInput(false); setNewCatName(''); }}
+                      className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowNewCatInput(true)}
+                    className="shrink-0 px-3 py-2 rounded-xl font-bold text-sm bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700 transition-all"
+                    title="Aggiungi categoria"
+                  >
+                    <Plus size={18} />
+                  </button>
+                )}
+              </div>
+
               <div className="space-y-12">
-                {['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Speciali', 'Pizze Rosse', 'Pizze Bianche', 'Fritti', 'Bevande', 'Caffè e Liquori', 'Dolci', 'EXTRA', 'Servizio'].map(cat => {
+                {allCategories.filter(cat => !menuCategory || cat === menuCategory).map(cat => {
                   const filteredProducts = products.filter(p => 
                     p.categoria === cat && 
                     p.nome.toLowerCase().includes(menuSearch.toLowerCase())
@@ -645,7 +612,7 @@ export default function AdminView() {
                                     }}
                                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none appearance-none"
                                   >
-                                      {['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Fritti', 'Bevande', 'Caffè e Liquori', 'Dolci', 'EXTRA', 'Servizio'].map(c => (
+                                      {allCategories.map(c => (
                                           <option key={c} value={c}>{c}</option>
                                       ))}
                                   </select>

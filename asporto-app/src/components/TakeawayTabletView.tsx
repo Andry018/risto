@@ -1,19 +1,19 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Order, IS_DEMO_MODE } from '../lib/supabase';
+import { Link, useNavigate } from 'react-router-dom';
+import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
+import { supabase, type Product, type Ingredient, type Order, type CustomizedItem, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
 import { capacityUtils, CAPACITY_CONFIG } from '../lib/CapacityUtils';
+import { calculateItemPrice } from '../lib/priceUtils';
 import { newUniqueId } from '../lib/id';
 import { 
   Plus, 
-  Minus, 
   Search, 
   Save, 
   Clock, 
   User, 
   Trash2, 
   X, 
-  AlertCircle, 
   Edit3,
   LayoutDashboard,
   Utensils,
@@ -21,16 +21,16 @@ import {
   Eye,
   AlertTriangle
 } from 'lucide-react';
-
-type CustomizedItem = Product & {
-  quantity: number;
-  addedIngredients: { nome: string, prezzo: number }[];
-  removedIngredients: string[];
-  notes: string;
-  uniqueId: string;
-};
+import ProductCustomizationModal from './ProductCustomizationModal';
 
 export default function TakeawayTabletView() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (user && user.role !== 'admin') {
+      navigate(getDefaultRouteForRole(user.role), { replace: true });
+    }
+  }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
@@ -39,7 +39,7 @@ export default function TakeawayTabletView() {
   const [pickupTime, setPickupTime] = useState(''); // This will now represent the selected slot
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [ingSearch, setIngSearch] = useState('');
+
   
   // Modals state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
@@ -139,16 +139,15 @@ export default function TakeawayTabletView() {
     setIsModalOpen(true);
   };
 
-  const saveCustomization = () => {
-    if (!editingItem) return;
+  const saveCustomization = (item: CustomizedItem) => {
     setCart(prev => {
-      const existingIdx = prev.findIndex(i => i.uniqueId === editingItem.uniqueId);
+      const existingIdx = prev.findIndex(i => i.uniqueId === item.uniqueId);
       if (existingIdx > -1) {
         const newCart = [...prev];
-        newCart[existingIdx] = editingItem;
+        newCart[existingIdx] = item;
         return newCart;
       }
-      return [...prev, editingItem];
+      return [...prev, item];
     });
     setIsModalOpen(false);
     setEditingItem(null);
@@ -158,16 +157,7 @@ export default function TakeawayTabletView() {
     setCart(prev => prev.filter(i => i.uniqueId !== uniqueId));
   };
 
-  const calculateItemPrice = (item: CustomizedItem) => {
-    const extrasPrice = item.addedIngredients.reduce((sum, ing) => sum + ing.prezzo, 0);
-    const removalsPrice = item.removedIngredients.reduce((sum, rName) => {
-      const ing = ingredients.find(i => i.nome.toLowerCase() === rName.toLowerCase());
-      return sum + (ing?.prezzo_rimozione || 0);
-    }, 0);
-    return Math.max(0, (item.prezzo + extrasPrice - removalsPrice)) * item.quantity;
-  };
-
-  const total = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0);
+  const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
   const currentPizzasInCart = cart.reduce((sum, item) => {
     const isPizza = item.nome?.toLowerCase().includes('pizza') || item.categoria?.toLowerCase().includes('pizze');
     return isPizza ? sum + item.quantity : sum;
@@ -441,7 +431,7 @@ export default function TakeawayTabletView() {
                   </div>
                   <div className="flex items-center gap-2">
                      <span className="text-gray-500 font-bold text-xs">x{item.quantity}</span>
-                     <span className="text-white font-black">€{calculateItemPrice(item).toFixed(2)}</span>
+                     <span className="text-white font-black">€{calculateItemPrice(item, ingredients).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -476,173 +466,14 @@ export default function TakeawayTabletView() {
         </div>
       </aside>
 
-      {/* Customization Modal */}
-      {isModalOpen && editingItem && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in zoom-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-5xl rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[90vh]">
-             
-             {/* Modal Header */}
-             <div className="p-8 border-b border-surface-light flex justify-between items-center bg-surface-light/5">
-                 <div>
-                    <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Personalizza <span className="text-gold">{editingItem.nome}</span></h2>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-1">Configurazione Ingredienti e Varianti</p>
-                 </div>
-                 <div className="flex items-center gap-6">
-                    <div className="text-right">
-                       <p className="text-[10px] font-black text-gray-500 uppercase">Prezzo Piatto</p>
-                       <p className="text-2xl font-black text-white italic">€{calculateItemPrice(editingItem).toFixed(2)}</p>
-                    </div>
-                    <button onClick={() => setIsModalOpen(false)} className="p-4 bg-charcoal rounded-2xl text-gray-500 hover:text-white transition-colors border border-surface-light">
-                       <X size={24} />
-                    </button>
-                 </div>
-             </div>
-
-             <div className="flex-1 overflow-hidden flex">
-                {/* Left Side: Removals & Options (40%) */}
-                <div className="w-[40%] border-r border-surface-light p-8 overflow-y-auto custom-scrollbar space-y-10">
-                    <section>
-                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center gap-2">
-                            <Minus size={14} className="text-red-500" /> Togli ingredienti
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2">
-                            {editingItem.ingredienti?.map(ing => {
-                               const isRemoved = editingItem.removedIngredients.includes(ing);
-                               const removalPrice = ingredients.find(i => i.nome.toLowerCase() === ing.toLowerCase())?.prezzo_rimozione || 0;
-                               return (
-                                 <button
-                                    key={ing}
-                                    onClick={() => {
-                                      if (isRemoved) setEditingItem({...editingItem, removedIngredients: editingItem.removedIngredients.filter(r => r !== ing)});
-                                      else setEditingItem({...editingItem, removedIngredients: [...editingItem.removedIngredients, ing]});
-                                    }}
-                                    className={`px-4 py-3 rounded-2xl font-bold text-[10px] border transition-all text-center ${isRemoved ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-charcoal border-surface-light text-gray-400 hover:border-surface-light-hover'}`}
-                                 >
-                                    {isRemoved ? `NO ${ing.toUpperCase()} -€${removalPrice.toFixed(2)}` : ing.toUpperCase()}
-                                 </button>
-                               )
-                            })}
-                        </div>
-                    </section>
-
-                    <section>
-                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-6 flex items-center gap-2">
-                            <AlertCircle size={14} className="text-gold" /> Varianti Rapide
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2">
-                            {['Rosè', 'Bianca', 'Rossa', 'Cottura ++', 'Senza Glutine', 'Senza Lattosio'].map(note => {
-                               const isActive = editingItem.notes.includes(note);
-                               return (
-                                 <button 
-                                  key={note}
-                                  onClick={() => {
-                                    let newNotes = editingItem.notes;
-                                    let newAdded = [...editingItem.addedIngredients];
-                                    
-                                    const pricedVariants: Record<string, number> = {
-                                      'Senza Glutine': 5.0,
-                                      'Senza Lattosio': 1.5
-                                    };
-
-                                    if (isActive) {
-                                      newNotes = newNotes.replace(note, '').replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '').trim();
-                                      if (pricedVariants[note]) {
-                                        newAdded = newAdded.filter(a => a.nome !== note);
-                                      }
-                                    } else {
-                                      newNotes = newNotes ? `${newNotes}, ${note}` : note;
-                                      if (pricedVariants[note]) {
-                                        newAdded.push({ nome: note, prezzo: pricedVariants[note] });
-                                      }
-                                    }
-                                    setEditingItem({...editingItem, notes: newNotes, addedIngredients: newAdded});
-                                  }}
-                                  className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${isActive ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'}`}
-                                 >
-                                  {note}
-                                 </button>
-                               );
-                            })}
-                        </div>
-                    </section>
-
-                    <section>
-                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-4">Note Libere</h3>
-                        <textarea 
-                            rows={2}
-                            placeholder="Altre note..."
-                            value={editingItem.notes}
-                            onChange={e => setEditingItem({...editingItem, notes: e.target.value})}
-                            className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white text-xs font-medium outline-none focus:border-gold transition-all"
-                        />
-                    </section>
-                </div>
-
-                {/* Right Side: Additions (60%) */}
-                <div className="flex-1 bg-charcoal/30 p-8 overflow-y-auto custom-scrollbar">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase flex items-center gap-2">
-                            <Plus size={14} className="text-emerald-500" /> Aggiungi ingredienti extra
-                        </h3>
-                        <div className="relative w-64">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
-                            <input 
-                                type="text"
-                                placeholder="Cerca aggiunta..."
-                                value={ingSearch}
-                                onChange={e => setIngSearch(e.target.value)}
-                                className="w-full bg-charcoal border border-surface-light rounded-xl py-3 pl-12 pr-4 text-xs font-bold text-white outline-none focus:border-gold"
-                            />
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                        {ingredients
-                          .filter(i => i.disponibile && i.nome.toLowerCase().includes(ingSearch.toLowerCase()))
-                          .map(ing => {
-                           const isAdded = editingItem.addedIngredients.some(a => a.nome === ing.nome);
-                           return (
-                             <button
-                                key={ing.id}
-                                onClick={() => {
-                                  if (isAdded) setEditingItem({...editingItem, addedIngredients: editingItem.addedIngredients.filter(a => a.nome !== ing.nome)});
-                                  else setEditingItem({...editingItem, addedIngredients: [...editingItem.addedIngredients, { nome: ing.nome, prezzo: ing.prezzo ?? 0 }]});
-                                }}
-                                className={`p-4 rounded-2xl font-bold text-[10px] border transition-all text-left flex flex-col gap-1 ${isAdded ? 'bg-emerald-500 border-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-charcoal border-surface-light text-gray-500 hover:border-surface-light-hover'}`}
-                             >
-                                <span className={isAdded ? 'text-black' : 'text-white'}>{ing.nome.toUpperCase()}</span>
-                                <span className={isAdded ? 'text-black/60 font-black' : 'text-emerald-500 font-black'}>+ €{(ing.prezzo ?? 0).toFixed(2)}</span>
-                             </button>
-                           )
-                        })}
-                    </div>
-                </div>
-             </div>
-
-             {/* Modal Footer */}
-             <div className="p-8 border-t border-surface-light bg-surface-light/5 flex justify-between items-center">
-                 <div className="flex items-center gap-8 bg-charcoal p-4 rounded-3xl border border-surface-light">
-                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Quantità Riga</span>
-                    <div className="flex items-center gap-6">
-                        <button onClick={() => setEditingItem({...editingItem, quantity: Math.max(1, editingItem.quantity - 1)})} className="p-2 bg-surface rounded-xl text-gold border border-surface-light active:scale-90"><Minus size={18} /></button>
-                        <span className="text-3xl font-black italic w-8 text-center">{editingItem.quantity}</span>
-                        <button onClick={() => setEditingItem({...editingItem, quantity: editingItem.quantity + 1})} className="p-2 bg-surface rounded-xl text-gold border border-surface-light active:scale-90"><Plus size={18} /></button>
-                    </div>
-                 </div>
-                 
-                 <div className="flex items-center gap-6">
-                    <div className="text-right">
-                        <p className="text-[10px] font-black text-gray-500 uppercase">Totale Riga</p>
-                        <p className="text-4xl font-black italic text-white text-right">€{calculateItemPrice(editingItem).toFixed(2)}</p>
-                    </div>
-                    <button onClick={saveCustomization} className="bg-emerald-500 hover:bg-emerald-600 text-black px-12 py-6 rounded-[32px] font-black text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">
-                        CONFERMA E AGGIUNGI
-                    </button>
-                 </div>
-             </div>
-          </div>
-        </div>
-      )}
+      <ProductCustomizationModal
+        isOpen={isModalOpen}
+        editingItem={editingItem}
+        ingredients={ingredients}
+        variant="desktop"
+        onClose={() => setIsModalOpen(false)}
+        onSave={saveCustomization}
+      />
 
       {/* Print Preview Modal - Kitchen Style */}
       {isPreviewOpen && (

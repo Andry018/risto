@@ -33,6 +33,16 @@ export const MOCK_PRODUCTS: Product[] = [
   // Vini Bottiglia
   { id: 'p18a', nome: 'VINO ROSSO BOTTIGLIA', prezzo: 18.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
   { id: 'p18b', nome: 'VINO BIANCO BOTTIGLIA', prezzo: 16.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  // Vino Bottiglia — Rossi
+  { id: 'p18c', nome: 'PRIMITIVO (SALENTO)', prezzo: 16.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  { id: 'p18d', nome: 'AGLIANICO TRE DANIELE', prezzo: 20.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  { id: 'p18e', nome: 'FUTOS AGLIANICO', prezzo: 18.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  { id: 'p18f', nome: 'VESÙ PIEDIROSSO', prezzo: 20.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  // Vino Bottiglia — Bianco
+  { id: 'p18g', nome: 'TRE DANIELE FIANO', prezzo: 20.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  { id: 'p18h', nome: 'FALANGHINA SAN SALVATORE', prezzo: 14.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
+  // Vino Bottiglia — Rosé
+  { id: 'p18i', nome: 'ANNA TRE DANIELE', prezzo: 25.0, categoria: 'Bevande', sottocategoria: 'Vini Bottiglia', disponibile: true, ingredienti: [] },
   // Birra alla Spina
   { id: 'p14a', nome: 'BIRRA MORETTI ALLA SPINA', prezzo: 4.5, categoria: 'Bevande', sottocategoria: 'Birra alla Spina', disponibile: true, ingredienti: [] },
   { id: 'p14b', nome: 'BIRRA ICHNUSA ALLA SPINA', prezzo: 5.0, categoria: 'Bevande', sottocategoria: 'Birra alla Spina', disponibile: true, ingredienti: [] },

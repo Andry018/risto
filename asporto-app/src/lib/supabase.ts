@@ -25,6 +25,25 @@ if (import.meta.env.DEV && (!envUrl || !envKey)) {
 export const supabase: SupabaseClient | null =
   supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
+export type Portata = '1' | '2' | '3' | '4' | '5';
+
+export const PORTATE: { value: Portata; label: string; color: string }[] = [
+  { value: '1', label: '1ª Uscita', color: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
+  { value: '2', label: '2ª Uscita', color: 'text-sky-400 border-sky-500/30 bg-sky-500/10' },
+  { value: '3', label: '3ª Uscita', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
+  { value: '4', label: '4ª Uscita', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
+  { value: '5', label: '5ª Uscita', color: 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/10' },
+];
+
+export type CustomizedItem = Product & {
+  quantity: number;
+  addedIngredients: { nome: string; prezzo: number }[];
+  removedIngredients: string[];
+  notes: string;
+  uniqueId: string;
+  portata?: Portata;
+};
+
 export interface Tavolo {
   id: string;
   nome: string;
@@ -61,6 +80,7 @@ export type OrderCarrelloItem = {
   quantity: number;
   prezzo_unitario?: number;
   categoria?: string;
+  portata?: Portata;
   modifiche?: {
     aggiunte?: string[];
     rimozioni?: string[];

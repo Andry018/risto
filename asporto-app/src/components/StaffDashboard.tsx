@@ -15,9 +15,11 @@ import {
   ShieldCheck,
   RefreshCw,
   Trash2,
-  LogOut
+  LogOut,
+  BarChart3,
+  Users
 } from 'lucide-react';
-import { staffLogout } from '../lib/staffAuth';
+import { staffLogout, getCurrentUser, getStaffUsers, removeStaffUser, updateStaffUser, type StaffUser, type StaffRole } from '../lib/staffAuth';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { dbUtils } from '../lib/DatabaseUtils';
@@ -31,6 +33,12 @@ export default function StaffDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
+  const currentUser = getCurrentUser();
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserPin, setEditUserPin] = useState('');
+  const [editUserRole, setEditUserRole] = useState<StaffRole>('waiter');
 
   async function fetchStats() {
     if (!supabase) return;
@@ -99,7 +107,7 @@ export default function StaffDashboard() {
     }
   };
 
-  const modules = [
+  const allModules = [
     {
       title: "Nuovo Asporto",
       desc: "Gestione chiamate tablet",
@@ -135,8 +143,25 @@ export default function StaffDashboard() {
       color: "from-fuchsia-500/20 to-fuchsia-500/5",
       iconColor: "text-fuchsia-400",
       badge: "Desktop"
+    },
+    {
+      title: "Report & Analytics",
+      desc: "Vendite, statistiche e trend",
+      icon: BarChart3,
+      path: "/reports",
+      color: "from-emerald-500/20 to-emerald-500/5",
+      iconColor: "text-emerald-400",
+      badge: `€${stats.totalToday.toFixed(0)} oggi`
     }
   ];
+
+  const roleModules: Record<string, string[]> = {
+    waiter: ['/map'],
+    kitchen: ['/kitchen'],
+    admin: ['/takeaway', '/map', '/kitchen', '/pos', '/reports'],
+  };
+
+  const modules = allModules.filter(m => (roleModules[currentUser?.role || ''] || []).includes(m.path));
 
   return (
     <div className="min-h-screen bg-charcoal text-white p-6 md:p-12 overflow-hidden relative">
@@ -154,9 +179,14 @@ export default function StaffDashboard() {
               </div>
               <span className="text-xs font-black uppercase tracking-[0.3em] text-gray-500">Control Center</span>
             </div>
-            <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter">
-              Risto<span className="text-gold">Premium</span>
-            </h1>
+              <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter">
+               Risto<span className="text-gold">Premium</span>
+              </h1>
+              {currentUser && (
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-2">
+                  {currentUser.name} • <span className="text-gold">{currentUser.role.toUpperCase()}</span>
+                </p>
+              )}
           </div>
 
           <div className="flex gap-4">
@@ -236,7 +266,7 @@ export default function StaffDashboard() {
                 Vista Cliente <ArrowRight size={14} />
               </Link>
               <button 
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => { setStaffUsers(getStaffUsers()); setIsSettingsOpen(true); }}
                 className="p-3 bg-charcoal hover:bg-surface-light border border-surface-light rounded-2xl text-gray-500 transition-all hover:text-gold active:scale-95"
               >
                 <Settings size={20} />
@@ -296,27 +326,73 @@ export default function StaffDashboard() {
                   </div>
                 </section>
 
+                {/* Staff Management */}
+                <section>
+                  <h3 className="text-xs font-black text-gray-500 tracking-[0.2em] uppercase mb-4 flex items-center gap-2">
+                    <Users size={14} /> Gestione Operatori
+                  </h3>
+                  <div className="space-y-2 mb-6">
+                    {staffUsers.map(user => (
+                      <div key={user.id} className="bg-charcoal border border-surface-light rounded-2xl p-4">
+                        {editingUserId === user.id ? (
+                          <div className="space-y-2">
+                            <input type="text" value={editUserName} onChange={e => setEditUserName(e.target.value)}
+                              className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold" />
+                            <input type="password" placeholder="Nuovo PIN (lascia vuoto per不变)" value={editUserPin} onChange={e => setEditUserPin(e.target.value)}
+                              className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold" />
+                            <select value={editUserRole} onChange={e => setEditUserRole(e.target.value as StaffRole)}
+                              className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold">
+                              <option value="waiter">Cameriere</option>
+                              <option value="kitchen">Cucina</option>
+                              <option value="admin">Amministratore / Cassa</option>
+                            </select>
+                            <div className="flex gap-2">
+                              <button onClick={() => setEditingUserId(null)}
+                                className="flex-1 py-2 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black uppercase text-gray-400">Annulla</button>
+                              <button onClick={() => {
+                                const updates: Partial<StaffUser> = { name: editUserName, role: editUserRole };
+                                if (editUserPin.trim()) updates.pin = editUserPin.trim();
+                                updateStaffUser(user.id, updates);
+                                setEditingUserId(null);
+                                setStaffUsers(getStaffUsers());
+                              }}
+                                className="flex-1 py-2 bg-gold text-black rounded-xl text-[10px] font-black uppercase">Salva</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gold font-black">{user.name.charAt(0).toUpperCase()}</div>
+                              <div>
+                                <p className="font-bold text-white text-sm">{user.name}</p>
+                                <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{user.role}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => {
+                                setEditingUserId(user.id);
+                                setEditUserName(user.name);
+                                setEditUserPin('');
+                                setEditUserRole(user.role);
+                              }} className="text-[10px] font-black text-gray-500 hover:text-gold uppercase">Modifica</button>
+                              {currentUser?.role === 'admin' && user.id !== currentUser.id && (
+                                <button onClick={() => { if (confirm(`Eliminare ${user.name}?`)) { removeStaffUser(user.id); setStaffUsers(getStaffUsers()); } }}
+                                  className="text-[10px] font-black text-red-500/50 hover:text-red-500 uppercase">Elimina</button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
                 {/* Configuration Section */}
                 <section>
                   <h3 className="text-xs font-black text-gray-500 tracking-[0.2em] uppercase mb-4 flex items-center gap-2">
                     <ShieldCheck size={14} /> Configurazione & Sicurezza
                   </h3>
                   <div className="space-y-4">
-                    <div className="bg-charcoal border border-surface-light p-5 rounded-3xl flex items-center justify-between group">
-                      <div className="flex items-center gap-4">
-                         <div className="p-2 bg-surface rounded-xl text-gray-400">
-                           <Activity size={18} />
-                         </div>
-                         <div>
-                            <p className="text-sm font-bold text-white uppercase italic tracking-tight leading-none mb-1">Modalità Test</p>
-                            <p className="text-[10px] text-gray-500 uppercase font-black">Simula pagamenti senza carta</p>
-                         </div>
-                      </div>
-                      <button className="w-12 h-6 bg-gold/10 rounded-full border border-gold/20 relative flex items-center px-1">
-                        <div className="w-4 h-4 bg-gold rounded-full shadow-lg" />
-                      </button>
-                    </div>
-
                     <button
                       type="button"
                       onClick={() => {
