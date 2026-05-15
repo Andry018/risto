@@ -34,6 +34,9 @@ export default function AdminView() {
     disponibile: true
   });
 
+  const [productPriceDraft, setProductPriceDraft] = useState('0');
+  const [ingredientPriceDraft, setIngredientPriceDraft] = useState('1.5');
+  const [removalPriceDrafts, setRemovalPriceDrafts] = useState<Record<string, string>>({});
   const [menuSearch, setMenuSearch] = useState('');
   const [menuCategory, setMenuCategory] = useState<string | null>(null);
   const [showNewCatInput, setShowNewCatInput] = useState(false);
@@ -46,6 +49,20 @@ export default function AdminView() {
   const allCategories = [...new Set([...menuCategories, ...extraCategories])];
   const [ingredientSearch, setIngredientSearch] = useState('');
   const [isIngredientsModalOpen, setIsIngredientsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      const val = editingProduct?.prezzo ?? newProduct.prezzo ?? 0;
+      setProductPriceDraft(String(val));
+    }
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (isIngredientsModalOpen) {
+      const val = editingIngredient?.prezzo ?? newIngredient.prezzo ?? 1.5;
+      setIngredientPriceDraft(String(val));
+    }
+  }, [isIngredientsModalOpen]);
 
   async function fetchProducts() {
     if (!supabase) return;
@@ -531,15 +548,18 @@ export default function AdminView() {
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black text-slate-500 uppercase">Riduzione</span>
                             <input 
-                              type="number"
-                              step="0.50"
-                              min="0"
-                              value={ing.prezzo_rimozione ?? 0}
-                              onChange={e => {
+                              type="text"
+                              inputMode="decimal"
+                              value={removalPriceDrafts[ing.id] ?? (ing.prezzo_rimozione ?? 0).toFixed(2)}
+                              onChange={e => setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: e.target.value }))}
+                              onBlur={e => {
                                 const raw = e.target.value.replace(',', '.');
                                 const val = parseFloat(raw);
                                 if (!isNaN(val) && val >= 0) {
                                   supabase?.from('ingredienti').update({ prezzo_rimozione: val }).eq('id', ing.id).then(() => fetchIngredients());
+                                  setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: val.toFixed(2) }));
+                                } else {
+                                  setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: (ing.prezzo_rimozione ?? 0).toFixed(2) }));
                                 }
                               }}
                               className="w-20 bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none focus:border-rose-500 transition-all"
@@ -582,20 +602,23 @@ export default function AdminView() {
                           <div className="grid grid-cols-2 gap-4">
                               <div>
                                   <label className="block text-xs font-black text-slate-500 uppercase mb-2">Prezzo (€)</label>
-                                   <input 
-                                     type="number"
-                                     step="0.50"
-                                     min="0"
-                                     value={(editingProduct ? editingProduct.prezzo : newProduct.prezzo) ?? 0}
-                                     onChange={e => {
-                                       const raw = e.target.value.replace(',', '.');
-                                       const val = parseFloat(raw);
-                                       if (!isNaN(val) && val >= 0) {
-                                         editingProduct ? setEditingProduct({...editingProduct, prezzo: val}) : setNewProduct({...newProduct, prezzo: val});
-                                       }
-                                     }}
-                                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none"
-                                   />
+                                    <input 
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={productPriceDraft}
+                                      onChange={e => setProductPriceDraft(e.target.value)}
+                                      onBlur={e => {
+                                        const raw = e.target.value.replace(',', '.');
+                                        const val = parseFloat(raw);
+                                        if (!isNaN(val) && val >= 0) {
+                                          editingProduct ? setEditingProduct({...editingProduct, prezzo: val}) : setNewProduct({...newProduct, prezzo: val});
+                                          setProductPriceDraft(String(val));
+                                        } else {
+                                          setProductPriceDraft(String(editingProduct?.prezzo ?? newProduct.prezzo ?? 0));
+                                        }
+                                      }}
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none"
+                                    />
                               </div>
                               <div>
                                   <label className="block text-xs font-black text-slate-500 uppercase mb-2">Categoria</label>
@@ -709,15 +732,18 @@ export default function AdminView() {
                           <div>
                                <label className="block text-xs font-black text-slate-500 uppercase mb-2">Prezzo Extra (€)</label>
                               <input 
-                                type="number"
-                                step="0.50"
-                                min="0"
-                                value={(editingIngredient ? editingIngredient.prezzo : newIngredient.prezzo) ?? 0}
-                                onChange={e => {
+                                type="text"
+                                inputMode="decimal"
+                                value={ingredientPriceDraft}
+                                onChange={e => setIngredientPriceDraft(e.target.value)}
+                                onBlur={e => {
                                   const raw = e.target.value.replace(',', '.');
                                   const val = parseFloat(raw);
                                   if (!isNaN(val) && val >= 0) {
                                     editingIngredient ? setEditingIngredient({...editingIngredient, prezzo: val}) : setNewIngredient({...newIngredient, prezzo: val});
+                                    setIngredientPriceDraft(String(val));
+                                  } else {
+                                    setIngredientPriceDraft(String(editingIngredient?.prezzo ?? newIngredient.prezzo ?? 1.5));
                                   }
                                 }}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-emerald-500 outline-none"
