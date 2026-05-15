@@ -1,9 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
-import { supabase, type Order, type OrderCarrelloItem, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Order, type OrderCarrelloItem, type DocumentoEmesso, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_ORDERS } from '../lib/MockData';
-import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2 } from 'lucide-react';
+import BillingModal from './BillingModal';
+import { deleteDocument } from '../lib/billingUtils';
 
 type Period = 'today' | 'week' | 'month';
 
@@ -30,6 +32,17 @@ export default function ReportsView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [period, setPeriod] = useState<Period>('today');
   const [loading, setLoading] = useState(true);
+  const [documents, setDocuments] = useState<DocumentoEmesso[]>([]);
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+
+  async function fetchDocuments() {
+    if (IS_DEMO_MODE) { setDocuments([]); return; }
+    if (!supabase) return;
+    const { data, error } = await supabase.from('documenti_emessi').select('*').order('created_at', { ascending: false }).limit(20);
+    if (data) setDocuments(data as DocumentoEmesso[]);
+    else if (error && import.meta.env.DEV) console.error(error);
+  }
 
   async function fetchOrders() {
     if (IS_DEMO_MODE) {
@@ -58,6 +71,8 @@ export default function ReportsView() {
     setLoading(true);
     void fetchOrders();
   }, [period]);
+
+  useEffect(() => { void fetchDocuments(); }, []);
 
   const stats = useMemo(() => {
     const completed = orders.filter(o => o.status === 'COMPLETATO');
@@ -252,10 +267,103 @@ export default function ReportsView() {
           </div>
         </div>
 
+        {/* Billing / Invoices Section */}
+        {!IS_DEMO_MODE && (
+          <div className="bg-surface border border-surface-light rounded-[40px] p-8 mb-10">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <FileText className="text-gold" size={20} />
+                <h2 className="text-lg font-black italic uppercase tracking-tighter text-white">Documenti Fiscali</h2>
+              </div>
+              <button
+                onClick={() => setBillingOpen(true)}
+                className="bg-gold hover:bg-gold-hover text-black font-black text-sm px-5 py-3 rounded-2xl transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-gold/20"
+              >
+                <Plus size={16} /> Nuova Fattura
+              </button>
+            </div>
+
+            {documents.length === 0 ? (
+              <p className="text-gray-500 italic text-sm">Nessuna fattura emessa</p>
+            ) : (
+              <div className="space-y-3">
+                {documents.map(doc => (
+                  <div key={doc.id} className="flex items-center justify-between bg-charcoal/50 rounded-2xl p-4 border border-surface-light group">
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <div className="w-10 h-10 bg-gold/10 rounded-xl flex items-center justify-center shrink-0">
+                        <FileText size={18} className="text-gold" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-white text-sm">{doc.doc_number}</span>
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                            doc.mode === 'linked' ? 'text-sky-400 border-sky-500/30 bg-sky-500/10' : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                          }`}>
+                            {doc.mode === 'linked' ? 'DA ORDINE' : 'MANUALE'}
+                          </span>
+                        </div>
+                        <p className="text-sm font-bold text-white truncate">{doc.customer_name}</p>
+                          {doc.company_name && <p className="text-[10px] text-gray-400 font-bold">{doc.company_name}</p>}
+                          {doc.codice_univoco && <p className="text-[10px] text-gray-500 font-bold">Cod. Univoco: {doc.codice_univoco}</p>}
+                          <p className="text-[10px] text-gray-500 font-bold">{doc.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <div className="text-right mr-2">
+                        <p className="font-black text-gold">€{doc.total.toFixed(2)}</p>
+                        <p className="text-[9px] text-gray-600 font-black">{new Date(doc.doc_date || doc.created_at).toLocaleDateString('it-IT')} · {doc.payment_method === 'carta' ? 'CARTA' : 'CONTANTI'}</p>
+                      </div>
+                      {doc.file_url && (
+                        <>
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2.5 bg-charcoal border border-surface-light rounded-xl text-gray-500 hover:text-white hover:border-gold/30 transition-all active:scale-90"
+                            title="Scarica"
+                          >
+                            <Download size={14} />
+                          </a>
+                          <button
+                            onClick={async () => {
+                              setSharingId(doc.id);
+                              try { await navigator.share({ title: `Fattura ${doc.doc_number}`, url: doc.file_url }); }
+                              catch { /* user cancelled */ }
+                              finally { setSharingId(null); }
+                            }}
+                            disabled={sharingId === doc.id}
+                            className="p-2.5 bg-charcoal border border-surface-light rounded-xl text-gray-500 hover:text-gold hover:border-gold/30 transition-all active:scale-90 disabled:opacity-50"
+                            title="Condividi"
+                          >
+                            <Share2 size={14} />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm(`Eliminare la fattura ${doc.doc_number}?`)) return;
+                              await deleteDocument(doc.id);
+                              fetchDocuments();
+                            }}
+                            className="p-2.5 bg-charcoal border border-surface-light rounded-xl text-gray-500 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-90"
+                            title="Elimina"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <footer className="text-center py-8">
           <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">RistoPremium Reports</p>
         </footer>
       </div>
+
+      <BillingModal isOpen={billingOpen} onClose={() => setBillingOpen(false)} onSuccess={() => fetchDocuments()} />
     </div>
   );
 }

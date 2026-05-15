@@ -509,7 +509,7 @@ export default function WaiterMobileView() {
             status: 'COMPLETATO',
             carrello: [],
             id: activeOrderId,
-          } as any);
+          } as Partial<Order>);
         }
         await syncManager.pushTableUpdate(selectedTable.id, { status: 'LIBERO', clienti: 0 });
       } finally {

@@ -71,7 +71,7 @@ export default function PaninoBuilderModal({ isOpen, products, currentPortata, v
       counts[cat.label] = cat.items.filter(i => isSelected(i.nome)).length;
     }
     return counts;
-  }, [selections]);
+  }, [isSelected]);
 
   const toggleCategory = (label: string) => {
     setExpandedCats(prev =>

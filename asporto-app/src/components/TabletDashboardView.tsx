@@ -8,6 +8,7 @@ import { completeKitchenOrder } from '../lib/tableOrderUtils';
 import POSView from './POSView';
 import ReservationsView from './ReservationsView';
 
+
 export default function TabletDashboardView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -15,6 +16,7 @@ export default function TabletDashboardView() {
   const [activeView, setActiveView] = useState<'POS' | 'ORDINI' | 'MAPPA' | 'MENU' | 'PRENOTAZIONI'>('MAPPA');
   const [menuTab, setMenuTab] = useState<'PRODOTTI' | 'INGREDIENTI'>('INGREDIENTI');
   const [selectedTable, setSelectedTable] = useState<{ id: string, nome: string } | null>(null);
+  const [freedTableIds, setFreedTableIds] = useState<Set<string>>(new Set());
 
   async function fetchOrders() {
     if (!supabase) return;
@@ -154,6 +156,7 @@ export default function TabletDashboardView() {
               tableId={selectedTable.id} 
               tableName={selectedTable.nome} 
               onOrderFinished={() => {
+                setFreedTableIds(prev => new Set(prev).add(selectedTable.id));
                 setSelectedTable(null);
                 setActiveView('MAPPA');
               }} 
@@ -162,7 +165,7 @@ export default function TabletDashboardView() {
         ) : activeView === 'POS' ? (
           <POSView />
         ) : activeView === 'MAPPA' ? (
-          <TableMapView onSelectTable={(id, nome) => {
+          <TableMapView freedTableIds={freedTableIds} onSelectTable={(id, nome) => {
             setSelectedTable({ id, nome });
             setActiveView('ORDINI');
           }} />

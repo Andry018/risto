@@ -611,7 +611,7 @@ export default function AdminView() {
                                         const raw = e.target.value.replace(',', '.');
                                         const val = parseFloat(raw);
                                         if (!isNaN(val) && val >= 0) {
-                                          editingProduct ? setEditingProduct({...editingProduct, prezzo: val}) : setNewProduct({...newProduct, prezzo: val});
+                                          if (editingProduct) setEditingProduct({...editingProduct, prezzo: val}); else setNewProduct({...newProduct, prezzo: val});
                                           setProductPriceDraft(String(val));
                                         } else {
                                           setProductPriceDraft(String(editingProduct?.prezzo ?? newProduct.prezzo ?? 0));
@@ -649,7 +649,7 @@ export default function AdminView() {
                                 value={editingProduct ? editingProduct.sottocategoria || '' : newProduct.sottocategoria || ''}
                                 onChange={e => {
                                   const sub = e.target.value;
-                                  editingProduct ? setEditingProduct({...editingProduct, sottocategoria: sub}) : setNewProduct({...newProduct, sottocategoria: sub});
+                                  if (editingProduct) setEditingProduct({...editingProduct, sottocategoria: sub}); else setNewProduct({...newProduct, sottocategoria: sub});
                                 }}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:border-indigo-500 outline-none appearance-none"
                               >
@@ -740,7 +740,7 @@ export default function AdminView() {
                                   const raw = e.target.value.replace(',', '.');
                                   const val = parseFloat(raw);
                                   if (!isNaN(val) && val >= 0) {
-                                    editingIngredient ? setEditingIngredient({...editingIngredient, prezzo: val}) : setNewIngredient({...newIngredient, prezzo: val});
+                                    if (editingIngredient) setEditingIngredient({...editingIngredient, prezzo: val}); else setNewIngredient({...newIngredient, prezzo: val});
                                     setIngredientPriceDraft(String(val));
                                   } else {
                                     setIngredientPriceDraft(String(editingIngredient?.prezzo ?? newIngredient.prezzo ?? 1.5));

@@ -39,7 +39,7 @@ export function addedIngredientsFromStoredOrderLine(
   removalsPrice?: number
 ): { nome: string; prezzo: number }[] {
   const names = item.modifiche?.aggiunte ?? [];
-  let rows = names.map((name: string) => {
+  const rows = names.map((name: string) => {
     const ing = findIngredientByName(ingredients, name);
     return { nome: name, prezzo: ing?.prezzo ?? 0 };
   });

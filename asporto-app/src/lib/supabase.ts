@@ -110,6 +110,24 @@ export type Reservation = {
   created_at?: string;
 };
 
+export type DocumentoEmesso = {
+  id: string;
+  doc_number: string;
+  customer_name: string;
+  piva_cf: string;
+  customer_address: string;
+  company_name: string;
+  codice_univoco: string;
+  description: string;
+  total: number;
+  payment_method: 'contanti' | 'carta';
+  doc_date: string;
+  file_url: string;
+  mode: 'linked' | 'manual';
+  order_id?: string;
+  created_at: string;
+};
+
 export const IS_DEMO_MODE = localStorage.getItem('demo_mode') === 'true';
 
 export const toggleDemoMode = (val: boolean) => {

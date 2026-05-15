@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, type Tavolo, type Reservation, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_TABLES } from '../lib/MockData';
@@ -8,7 +8,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 
 const SALE = ['Principale', 'Verde', 'Rotonda'];
 
-export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: string, name: string, status: string) => void }) {
+export default function TableMapView({ onSelectTable, freedTableIds }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string> }) {
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
   const [activeSala, setActiveSala] = useState(SALE[0]);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
@@ -208,6 +208,11 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
     return normalizedSala === normalizedActive;
   });
 
+  const displayTavoli = useMemo(() =>
+    filteredTavoli.map(t => freedTableIds?.has(t.id) ? { ...t, status: 'LIBERO' as Tavolo['status'] } : t),
+    [filteredTavoli, freedTableIds]
+  );
+
   return (
     <div className="h-[100dvh] min-h-0 flex flex-col bg-charcoal text-white overflow-hidden p-3 sm:p-5 lg:p-8">
 
@@ -303,7 +308,7 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
                 border: '1px solid rgba(207, 160, 85, 0.1)'
               }}
             >
-              {filteredTavoli.map(tavolo => (
+              {displayTavoli.map(tavolo => (
                 <div
                   key={tavolo.id}
                   onPointerDown={(e) => handlePointerDown(tavolo.id, e)}
@@ -407,7 +412,7 @@ export default function TableMapView({ onSelectTable }: { onSelectTable?: (id: s
         ) : (
           <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-              {filteredTavoli.map(tavolo => (
+              {displayTavoli.map(tavolo => (
                 <div key={tavolo.id} className="bg-surface border border-surface-light p-6 rounded-3xl flex items-center justify-between hover:border-gold/30 transition-all shadow-xl group">
                   <div className="flex items-center gap-6">
                     <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black ${tavolo.status === 'LIBERO' ? 'bg-charcoal text-gray-500 border border-surface-light' : 'bg-gold text-black shadow-lg shadow-gold/20'}`}>

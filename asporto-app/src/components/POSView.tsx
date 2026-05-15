@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
-import { supabase, type Product, type Ingredient, type OrderCarrelloItem, type CustomizedItem, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem, type CustomizedItem, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
 import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich } from 'lucide-react';
@@ -367,7 +367,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           status: 'COMPLETATO',
           carrello: [],
           id: activeOrderId,
-        } as any);
+        } as Partial<Order>);
       }
       await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
       setActiveOrderId(null);
