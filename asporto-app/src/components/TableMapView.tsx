@@ -2,9 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, type Tavolo, type Reservation, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_TABLES } from '../lib/MockData';
-import { stablePseudoMinutes } from '../lib/id';
-import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2, QrCode } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
+import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2 } from 'lucide-react';
 
 const SALE = ['Principale', 'Verde', 'Rotonda'];
 
@@ -21,7 +19,8 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationModal, setReservationModal] = useState<{ table: Tavolo; reservation?: Reservation; open: boolean }>({ open: false, table: null! });
   const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
-  const [qrModal, setQrModal] = useState<Tavolo | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
   const pointerDownPos = useRef({ x: 0, y: 0 });
@@ -41,8 +40,30 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
     }
     if (!supabase) return;
     const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
-    if (data) setTavoli(data);
+    if (data) {
+      setTavoli(data);
+      const aperturaMap: Record<string, string> = {};
+      await Promise.all(data.map(async (t) => {
+        if (t.status === 'OCCUPATO') {
+          const { data: ord } = await supabase!
+            .from('ordini')
+            .select('created_at')
+            .eq('nome_cliente', t.nome)
+            .eq('status', 'IN_ATTESA')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (ord?.created_at) aperturaMap[t.id] = ord.created_at;
+        }
+      }));
+      setTableApertura(prev => ({ ...prev, ...aperturaMap }));
+    }
   }
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   async function handleTransfer(from: Tavolo, to: Tavolo) {
      if (to.status !== 'LIBERO') {
@@ -370,9 +391,15 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
                       {tavolo.status === 'OCCUPATO' && (
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
                       )}
-                    {tavolo.status === 'OCCUPATO' && (
-                      <div className="mt-1 px-2 py-0.5 bg-black/40 rounded-full text-[8px] font-black tracking-tighter text-emerald-400">
-                        {stablePseudoMinutes(tavolo.id)}m
+                    {tavolo.status === 'OCCUPATO' && tableApertura[tavolo.id] && (
+                      <div className="mt-1 px-2 py-0.5 bg-black/40 rounded-full text-[8px] font-black text-emerald-400">
+                        {(() => {
+                          const diff = now - new Date(tableApertura[tavolo.id]).getTime();
+                          const mins = Math.floor(diff / 60000);
+                          if (mins < 1) return 'ora';
+                          if (mins < 60) return `${mins}min`;
+                          return `${Math.floor(mins / 60)}h ${mins % 60}min`;
+                        })()}
                       </div>
                     )}
                     {/* Prenotazione badge / button on table card */}
@@ -391,14 +418,6 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
                         <BookOpen size={10} /> P
                       </button>
                     )}
-                    {/* QR Code button */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setQrModal(tavolo); }}
-                      className="absolute -top-2 -left-2 flex items-center gap-1 px-2 py-1 bg-charcoal border border-gold/30 rounded-full text-[8px] font-black text-gold shadow-lg hover:bg-gold hover:text-black transition-all active:scale-95 z-20 opacity-0 group-hover:opacity-100"
-                      title="QR Code Menu"
-                    >
-                      <QrCode size={10} />
-                    </button>
                   </div>
                   {isEditLayoutMode && (
                     <div className="absolute -top-2 -right-2 w-5 h-5 bg-gold rounded-full flex items-center justify-center text-black animate-bounce shadow-lg">
@@ -619,43 +638,6 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
           </div>
         </div>
       )}
-
-      {/* QR Code Modal */}
-      {qrModal && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden p-10 text-center">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">QR <span className="text-gold">Menu</span></h2>
-              <button onClick={() => setQrModal(null)} className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light">
-                <X size={22} />
-              </button>
-            </div>
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">{qrModal.nome}</p>
-            <p className="text-xs text-gray-600 mb-8"> Sala {qrModal.sala || 'Principale'}</p>
-
-            <div className="bg-white p-6 rounded-3xl inline-block mx-auto mb-6 shadow-xl">
-              <QRCodeCanvas value={`https://risto-taupe.vercel.app/menu`} size={200} level="M" />
-            </div>
-
-            <p className="text-xs font-bold text-gray-500 break-all mb-6"> https://risto-taupe.vercel.app/menu</p>
-
-            <div className="grid gap-3">
-              <a
-                href={`${window.location.origin}/menu/${qrModal.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full bg-gold text-black font-black py-4 rounded-2xl text-lg shadow-xl active:scale-95 transition-all inline-block"
-              >
-                APRI MENU
-              </a>
-              <button onClick={() => setQrModal(null)} className="text-gray-500 font-black text-xs uppercase tracking-widest py-2">
-                Chiudi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Reservations Modal */}
       {isReservationsOpen && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300">

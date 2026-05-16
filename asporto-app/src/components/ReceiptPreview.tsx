@@ -10,9 +10,11 @@ interface Props {
   items: CustomizedItem[];
   ingredients: Ingredient[];
   total: number;
+  scontoTipo?: 'percentuale' | 'fisso';
+  scontoValore?: number;
 }
 
-export default function ReceiptPreview({ isOpen, onClose, customerName, pickupTime, items, ingredients, total }: Props) {
+export default function ReceiptPreview({ isOpen, onClose, customerName, pickupTime, items, ingredients, total, scontoTipo, scontoValore }: Props) {
   if (!isOpen) return null;
 
   return (
@@ -63,6 +65,27 @@ export default function ReceiptPreview({ isOpen, onClose, customerName, pickupTi
             </div>
           ))}
         </div>
+
+        {scontoTipo && scontoValore && scontoValore > 0 && (
+          <div className="border-t border-gray-200 pt-3 mb-3">
+            <div className="flex justify-between items-center text-sm font-bold mb-1">
+              <span className="text-gray-600">Subtotale</span>
+              <span>
+                €{(scontoTipo === 'percentuale'
+                  ? (total / (1 - scontoValore / 100))
+                  : (total + scontoValore)
+                ).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm font-bold text-red-600">
+              <span>Sconto {scontoTipo === 'percentuale' ? `${scontoValore}%` : ''}</span>
+              <span>-€{(scontoTipo === 'percentuale'
+                ? (total / (1 - scontoValore / 100)) * (scontoValore / 100)
+                : scontoValore
+              ).toFixed(2)}</span>
+            </div>
+          </div>
+        )}
 
         <div className="border-t-2 border-black pt-4 mb-4">
           <div className="flex justify-between items-center text-xl font-black">

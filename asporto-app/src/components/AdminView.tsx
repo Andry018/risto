@@ -37,6 +37,7 @@ export default function AdminView() {
   const [productPriceDraft, setProductPriceDraft] = useState('0');
   const [ingredientPriceDraft, setIngredientPriceDraft] = useState('1.5');
   const [removalPriceDrafts, setRemovalPriceDrafts] = useState<Record<string, string>>({});
+  const [additionPriceDrafts, setAdditionPriceDrafts] = useState<Record<string, string>>({});
   const [menuSearch, setMenuSearch] = useState('');
   const [menuCategory, setMenuCategory] = useState<string | null>(null);
   const [showNewCatInput, setShowNewCatInput] = useState(false);
@@ -488,24 +489,46 @@ export default function AdminView() {
                        <div className="flex justify-between items-start mb-4">
                           <div>
                               <h4 className="font-bold text-white group-hover:text-emerald-400 transition-colors uppercase text-sm">{ing.nome}</h4>
-                              <p className="text-emerald-400 font-black mt-1">€{(ing.prezzo || 0).toFixed(2)}</p>
                           </div>
-                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex gap-2">
                               <button onClick={() => { setEditingIngredient(ing); setIsIngredientsModalOpen(true); }} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Edit2 size={16} /></button>
                               <button onClick={() => deleteIngredient(ing.id)} className="p-2 bg-slate-800 rounded-lg text-rose-500/50 hover:text-rose-500"><Trash2 size={16} /></button>
                           </div>
                        </div>
                        
                        <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
-                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                              {ing.disponibile ? 'Disponibile' : 'Esaurito'}
-                          </span>
-                          <button 
-                              onClick={() => toggleIngredientAvailability(ing.id, ing.disponibile)}
-                              className={`p-1 rounded-md transition-colors ${ing.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
-                          >
-                              {ing.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-500 uppercase">Prezzo</span>
+                            <input 
+                              type="text"
+                              inputMode="decimal"
+                              value={additionPriceDrafts[ing.id] ?? (ing.prezzo ?? 0).toFixed(2)}
+                              onChange={e => setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: e.target.value }))}
+                              onBlur={e => {
+                                const raw = e.target.value.replace(',', '.');
+                                const val = parseFloat(raw);
+                                if (!isNaN(val) && val >= 0) {
+                                  supabase?.from('ingredienti').update({ prezzo: val }).eq('id', ing.id).then(() => fetchIngredients());
+                                  setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: val.toFixed(2) }));
+                                } else {
+                                  setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: (ing.prezzo ?? 0).toFixed(2) }));
+                                }
+                              }}
+                              className="w-20 bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2 text-emerald-400 font-bold text-xs text-center outline-none focus:border-emerald-500 transition-all"
+                            />
+                            <span className="text-[10px] font-black text-slate-500">€</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                                {ing.disponibile ? 'Disponibile' : 'Esaurito'}
+                            </span>
+                            <button 
+                                onClick={() => toggleIngredientAvailability(ing.id, ing.disponibile)}
+                                className={`p-1 rounded-md transition-colors ${ing.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
+                            >
+                                {ing.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                            </button>
+                          </div>
                        </div>
                     </div>
                   ))}

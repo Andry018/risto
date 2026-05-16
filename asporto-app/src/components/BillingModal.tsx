@@ -77,6 +77,13 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
     setError('');
     setResult(null);
 
+    let aborted = false;
+    const timeout = setTimeout(() => {
+      aborted = true;
+      setError('Timeout: la generazione ha impiegato troppo tempo. Riprova.');
+      setGenerating(false);
+    }, 25000);
+
     try {
       const now = new Date().toISOString();
 
@@ -94,9 +101,13 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
         createdAt: now,
       });
 
+      if (aborted) return;
+      if (pdfBlob.size === 0) throw new Error('PDF generato vuoto');
+
       let fileUrl = '';
       if (!IS_DEMO_MODE) {
         fileUrl = (await uploadPdfToStorage(pdfBlob, docNumber)) || '';
+        if (aborted) return;
         const saved = await saveDocumentMetadata({
           doc_number: docNumber,
           customer_name: customerName.trim(),
@@ -115,12 +126,15 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
         if (!saved) throw new Error('Errore salvataggio documento');
       }
 
+      clearTimeout(timeout);
       setResult({ success: true, fileUrl, docNumber });
       if (onSuccess) onSuccess();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Errore durante la generazione');
+      clearTimeout(timeout);
+      if (!aborted) setError(e instanceof Error ? e.message : 'Errore durante la generazione');
     } finally {
-      setGenerating(false);
+      clearTimeout(timeout);
+      if (!aborted) setGenerating(false);
     }
   };
 

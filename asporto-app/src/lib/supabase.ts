@@ -96,6 +96,8 @@ export type Order = {
   totale: number;
   status: 'IN_ATTESA' | 'COMPLETATO';
   carrello: OrderCarrelloItem[];
+  sconto_tipo?: 'percentuale' | 'fisso';
+  sconto_valore?: number;
 };
 
 export type Reservation = {

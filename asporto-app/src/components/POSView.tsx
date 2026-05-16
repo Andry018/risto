@@ -4,7 +4,7 @@ import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
 import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem, type CustomizedItem, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich, Percent } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import ReceiptPreview from './ReceiptPreview';
@@ -50,6 +50,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [splitResult, setSplitResult] = useState<{ parts: number; eachAmount: number } | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [showBillReview, setShowBillReview] = useState(false);
+  const [scontoTipo, setScontotipo] = useState<'percentuale' | 'fisso' | null>(null);
+  const [scontoValore, setScontoValore] = useState(0);
+  const [scontoInputOpen, setScontoInputOpen] = useState(false);
 
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
@@ -352,6 +355,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
 
+  const discountedTotal = scontoTipo === 'percentuale'
+    ? total * (1 - scontoValore / 100)
+    : scontoTipo === 'fisso'
+    ? Math.max(0, total - scontoValore)
+    : total;
+
   const freeTable = async () => {
     if (!tableId || finishingOrder) return;
     if (!confirm(`Sei sicuro di voler liberare il tavolo? I dati del conto andranno persi.`)) return;
@@ -390,7 +399,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       const orderData = {
         nome_cliente: tableName || 'POS VENDITA',
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-        totale: total,
+        totale: discountedTotal,
         status: 'COMPLETATO' as const,
         carrello: cart.map(i => {
           const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
@@ -408,7 +417,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               note: i.notes
             }
           };
-        })
+        }),
+        ...(scontoTipo ? { sconto_tipo: scontoTipo, sconto_valore: scontoValore } : {}),
       };
 
       if (activeOrderId) {
@@ -443,7 +453,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       const orderData = {
         nome_cliente: tableName || 'POS',
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-        totale: total,
+        totale: discountedTotal,
         status: 'IN_ATTESA' as const,
         carrello: cart.map(i => {
           const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
@@ -461,7 +471,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               note: i.notes
             }
           };
-        })
+        }),
+        ...(scontoTipo ? { sconto_tipo: scontoTipo, sconto_valore: scontoValore } : {}),
       };
 
       if (activeOrderId) {
@@ -522,7 +533,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-black text-gray-500 uppercase">Totale</p>
-                <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
+                {scontoTipo ? (
+                  <div className="flex flex-col items-end">
+                    <p className="text-lg font-black text-gray-500 line-through">€{total.toFixed(2)}</p>
+                    <p className="text-4xl font-black text-gold italic">€{discountedTotal.toFixed(2)}</p>
+                    <p className="text-[10px] font-black text-emerald-400">{scontoTipo === 'percentuale' ? `${scontoValore}%` : `-€${scontoValore.toFixed(2)}`}</p>
+                  </div>
+                ) : (
+                  <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
+                )}
               </div>
             </div>
 
@@ -581,6 +600,46 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   <p className="text-4xl font-black italic text-gold">€{splitResult.eachAmount.toFixed(2)} <span className="text-sm text-gray-500 font-bold">× {splitResult.parts}</span></p>
                 </div>
               )}
+
+              {/* Discount Section */}
+              <div className="bg-charcoal border border-surface-light rounded-3xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Percent size={18} className="text-gold" />
+                    <span className="font-black text-sm text-white">Sconto</span>
+                    {scontoTipo && (
+                      <span className="text-emerald-400 font-black text-sm">
+                        {scontoTipo === 'percentuale' ? `-${scontoValore}%` : `-€${scontoValore.toFixed(2)}`}
+                        <button onClick={() => { setScontotipo(null); setScontoValore(0); setScontoInputOpen(false); }} className="ml-2 text-gray-500 hover:text-red-400 text-xs">✕</button>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {!scontoTipo && (
+                      <>
+                        <button onClick={() => { setScontotipo('percentuale'); setScontoValore(10); setScontoInputOpen(true); }} className="px-3 py-1.5 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black text-gray-300 hover:text-gold hover:border-gold/30 transition-all">%</button>
+                        <button onClick={() => { setScontotipo('fisso'); setScontoValore(5); setScontoInputOpen(true); }} className="px-3 py-1.5 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black text-gray-300 hover:text-gold hover:border-gold/30 transition-all">€</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {scontoInputOpen && scontoTipo && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <input
+                      type="number"
+                      value={scontoValore}
+                      onChange={e => setScontoValore(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-24 bg-surface border border-surface-light rounded-xl py-2 px-3 text-white font-bold text-sm outline-none focus:border-gold/50"
+                      min="0"
+                      autoFocus
+                    />
+                    <span className="text-sm font-black text-gray-500">{scontoTipo === 'percentuale' ? '%' : '€'}</span>
+                    <span className="text-sm font-black text-gray-500 ml-auto">
+                      -{scontoTipo === 'percentuale' ? (total * scontoValore / 100).toFixed(2) : scontoValore.toFixed(2)} €
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer actions */}
@@ -594,7 +653,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   <Printer size={16} /> STAMPA CUCINA
                 </button>
                 <button
-                  onClick={() => printFullReceipt(cart, tableName || 'Tavolo', total)}
+                  onClick={() => printFullReceipt(cart, tableName || 'Tavolo', discountedTotal)}
                   disabled={cart.length === 0}
                   className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest hover:border-blue-500/40 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
                 >
@@ -627,7 +686,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   disabled={cart.length === 0 || finishingOrder}
                   className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl shadow-2xl shadow-gold/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-30 text-lg"
                 >
-                  {finishingOrder ? 'Attendi…' : <><CreditCard size={26} /> PAGA €{total.toFixed(2)}</>}
+                  {finishingOrder ? 'Attendi…' : <><CreditCard size={26} /> PAGA €{discountedTotal.toFixed(2)}</>}
                 </button>
               </div>
             </div>
@@ -1110,7 +1169,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         pickupTime={new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
         items={cart}
         ingredients={ingredients}
-        total={total}
+        total={discountedTotal}
+        scontoTipo={scontoTipo ?? undefined}
+        scontoValore={scontoTipo ? scontoValore : undefined}
       />
       <PaninoBuilderModal
         isOpen={paninoModalOpen}

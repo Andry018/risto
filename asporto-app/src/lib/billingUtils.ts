@@ -2,20 +2,28 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase, type DocumentoEmesso } from './supabase';
 
+function loadImage(src: string, timeoutMs: number): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const img = new Image();
+    const t = setTimeout(() => { img.src = ''; resolve(null); }, timeoutMs);
+    img.onload = () => { clearTimeout(t); resolve(img); };
+    img.onerror = () => { clearTimeout(t); resolve(null); };
+    img.src = src;
+  });
+}
+
 let _logoDataUrl: string | null = null;
 async function getLogoDataUrl(): Promise<string | null> {
   if (_logoDataUrl) return _logoDataUrl;
+  const img = await loadImage('/IlGirasole-1.png', 5000);
+  if (!img) return null;
   try {
-    const resp = await fetch('/IlGirasole-1.png');
-    if (!resp.ok) return null;
-    const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const r = new FileReader();
-      const timer = setTimeout(() => { r.abort(); resolve(null); }, 4000);
-      r.onload = () => { clearTimeout(timer); resolve(r.result as string); };
-      r.onerror = () => { clearTimeout(timer); resolve(null); };
-      r.readAsDataURL(blob);
-    });
+    const c = document.createElement('canvas');
+    c.width = 200;
+    c.height = Math.round((img.height / img.width) * 200) || 64;
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    _logoDataUrl = c.toDataURL('image/png');
+    return _logoDataUrl;
   } catch { return null; }
 }
 
@@ -33,8 +41,8 @@ export async function generateInvoicePdf(doc: {
   createdAt: string;
 }): Promise<Blob> {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
-  const pw = 190; // page width inside margins
-  const m = 10;   // margin
+  const pw = 190;
+  const m = 10;
 
   // --- Extract sequential number ---
   const seq = doc.docNumber.split('-').pop() || '000';

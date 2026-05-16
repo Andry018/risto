@@ -3,14 +3,13 @@ import { Link } from 'react-router-dom';
 import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, type Order, type CustomizedItem, type Portata, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, CreditCard, Users, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, Printer } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import { useToast } from './Toast';
-import { printKitchen, printFullReceipt } from '../lib/printUtils';
 import {
   addedIngredientsFromStoredOrderLine,
   calculateRemovalsPrice,
@@ -46,9 +45,6 @@ export default function WaiterMobileView() {
   const [billsTableOpen, setBillsTableOpen] = useState(false);
   const [orderActionBusy, setOrderActionBusy] = useState(false);
   const [lastOrderForTable, setLastOrderForTable] = useState<Order | null>(null);
-  const [showBillReview, setShowBillReview] = useState(false);
-  const [splitType, setSplitType] = useState<'NONE' | 'EQUAL' | 'GUESTS' | 'CUSTOM'>('NONE');
-  const [splitResult, setSplitResult] = useState<{ parts: number; eachAmount: number } | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
@@ -323,8 +319,6 @@ export default function WaiterMobileView() {
       setSelectedTable(table);
       setCart(draft.cart);
       setActiveOrderId(null);
-      setShowBillReview(false);
-      setSplitResult(null);
       setActiveTab('RIEPILOGO');
       clearDraft(table.id);
       if (table.status === 'LIBERO') {
@@ -359,15 +353,7 @@ export default function WaiterMobileView() {
     setSelectedTable(table);
     setCart([]);
     setActiveOrderId(null);
-    setShowBillReview(false);
-    setSplitResult(null);
-
-    if (IS_DEMO_MODE || !supabase) return;
-
-    const hasOrder = await loadOpenOrderForTable(table);
-    if (hasOrder) {
-      setShowBillReview(true);
-    }
+    void loadOpenOrderForTable(table);
   };
 
   const loadLastOrder = async () => {
@@ -493,38 +479,7 @@ export default function WaiterMobileView() {
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
 
-  const freeTable = async () => {
-    if (!selectedTable || orderActionBusy) return;
-    if (!confirm(`Sei sicuro di voler liberare ${selectedTable.nome}? I dati del conto andranno persi.`)) return;
-
-    if (!IS_DEMO_MODE && supabase) {
-      localUpdateRef.current = true;
-      setOrderActionBusy(true);
-      try {
-        if (activeOrderId) {
-          await syncManager.pushOrder({
-            nome_cliente: selectedTable.nome,
-            orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-            totale: 0,
-            status: 'COMPLETATO',
-            carrello: [],
-            id: activeOrderId,
-          } as Partial<Order>);
-        }
-        await syncManager.pushTableUpdate(selectedTable.id, { status: 'LIBERO', clienti: 0 });
-      } finally {
-        setOrderActionBusy(false);
-      }
-    }
-
-    clearDraft(selectedTable.id);
-    setCart([]);
-    setActiveOrderId(null);
-    setSelectedTable(null);
-    setShowBillReview(false);
-  };
-
-  const saveOrder = async (isClosing: boolean = false) => {
+  const saveOrder = async () => {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
     if (IS_DEMO_MODE) {
@@ -542,7 +497,7 @@ export default function WaiterMobileView() {
         nome_cliente: selectedTable.nome,
         orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         totale: total,
-        status: (isClosing ? 'COMPLETATO' : 'IN_ATTESA') as 'COMPLETATO' | 'IN_ATTESA',
+        status: 'IN_ATTESA' as const,
         carrello: cart.map(item => {
           const extras = item.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
           const removals = item.removedIngredients.reduce((s, rName) => {
@@ -560,7 +515,7 @@ export default function WaiterMobileView() {
               note: item.notes
             }
           };
-        })
+        }),
       };
 
       if (activeOrderId) {
@@ -568,16 +523,8 @@ export default function WaiterMobileView() {
       } else {
         const nowISO = new Date().toISOString();
         await syncManager.pushOrder(orderData);
-        if (!isClosing) {
-          await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO' });
-          setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
-        }
-      }
-
-      if (isClosing) {
-        await syncManager.pushTableUpdate(selectedTable.id, { status: 'LIBERO', clienti: 0 });
-        setActiveOrderId(null);
-        setSelectedTable(null);
+        await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO' });
+        setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
       }
 
       clearDraft(selectedTable.id);
@@ -690,137 +637,11 @@ export default function WaiterMobileView() {
             onSelectTable={selectTable}
           />
         </div>
-      ) : showBillReview ? (
-        /* — BILL REVIEW SCREEN — */
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
-            <button onClick={() => { setSelectedTable(null); setShowBillReview(false); }} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
-            <div className="flex flex-col items-center">
-              <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable?.nome}</h2>
-              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{selectedTable?.clienti} coperti</span>
-            </div>
-            <div className="w-12 h-12 bg-gold rounded-2xl flex items-center justify-center text-black font-black text-lg shadow-xl">
-              €{total.toFixed(0)}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto pb-40">
-            <div className="p-6 space-y-2">
-              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Riepilogo Conto</p>
-              <p className="text-5xl font-black text-gold italic">€{total.toFixed(2)}</p>
-            </div>
-
-            <div className="px-6 space-y-5">
-              {cart.length === 0 ? (
-                <div className="py-12 text-center text-gray-500 text-sm">Nessun articolo nel conto</div>
-              ) : (
-                (() => {
-                  const grouped = new Map<string, CustomizedItem[]>();
-                  for (const item of cart) {
-                    const key = item.portata || '_';
-                    if (!grouped.has(key)) grouped.set(key, []);
-                    grouped.get(key)!.push(item);
-                  }
-                  const sortedGroups = Array.from(grouped.entries()).sort(([a], [b]) => {
-                    if (a === '_') return 1; if (b === '_') return -1;
-                    return parseInt(a) - parseInt(b);
-                  });
-                  return sortedGroups.map(([portataKey, items]) => {
-                    const portataInfo = PORTATE.find(p => p.value === portataKey);
-                    const groupTotal = items.reduce((s, i) => s + calculateItemPrice(i, ingredients), 0);
-                    return (
-                      <div key={portataKey}>
-                        <div className={`flex items-center justify-between mb-2 px-3 py-2 rounded-xl border ${portataInfo?.color || 'border-surface-light bg-charcoal'}`}>
-                          <span className="font-black text-xs uppercase tracking-wider">{portataInfo?.label || 'ALTRO'}</span>
-                          <span className="font-black text-xs opacity-80">€{groupTotal.toFixed(2)}</span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {items.map(item => (
-                            <div key={item.uniqueId} className="flex items-center justify-between py-1 px-1">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <span className="w-6 h-6 bg-charcoal rounded-lg text-[10px] flex items-center justify-center font-black text-gold shrink-0">{item.quantity}</span>
-                                <span className="font-bold text-white text-sm truncate">{item.nome}</span>
-                                {item.addedIngredients.length > 0 && <span className="text-[9px] text-emerald-400 font-bold truncate">+{item.addedIngredients.map(a => a.nome).join(', ')}</span>}
-                                {item.removedIngredients.length > 0 && <span className="text-[9px] text-red-400 font-bold truncate">NO {item.removedIngredients.join(', ')}</span>}
-                              </div>
-                              <span className="font-black text-white text-sm shrink-0 ml-2">€{calculateItemPrice(item, ingredients).toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()
-              )}
-            </div>
-
-            {/* Split result */}
-            {splitResult && (
-              <div className="mx-6 mt-6 bg-charcoal border border-gold/30 rounded-3xl p-5">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Conto diviso</p>
-                <p className="text-3xl font-black italic text-gold">€{splitResult.eachAmount.toFixed(2)} <span className="text-sm text-gray-500 font-bold">× {splitResult.parts}</span></p>
-              </div>
-            )}
-          </div>
-
-          {/* Bill Review Footer */}
-          <div className="absolute bottom-0 left-0 right-0 p-5 bg-surface/90 backdrop-blur-xl border-t border-white/5 rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] z-40 space-y-3">
-            <div className="flex gap-3">
-              <button
-                onClick={() => printKitchen(cart, selectedTable?.nome || 'Tavolo')}
-                disabled={cart.length === 0}
-                className="flex-1 bg-charcoal border border-surface-light text-gray-400 font-black py-3 rounded-2xl text-[8px] uppercase tracking-widest hover:border-amber-500/40 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-1.5"
-              >
-                <Printer size={14} /> CUCINA
-              </button>
-              <button
-                onClick={() => printFullReceipt(cart, selectedTable?.nome || 'Tavolo', total)}
-                disabled={cart.length === 0}
-                className="flex-1 bg-charcoal border border-surface-light text-gray-400 font-black py-3 rounded-2xl text-[8px] uppercase tracking-widest hover:border-blue-500/40 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-1.5"
-              >
-                <Printer size={14} /> SCONTRINO
-              </button>
-            </div>
-            <button
-              onClick={() => { setShowBillReview(false); setActiveTab('MENU'); }}
-              className="w-full bg-surface-light border border-white/10 text-white font-black py-4 rounded-2xl text-sm flex items-center justify-center gap-3 active:scale-95 transition-all"
-            >
-              <Edit3 size={18} /> MODIFICA / AGGIUNGI PIATTI
-            </button>
-            <button
-              onClick={freeTable}
-              disabled={orderActionBusy}
-              className="w-full bg-red-500/10 border border-red-500/30 text-red-400 font-black py-2.5 rounded-2xl text-[9px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-1.5"
-            >
-              LIBERA TAVOLO
-            </button>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  if (splitType !== 'NONE') { setSplitType('NONE'); setSplitResult(null); return; }
-                  const parts = selectedTable?.clienti || 2;
-                  setSplitResult({ parts, eachAmount: total / parts });
-                }}
-                disabled={cart.length === 0}
-                className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-30"
-              >
-                <Users size={16} className="mx-auto mb-1" /> DIVIDI CONTO
-              </button>
-              <button
-                onClick={() => { if (confirm('Confermi la chiusura del conto?')) saveOrder(true); }}
-                disabled={cart.length === 0 || orderActionBusy}
-                className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl shadow-2xl shadow-gold/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-30"
-              >
-                {orderActionBusy ? 'Attendi…' : <><CreditCard size={20} /> PAGA €{total.toFixed(2)}</>}
-              </button>
-            </div>
-          </div>
-        </div>
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Mobile */}
           <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
-            <button onClick={() => { if (selectedTable && cart.length > 0) saveDraft(selectedTable.id, cart, selectedTable.clienti || 2); setSelectedTable(null); setShowBillReview(false); }} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
+            <button onClick={() => { if (selectedTable && cart.length > 0) saveDraft(selectedTable.id, cart, selectedTable.clienti || 2); setSelectedTable(null); }} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
             <div className="flex flex-col items-center">
               <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
               <div className="flex items-center gap-2 mt-1">
@@ -918,7 +739,7 @@ export default function WaiterMobileView() {
                           </div>
                           <div className="space-y-2 pl-2">
                             {items.map(item => (
-                              <SwipeableCartItem key={item.uniqueId} item={item} ingredients={ingredients} onRemove={removeFromCart} onEdit={editCartItem} onSetCart={setCart} />
+                              <SwipeableCartItem key={item.uniqueId} item={item} onRemove={removeFromCart} onEdit={editCartItem} onSetCart={setCart} />
                             ))}
                           </div>
                         </div>
@@ -939,32 +760,16 @@ export default function WaiterMobileView() {
 
           {/* Sticky Footer Action Bar */}
           <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl border-t border-white/5 rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] z-40">
-            <div className="flex gap-3">
-              <button 
-                onClick={() => saveOrder(false)}
-                disabled={cart.length === 0 || orderActionBusy}
-                className={`flex-[2] py-5 rounded-2xl border font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                  success 
-                    ? 'bg-emerald-500 border-emerald-500 text-black' 
-                    : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
-                } disabled:opacity-30`}
-              >
-                {orderActionBusy ? '…' : success ? 'INVIATO!' : 'AGGIORNA'} <Save size={22} />
-              </button>
-              <button 
-                onClick={() => { if (confirm('Confermi la chiusura del conto?')) saveOrder(true); }}
-                disabled={cart.length === 0 || orderActionBusy}
-                className="flex-[3] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-sm shadow-2xl shadow-gold/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-30"
-              >
-                {orderActionBusy ? '…' : success ? 'PAGATO!' : <><CreditCard size={24} /> PAGA & CHIUDI</>}
-              </button>
-            </div>
-            <button
-              onClick={freeTable}
-              disabled={orderActionBusy}
-              className="w-full mt-3 bg-red-500/10 border border-red-500/30 text-red-400 font-black py-3 rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-1.5"
+            <button 
+              onClick={() => saveOrder()}
+              disabled={cart.length === 0 || orderActionBusy}
+              className={`w-full py-5 rounded-2xl border font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                success 
+                  ? 'bg-emerald-500 border-emerald-500 text-black' 
+                  : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
+              } disabled:opacity-30`}
             >
-              LIBERA TAVOLO
+              {orderActionBusy ? '…' : success ? 'INVIATO!' : <><Save size={22} /> AGGIORNA COMANDA</>}
             </button>
             {IS_DEMO_MODE && (
                <div className="mt-3 text-center">
@@ -1070,13 +875,12 @@ export default function WaiterMobileView() {
 
 interface SwipeableCartItemProps {
   item: CustomizedItem;
-  ingredients: Ingredient[];
   onRemove: (id: string) => void;
   onEdit: (item: CustomizedItem) => void;
   onSetCart: React.Dispatch<React.SetStateAction<CustomizedItem[]>>;
 }
 
-function SwipeableCartItem({ item, ingredients, onRemove, onEdit, onSetCart }: SwipeableCartItemProps) {
+function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartItemProps) {
   const [swipeX, setSwipeX] = useState(0);
   const swipeStartX = useRef(0);
   const DELETE_THRESHOLD = -80;
@@ -1099,70 +903,64 @@ function SwipeableCartItem({ item, ingredients, onRemove, onEdit, onSetCart }: S
     setSwipeX(0);
   };
 
+  const portataInfo = PORTATE.find(p => p.value === item.portata);
+
   return (
-    <div className="relative overflow-hidden rounded-2xl">
-      <div className="absolute inset-y-0 right-0 flex items-center justify-end bg-red-500/20 rounded-2xl pr-4">
+    <div className="relative overflow-hidden rounded-xl">
+      <div className="absolute inset-y-0 right-0 flex items-center justify-end bg-red-500/20 rounded-xl pr-3">
         <button
           onClick={() => { onRemove(item.uniqueId); setSwipeX(0); }}
-          className="w-14 h-14 flex items-center justify-center bg-red-500 text-white rounded-2xl active:scale-90"
+          className="w-10 h-10 flex items-center justify-center bg-red-500 text-white rounded-xl active:scale-90"
         >
-          <Trash2 size={24} />
+          <Trash2 size={18} />
         </button>
       </div>
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative bg-surface border border-surface-light rounded-2xl p-5 flex items-center gap-5 transition-transform duration-200"
+        className="relative bg-surface border border-surface-light rounded-xl p-3 flex items-center gap-3 transition-transform duration-200"
         style={{ transform: `translateX(${swipeX}px)` }}
       >
-        {/* Quantity badge */}
-        <div className="shrink-0 w-14 h-14 bg-gold text-black rounded-2xl flex items-center justify-center font-black text-xl">
-          {item.quantity}
-        </div>
-
-        {/* Info */}
+        {/* Info (fill remaining space) */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h5 className="font-bold text-white text-xl truncate">{item.nome}</h5>
+            <h5 className="font-bold text-white text-sm truncate">{item.nome}</h5>
             {item.portata && (
-              <span className={`shrink-0 text-xs font-black uppercase px-3 py-1 rounded-full border ${PORTATE.find(p => p.value === item.portata)?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
-                {PORTATE.find(p => p.value === item.portata)?.label || item.portata}
+              <span className={`shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
+                {item.portata}ª
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-[10px] text-gray-400 mt-0.5">
             {item.addedIngredients.length > 0 && <span className="text-emerald-400 font-bold">+{item.addedIngredients.map(a => a.nome).join(', ')} </span>}
             {item.removedIngredients.length > 0 && <span className="text-red-400 font-bold">NO {item.removedIngredients.join(', ')} </span>}
             {item.notes && <span className="text-amber-400 italic font-bold">({item.notes})</span>}
           </p>
         </div>
 
-        {/* Price & actions */}
-        <div className="shrink-0 flex flex-col items-end gap-2">
-          <span className="font-black text-white text-lg">€{calculateItemPrice(item, ingredients).toFixed(2)}</span>
-          <div className="flex items-center gap-2">
-            <button onClick={() => onEdit(item)} className="w-12 h-12 bg-charcoal text-gray-400 hover:text-gold rounded-2xl flex items-center justify-center border border-surface-light active:scale-90">
-              <Edit3 size={20} />
+        {/* Quantity controls */}
+        <div className="shrink-0 flex items-center gap-2">
+          <button onClick={() => onEdit(item)} className="w-9 h-9 bg-charcoal text-gray-400 hover:text-gold rounded-xl flex items-center justify-center border border-surface-light active:scale-90">
+            <Edit3 size={15} />
+          </button>
+          <div className="flex items-center bg-charcoal rounded-xl border border-surface-light">
+            <button
+              onClick={() => {
+                if (item.quantity <= 1) { onRemove(item.uniqueId); return; }
+                onSetCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity - 1 } : i));
+              }}
+              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white active:scale-90"
+            >
+              <Minus size={15} />
             </button>
-            <div className="flex items-center bg-charcoal rounded-2xl border border-surface-light">
-              <button
-                onClick={() => {
-                  if (item.quantity <= 1) { onRemove(item.uniqueId); return; }
-                  onSetCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity - 1 } : i));
-                }}
-                className="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-white active:scale-90"
-              >
-                <Minus size={20} />
-              </button>
-              <span className="w-8 text-center font-black text-white text-lg">{item.quantity}</span>
-              <button
-                onClick={() => onSetCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity + 1 } : i))}
-                className="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-white active:scale-90"
-              >
-                <Plus size={20} />
-              </button>
-            </div>
+            <span className="w-6 text-center font-black text-white text-sm">{item.quantity}</span>
+            <button
+              onClick={() => onSetCart(prev => prev.map(i => i.uniqueId === item.uniqueId ? { ...i, quantity: i.quantity + 1 } : i))}
+              className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white active:scale-90"
+            >
+              <Plus size={15} />
+            </button>
           </div>
         </div>
       </div>
