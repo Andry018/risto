@@ -393,7 +393,7 @@ export default function AdminView() {
                                             <p className="text-[9px] text-slate-500 mt-1.5">{product.ingredienti.join(', ')}</p>
                                           )}
                                         </div>
-                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex gap-2">
                                           <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Edit2 size={16} /></button>
                                           <button onClick={() => deleteProduct(product.id)} className="p-2 bg-slate-800 rounded-lg text-rose-500/50 hover:text-rose-500"><Trash2 size={16} /></button>
                                         </div>
@@ -426,7 +426,7 @@ export default function AdminView() {
                                       <p className="text-[9px] text-slate-500 mt-1.5">{product.ingredienti.join(', ')}</p>
                                     )}
                                 </div>
-                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex gap-2">
                                     <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Edit2 size={16} /></button>
                                     <button onClick={() => deleteProduct(product.id)} className="p-2 bg-slate-800 rounded-lg text-rose-500/50 hover:text-rose-500"><Trash2 size={16} /></button>
                                 </div>
