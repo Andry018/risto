@@ -4,7 +4,7 @@ import { supabase, type Tavolo, type Reservation, IS_DEMO_MODE } from '../lib/su
 import { MOCK_TABLES } from '../lib/MockData';
 import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2 } from 'lucide-react';
 
-const SALE = ['Principale', 'Verde', 'Rotonda'];
+const SALE = ['Principale', 'Verde', 'Rotonda', 'Terrazza'];
 
 export default function TableMapView({ onSelectTable, freedTableIds }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string> }) {
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
@@ -17,7 +17,7 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
   const [transferTable, setTransferTable] = useState<Tavolo | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [reservationModal, setReservationModal] = useState<{ table: Tavolo; reservation?: Reservation; open: boolean }>({ open: false, table: null! });
+  const [reservationModal, setReservationModal] = useState<{ table?: Tavolo; reservation?: Reservation; open: boolean }>({ open: false });
   const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
   const [now, setNow] = useState(Date.now());
   const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
@@ -145,16 +145,33 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
     }
   }
 
+  function openNewReservationModal() {
+    setResForm({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
+    setReservationModal({ open: true, reservation: undefined });
+  }
+
   async function handleSaveReservation() {
     if (!supabase || !resForm.nome || !resForm.data || !resForm.ora) return;
-    const payload = { ...resForm, tavolo_id: reservationModal.table.id };
+    const payload = { ...resForm };
+    // If tavolo_id is the empty string from the default select option, treat as unassigned
+    if (!payload.tavolo_id) delete payload.tavolo_id;
     if (reservationModal.reservation) {
-      await supabase.from('prenotazioni').update(payload).eq('id', reservationModal.reservation.id);
+      const oldRes = reservationModal.reservation;
+      await supabase.from('prenotazioni').update(payload).eq('id', oldRes.id);
+      // If table changed, free old table and prenotate new one
+      if (oldRes.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
+        await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', oldRes.tavolo_id);
+      }
+      if (payload.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
+        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
+      }
     } else {
       await supabase.from('prenotazioni').insert([payload]);
+      if (payload.tavolo_id) {
+        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
+      }
     }
-    await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', reservationModal.table.id);
-    setReservationModal({ open: false, table: null! });
+    setReservationModal({ open: false });
     void fetchReservationsForDate();
     void fetchTavoli();
   }
@@ -163,8 +180,21 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
     if (!supabase || !reservationModal.reservation) return;
     if (!confirm(`Eliminare la prenotazione per ${reservationModal.reservation.nome}?`)) return;
     await supabase.from('prenotazioni').delete().eq('id', reservationModal.reservation.id);
-    await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.table.id);
-    setReservationModal({ open: false, table: null! });
+    if (reservationModal.reservation.tavolo_id) {
+      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.reservation.tavolo_id);
+    }
+    setReservationModal({ open: false });
+    void fetchReservationsForDate();
+    void fetchTavoli();
+  }
+
+  async function handleDeleteReservationById(res: Reservation) {
+    if (!supabase) return;
+    if (!confirm(`Eliminare la prenotazione per ${res.nome}?`)) return;
+    await supabase.from('prenotazioni').delete().eq('id', res.id);
+    if (res.tavolo_id) {
+      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', res.tavolo_id);
+    }
     void fetchReservationsForDate();
     void fetchTavoli();
   }
@@ -485,18 +515,53 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
             </div>
 
             <div className="grid gap-3">
-              <button 
-                onClick={async () => {
-                  const covers = quickCoversModal.clienti || 2;
-                  await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
-                  if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
-                  else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
-                  setQuickCoversModal(null);
-                }}
-                className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
-              >
-                {quickCoversModal.status === 'PRENOTATO' ? 'CHECK-IN' : 'APRI TAVOLO'}
-              </button>
+              {quickCoversModal.status === 'PRENOTATO' ? (
+                <>
+                  <button 
+                    onClick={async () => {
+                      const covers = quickCoversModal.clienti || 2;
+                      await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
+                      if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
+                      else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
+                      setQuickCoversModal(null);
+                    }}
+                    className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+                  >
+                    APRI TAVOLO
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      const covers = quickCoversModal.clienti || 2;
+                      const res = tableReservation(quickCoversModal.id);
+                      await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
+                      if (res && supabase) {
+                        await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', res.id);
+                        void fetchReservationsForDate();
+                      }
+                      if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
+                      else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
+                      setQuickCoversModal(null);
+                      void fetchTavoli();
+                    }}
+                    className="w-full bg-amber-500 text-black font-black py-5 rounded-2xl text-lg shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
+                  >
+                    CHECK-IN
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={async () => {
+                    const covers = quickCoversModal.clienti || 2;
+                    await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
+                    if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
+                    else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
+                    setQuickCoversModal(null);
+                  }}
+                  className="w-full bg-emerald-500 text-black font-black py-5 rounded-2xl text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+                >
+                  APRI TAVOLO
+                </button>
+              )}
               <button 
                 onClick={() => { const t = quickCoversModal; setQuickCoversModal(null); openReservationModal(t); }}
                 className="w-full bg-amber-500 text-black font-black py-5 rounded-2xl text-lg shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
@@ -585,9 +650,11 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
               <div className="flex justify-between items-center mb-8">
                 <div>
                   <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">{reservationModal.reservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
-                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Tavolo: {reservationModal.table?.nome}</p>
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">
+                    {reservationModal.table ? `Tavolo: ${reservationModal.table.nome}` : 'Nessun tavolo assegnato'}
+                  </p>
                 </div>
-                <button onClick={() => setReservationModal({ open: false, table: null! })} className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light">
+                <button onClick={() => setReservationModal({ open: false })} className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light">
                   <X size={22} />
                 </button>
               </div>
@@ -619,6 +686,20 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
+                  <select
+                    value={resForm.tavolo_id || ''}
+                    onChange={e => setResForm({...resForm, tavolo_id: e.target.value || undefined})}
+                    className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all appearance-none"
+                  >
+                    <option value="">Nessun tavolo</option>
+                    {tavoli.map(t => (
+                      <option key={t.id} value={t.id}>{t.nome} ({t.sala})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Note</label>
                   <textarea placeholder="Opzionale..." value={resForm.note || ''} onChange={e => setResForm({...resForm, note: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all h-20" />
                 </div>
@@ -647,17 +728,25 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
                 <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">Libro <span className="text-gold">Prenotazioni</span></h2>
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-1">Prenotazioni di oggi</p>
               </div>
-              <button onClick={() => setIsReservationsOpen(false)} className="p-4 bg-charcoal rounded-3xl text-gray-500 hover:text-white border border-surface-light">
-                <X size={28} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="p-4 bg-gold text-black rounded-3xl hover:brightness-110 transition-all shadow-lg shadow-gold/20">
+                  <Plus size={28} />
+                </button>
+                <button onClick={() => setIsReservationsOpen(false)} className="p-4 bg-charcoal rounded-3xl text-gray-500 hover:text-white border border-surface-light">
+                  <X size={28} />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
                {reservations.length === 0 ? (
-                 <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 py-20">
-                   <BookOpen size={60} strokeWidth={1} className="mb-4" />
-                   <p className="font-black uppercase tracking-widest text-sm">Nessuna prenotazione oggi</p>
-                 </div>
+                  <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 py-20">
+                    <BookOpen size={60} strokeWidth={1} className="mb-4" />
+                    <p className="font-black uppercase tracking-widest text-sm mb-6">Nessuna prenotazione oggi</p>
+                    <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="bg-gold text-black font-black py-3 px-6 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-gold/20 hover:brightness-110 transition-all">
+                      NUOVA PRENOTAZIONE
+                    </button>
+                  </div>
                ) : (
                  <div className="grid gap-4">
                     {reservations.map(res => (
@@ -677,18 +766,25 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
                                {res.note && <p className="text-xs text-gray-500 italic mt-1">"{res.note}"</p>}
                             </div>
                          </div>
-                         {res.status === 'ARRIVATA' ? (
-                           <div className="flex items-center gap-2 px-6 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-500 font-black text-xs uppercase tracking-widest">
-                             <CheckCircle2 size={16} /> ARRIVATO
-                           </div>
-                         ) : (
-                           <button
-                             onClick={() => handleCheckIn(res)}
-                             className="bg-emerald-500 text-black px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-                           >
-                             CHECK-IN
-                           </button>
-                         )}
+                          {res.status === 'ARRIVATA' ? (
+                            <div className="flex items-center gap-2 px-6 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-500 font-black text-xs uppercase tracking-widest shrink-0">
+                              <CheckCircle2 size={16} /> ARRIVATO
+                            </div>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleCheckIn(res); }}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-black px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all shrink-0"
+                            >
+                              CHECK-IN
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteReservationById(res); }}
+                            className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-2xl transition-all shrink-0"
+                            title="Elimina prenotazione"
+                          >
+                            <Trash2 size={18} />
+                          </button>
                       </div>
                     ))}
                  </div>

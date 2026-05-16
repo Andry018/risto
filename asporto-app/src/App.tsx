@@ -8,6 +8,8 @@ import AdminView from './components/AdminView';
 import POSView from './components/POSView';
 import TakeawayTabletView from './components/TakeawayTabletView';
 import PublicMenuView from './components/PublicMenuView';
+import MenuQRView from './components/MenuQRView';
+import MenuQRPrint from './components/MenuQRPrint';
 import ReportsView from './components/ReportsView';
 import StaffPinGuard from './components/StaffPinGuard';
 import { isTablet } from './lib/DeviceUtils';
@@ -28,6 +30,8 @@ export default function App() {
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
           <Route path="/menu" element={<PublicMenuView />} />
+          <Route path="/qr-menu" element={<MenuQRView />} />
+          <Route path="/qr-print" element={<MenuQRPrint />} />
           <Route element={<StaffPinGuard />}>
             <Route path="/" element={<RootRoute />} />
             <Route path="/takeaway" element={<TakeawayTabletView />} />

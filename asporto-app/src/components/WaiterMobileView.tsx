@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, type Order, type CustomizedItem, type Portata, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, type Order, type CustomizedItem, type Portata, type Reservation, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, BookOpen, X, CheckCircle2 } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
@@ -55,6 +55,12 @@ export default function WaiterMobileView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Reservation state
+  const [isReservationsOpen, setIsReservationsOpen] = useState(false);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservationModal, setReservationModal] = useState<{ table?: Tavolo; reservation?: Reservation; open: boolean }>({ open: false });
+  const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
@@ -201,15 +207,18 @@ export default function WaiterMobileView() {
 
   useEffect(() => {
     void fetchInitialData();
+    void fetchReservationsForDate();
     if (!supabase) return;
     const sb = supabase;
     const tablesChannel = sb.channel('public:tavoli').on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTables()).subscribe();
     const productsChannel = sb.channel('public:prodotti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts()).subscribe();
     const ingredientsChannel = sb.channel('public:ingredienti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients()).subscribe();
+    const prenotazioniChannel = sb.channel('public:prenotazioni-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prenotazioni' }, () => void fetchReservationsForDate()).subscribe();
     return () => {
       sb.removeChannel(tablesChannel);
       sb.removeChannel(productsChannel);
       sb.removeChannel(ingredientsChannel);
+      sb.removeChannel(prenotazioniChannel);
     };
   }, []);
 
@@ -537,6 +546,82 @@ export default function WaiterMobileView() {
     }
   };
 
+  // --- Reservation functions ---
+
+  async function fetchReservationsForDate() {
+    if (IS_DEMO_MODE || !supabase) return;
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('prenotazioni')
+      .select('*')
+      .eq('data', today)
+      .in('status', ['CONFERMATA', 'ARRIVATA'])
+      .order('ora', { ascending: true });
+    if (data) setReservations(data);
+  }
+
+  async function handleCheckIn(res: Reservation) {
+    if (!supabase) return;
+    await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', res.id);
+    if (res.tavolo_id) {
+      await supabase.from('tavoli').update({ status: 'OCCUPATO', clienti: res.persone }).eq('id', res.tavolo_id);
+    }
+    void fetchReservationsForDate();
+    void fetchTables();
+  }
+
+  function openNewReservationModal() {
+    setResForm({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
+    setReservationModal({ open: true, reservation: undefined });
+  }
+
+  async function handleSaveReservation() {
+    if (!supabase || !resForm.nome || !resForm.data || !resForm.ora) return;
+    const payload = { ...resForm };
+    if (!payload.tavolo_id) delete payload.tavolo_id;
+    if (reservationModal.reservation) {
+      const oldRes = reservationModal.reservation;
+      await supabase.from('prenotazioni').update(payload).eq('id', oldRes.id);
+      if (oldRes.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
+        await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', oldRes.tavolo_id);
+      }
+      if (payload.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
+        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
+      }
+    } else {
+      await supabase.from('prenotazioni').insert([payload]);
+      if (payload.tavolo_id) {
+        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
+      }
+    }
+    setReservationModal({ open: false });
+    void fetchReservationsForDate();
+    void fetchTables();
+  }
+
+  async function handleDeleteReservation() {
+    if (!supabase || !reservationModal.reservation) return;
+    if (!confirm(`Eliminare la prenotazione per ${reservationModal.reservation.nome}?`)) return;
+    await supabase.from('prenotazioni').delete().eq('id', reservationModal.reservation.id);
+    if (reservationModal.reservation.tavolo_id) {
+      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.reservation.tavolo_id);
+    }
+    setReservationModal({ open: false });
+    void fetchReservationsForDate();
+    void fetchTables();
+  }
+
+  async function handleDeleteReservationById(res: Reservation) {
+    if (!supabase) return;
+    if (!confirm(`Eliminare la prenotazione per ${res.nome}?`)) return;
+    await supabase.from('prenotazioni').delete().eq('id', res.id);
+    if (res.tavolo_id) {
+      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', res.tavolo_id);
+    }
+    void fetchReservationsForDate();
+    void fetchTables();
+  }
+
   if (loading) return (
     <div className="min-h-screen bg-charcoal flex items-center justify-center">
       <div className="relative">
@@ -591,6 +676,13 @@ export default function WaiterMobileView() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsReservationsOpen(true)}
+                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-amber-400 transition-colors"
+                    title="Prenotazioni"
+                  >
+                    <BookOpen size={20} />
+                  </button>
                   {pendingSyncCount > 0 && (
                     <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
                       <WifiOff size={10} /> {pendingSyncCount}
@@ -614,7 +706,7 @@ export default function WaiterMobileView() {
             
             {/* Room Slider */}
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-              {['Principale', 'Verde', 'Rotonda'].map(room => (
+              {['Principale', 'Verde', 'Rotonda', 'Terrazza'].map(room => (
                 <button
                   key={room}
                   onClick={() => setActiveRoom(room)}
@@ -869,6 +961,151 @@ export default function WaiterMobileView() {
         onClose={() => setPaninoModalOpen(false)}
         onSave={addPaninoToCart}
       />
+
+      {/* Reservation Create/Edit Modal */}
+      {reservationModal.open && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden">
+            <div className="p-5">
+              <div className="flex justify-between items-center mb-5">
+                <div>
+                  <h2 className="text-lg font-black italic uppercase tracking-tighter text-white">{reservationModal.reservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
+                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-0.5">
+                    {reservationModal.table ? `Tavolo: ${reservationModal.table.nome}` : 'Nessun tavolo assegnato'}
+                  </p>
+                </div>
+                <button onClick={() => setReservationModal({ open: false })} className="p-2 bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Cliente</label>
+                  <input type="text" placeholder="es. Mario Rossi" value={resForm.nome} onChange={e => setResForm({...resForm, nome: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Data</label>
+                    <input type="date" value={resForm.data} onChange={e => setResForm({...resForm, data: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Ora</label>
+                    <input type="time" value={resForm.ora} onChange={e => setResForm({...resForm, ora: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
+                  <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-xl p-1.5 px-3">
+                    <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-8 h-8 bg-surface rounded-lg text-gold active:scale-90 text-sm">-</button>
+                    <span className="text-xl font-black text-white">{resForm.persone}</span>
+                    <button onClick={() => setResForm({...resForm, persone: (resForm.persone || 2) + 1})} className="w-8 h-8 bg-surface rounded-lg text-gold active:scale-90 text-sm">+</button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
+                  <select
+                    value={resForm.tavolo_id || ''}
+                    onChange={e => setResForm({...resForm, tavolo_id: e.target.value || undefined})}
+                    className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all appearance-none"
+                  >
+                    <option value="">Nessun tavolo</option>
+                    {tables.map(t => (
+                      <option key={t.id} value={t.id}>{t.nome} ({t.sala})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Note</label>
+                  <textarea placeholder="Opzionale..." value={resForm.note || ''} onChange={e => setResForm({...resForm, note: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all h-16" />
+                </div>
+                <div className="grid gap-2 mt-4">
+                  <button onClick={handleSaveReservation} className="w-full bg-gold text-black font-black py-4 rounded-xl text-base shadow-xl active:scale-95 transition-all">
+                    {reservationModal.reservation ? 'SALVA MODIFICHE' : 'CONFERMA PRENOTAZIONE'}
+                  </button>
+                  {reservationModal.reservation && (
+                    <button onClick={handleDeleteReservation} className="w-full bg-red-500/10 text-red-500 font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest">
+                      ELIMINA PRENOTAZIONE
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reservations Modal */}
+      {isReservationsOpen && (
+        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300">
+          <div className="bg-surface border border-surface-light w-full sm:max-w-xl rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-surface-light flex justify-between items-center bg-surface-light/5">
+              <div>
+                <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">Libro <span className="text-gold">Prenotazioni</span></h2>
+                <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mt-0.5">Prenotazioni di oggi</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="p-3 bg-gold text-black rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-gold/20">
+                  <Plus size={20} />
+                </button>
+                <button onClick={() => setIsReservationsOpen(false)} className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+               {reservations.length === 0 ? (
+                 <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 py-16">
+                   <BookOpen size={48} strokeWidth={1} className="mb-4" />
+                   <p className="font-black uppercase tracking-widest text-sm mb-5">Nessuna prenotazione oggi</p>
+                   <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="bg-gold text-black font-black py-3 px-6 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-gold/20 hover:brightness-110 transition-all">
+                     NUOVA PRENOTAZIONE
+                   </button>
+                 </div>
+               ) : (
+                 <div className="grid gap-3">
+                    {reservations.map(res => (
+                      <div key={res.id} className="bg-gradient-to-br from-charcoal to-surface border border-surface-light/80 p-4 rounded-[24px] flex items-center justify-between group hover:border-gold/40 hover:shadow-lg hover:shadow-gold/5 transition-all">
+                         <div className="flex items-center gap-4 flex-1 min-w-0">
+                            <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 shrink-0">
+                               <p className="text-[8px] font-black text-gold/70 uppercase tracking-widest leading-none">Ora</p>
+                               <p className="text-lg font-black text-gold italic leading-tight">{res.ora.length > 5 ? res.ora.slice(0, 5) : res.ora}</p>
+                            </div>
+                            <div className="min-w-0">
+                               <p className="text-base font-black text-white truncate">{res.nome}</p>
+                               <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-0.5">
+                                 {res.persone} {res.persone === 1 ? 'Persona' : 'Persone'}
+                                 {res.tavolo_id && tables.find(t => t.id === res.tavolo_id) && ` • ${tables.find(t => t.id === res.tavolo_id)!.nome}`}
+                               </p>
+                               {res.note && <p className="text-[10px] text-gray-500 italic mt-1 truncate">"{res.note}"</p>}
+                            </div>
+                         </div>
+                          {res.status === 'ARRIVATA' ? (
+                            <div className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-500 font-black text-[10px] uppercase tracking-widest shrink-0">
+                              <CheckCircle2 size={14} /> ARRIVATO
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleCheckIn(res)}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-black px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all shrink-0"
+                            >
+                              CHECK-IN
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteReservationById(res)}
+                            className="p-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl transition-all shrink-0"
+                            title="Elimina prenotazione"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                      </div>
+                    ))}
+                 </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

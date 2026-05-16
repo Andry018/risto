@@ -41,7 +41,7 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, onSe
               table.status === 'LIBERO' ? 'bg-surface border-surface-light text-gray-500' : 'bg-emerald-500/10 border-emerald-500 text-emerald-400 font-bold'
             }`}
           >
-            <div className="text-2xl font-black">{table.nome.match(/\d+/)?.[0] || 'T'}</div>
+            <div className="text-2xl font-black">{table.nome}</div>
             <div className="text-[10px] uppercase font-black tracking-widest opacity-60">{table.status}</div>
             <div className="flex items-center gap-1 text-xs"><Users size={10} /> {table.clienti}</div>
             {table.status === 'OCCUPATO' && elapsedStr(table, tableApertura, now) && (
