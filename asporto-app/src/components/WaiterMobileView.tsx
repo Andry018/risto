@@ -879,7 +879,7 @@ export default function WaiterMobileView() {
             <h2 className="text-2xl font-black italic uppercase text-white mb-2 text-center">Numero Coperti</h2>
             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-8 text-center">{selectedTable?.nome}</p>
             
-            <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-3xl p-4 mb-8">
+            <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-3xl p-4 mb-4">
               <button 
                 onClick={() => setTempCovers(Math.max(1, tempCovers - 1))}
                 className="w-14 h-14 bg-surface rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
@@ -894,6 +894,20 @@ export default function WaiterMobileView() {
                 <Plus size={24} />
               </button>
             </div>
+
+            <textarea
+              placeholder="Note sul tavolo (opzionale)..."
+              value={selectedTable?.note || ''}
+              onChange={e => {
+                if (!selectedTable) return;
+                const updated = { ...selectedTable, note: e.target.value };
+                setSelectedTable(updated);
+                if (!IS_DEMO_MODE && supabase) {
+                  supabase.from('tavoli').update({note: e.target.value || null}).eq('id', selectedTable.id).then(() => {});
+                }
+              }}
+              className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white text-xs outline-none mb-6 resize-none h-20 placeholder:text-gray-600"
+            />
             
             <button 
               onClick={confirmCovers}

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
 import { supabase, type Order, type OrderCarrelloItem, type DocumentoEmesso, IS_DEMO_MODE } from '../lib/supabase';
 import { MOCK_ORDERS } from '../lib/MockData';
-import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2 } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2, LogOut, AlertTriangle } from 'lucide-react';
 import BillingModal from './BillingModal';
 import { deleteDocument } from '../lib/billingUtils';
 
@@ -181,6 +181,36 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
             <p className="text-4xl font-black italic text-white">{stats.pendingCount}</p>
           </div>
         </div>
+
+        {/* Daily Close */}
+        {period === 'today' && (
+          <div className="bg-surface border border-rose-500/30 rounded-[32px] p-8 mb-10">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-rose-500/10 rounded-2xl"><AlertTriangle className="text-rose-400" size={24} /></div>
+                <div>
+                  <h2 className="text-lg font-black italic uppercase tracking-tighter text-white">Chiusura Giornaliera</h2>
+                  <p className="text-xs text-gray-500 font-bold mt-1">
+                    {stats.totalOrders} ordini &middot; €{stats.totalRevenue.toFixed(2)} incasso &middot; {stats.pendingCount} in attesa
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!confirm(`Chiudere la giornata?\n\nOrdini completati: ${stats.totalOrders}\nIncasso totale: €${stats.totalRevenue.toFixed(2)}\nIn attesa: ${stats.pendingCount}\n\nTutti i tavoli OCCUPATO verranno liberati.`)) return;
+                  if (!supabase) { alert('Modalità demo — nessuna azione eseguita'); return; }
+                  const { error } = await supabase.from('tavoli').update({ status: 'LIBERO' }).eq('status', 'OCCUPATO');
+                  if (error) { alert('Errore: ' + error.message); return; }
+                  alert(`Giornata chiusa!\n\n€{stats.totalRevenue.toFixed(2)} incasso totale\n${stats.totalOrders} ordini\n\nTavoli liberati.`);
+                  void fetchOrders();
+                }}
+                className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-black text-xs px-6 py-3 rounded-2xl transition-all active:scale-95 flex items-center gap-2 shrink-0"
+              >
+                <LogOut size={16} /> CHIUDI GIORNATA
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
           {/* Top Products */}

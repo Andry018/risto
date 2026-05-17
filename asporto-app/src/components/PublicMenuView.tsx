@@ -1,26 +1,17 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase, type Product, ALLERGEN_META } from '../lib/supabase';
-import { translateBatch } from '../lib/translate';
 import { Search, X, Globe } from 'lucide-react';
 
 const CATEGORY_ORDER = ['Antipasti', 'Fritti', 'Primi', 'Secondi', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Dolci', 'Caffè e Liquori', 'Bevande'];
 
-const LANGUAGES = [
-  { code: 'it', label: 'ITA' },
-  { code: 'en', label: 'ENG' },
-  { code: 'fr', label: 'FRA' },
-  { code: 'de', label: 'DEU' },
-];
+declare global {
+  interface Window { googleTranslateElementInit: () => void; }
+}
 
 export default function PublicMenuView() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lang, setLang] = useState(() => {
-    const saved = localStorage.getItem('menu_lang');
-    return saved || 'it';
-  });
-  const [translations, setTranslations] = useState<Record<string, string>>({});
-  const [translating, setTranslating] = useState(false);
+  const [currentLang, setCurrentLang] = useState('it');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showLangPicker, setShowLangPicker] = useState(false);
@@ -29,8 +20,22 @@ export default function PublicMenuView() {
   const catsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('menu_lang', lang);
-  }, [lang]);
+    window.googleTranslateElementInit = () => {
+      new (window as any).google.translate.TranslateElement({
+        pageLanguage: 'it',
+        includedLanguages: 'en,fr,de',
+        autoDisplay: false,
+      }, 'google_translate_element');
+    };
+    const script = document.createElement('script');
+    script.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+    script.async = true;
+    document.body.appendChild(script);
+    const style = document.createElement('style');
+    style.textContent = `.goog-te-banner-frame,.goog-te-balloon-frame,.goog-te-gadget-simple,.goog-te-gadget-icon{display:none!important}body{top:0!important}`;
+    document.head.appendChild(style);
+    return () => { document.body.removeChild(script); document.head.removeChild(style); };
+  }, []);
 
   async function fetchData() {
     if (!supabase) { setLoading(false); return; }
@@ -61,27 +66,13 @@ export default function PublicMenuView() {
     return () => { sb.removeChannel(channel); };
   }, []);
 
-  const doTranslate = useCallback(async (targetLang: string, prods: Product[]) => {
-    if (targetLang === 'it') {
-      setTranslations({});
-      return;
-    }
-    setTranslating(true);
-    const items = prods.map(p => ({ id: p.id, text: p.nome }));
-    const result = await translateBatch(items, targetLang);
-    setTranslations(result);
-    setTranslating(false);
-  }, []);
-
-  useEffect(() => {
-    if (products.length > 0) {
-      void doTranslate(lang, products);
-    }
-  }, [lang, products, doTranslate]);
-
-  const getTranslatedName = (product: Product): string => {
-    if (lang === 'it') return product.nome;
-    return translations[product.id] || product.nome;
+  const changeLang = (code: string) => {
+    setCurrentLang(code);
+    setShowLangPicker(false);
+    try {
+      const select = document.querySelector('.goog-te-combo') as HTMLSelectElement;
+      if (select) { select.value = code; select.dispatchEvent(new Event('change')); }
+    } catch {}
   };
 
   const getA = (label: string) => ALLERGEN_META.find(a => a.label === label);
@@ -177,12 +168,17 @@ export default function PublicMenuView() {
 
         {showLangPicker && (
           <div className="absolute top-28 right-5 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-30 animate-in zoom-in origin-top-right">
-            {LANGUAGES.map(l => (
+            {[
+              { code: 'it', label: 'ITA' },
+              { code: 'en', label: 'ENG' },
+              { code: 'fr', label: 'FRA' },
+              { code: 'de', label: 'DEU' },
+            ].map(l => (
               <button
                 key={l.code}
-                onClick={() => { setLang(l.code); setShowLangPicker(false); }}
+                onClick={() => changeLang(l.code)}
                 className={`block w-full text-left px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                  lang === l.code ? 'bg-[#ebc22d]/10 text-[#ebc22d]' : 'text-gray-700 hover:bg-gray-50'
+                  currentLang === l.code ? 'bg-[#ebc22d]/10 text-[#ebc22d]' : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
                 {l.label}
@@ -190,6 +186,9 @@ export default function PublicMenuView() {
             ))}
           </div>
         )}
+
+        {/* Google Translate (hidden) */}
+        <div id="google_translate_element" className="hidden" />
 
         {/* Gold accent line */}
         <div className="relative mt-6 h-px bg-gradient-to-r from-transparent via-[#ebc22d]/40 to-transparent" />
@@ -243,12 +242,6 @@ export default function PublicMenuView() {
 
       {/* Menu Content */}
       <div className="px-5 pb-24 mt-3">
-        {translating && lang !== 'it' && (
-          <div className="text-center py-3 mb-3 bg-amber-50 rounded-2xl border border-amber-200">
-            <span className="text-[10px] text-amber-600 font-black uppercase tracking-widest animate-pulse">Traduzione in corso...</span>
-          </div>
-        )}
-
         {searchQuery && filteredCategories.length === 0 ? (
           <div className="text-center py-20">
             <Search size={40} className="mx-auto text-gray-300 mb-4" />
@@ -302,7 +295,7 @@ export default function PublicMenuView() {
                                                     <img src={p.immagine} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0 mt-0.5 border border-gray-100" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                   )}
                                                   <div>
-                                                    <p className="text-sm font-bold text-gray-800">{getTranslatedName(p)}</p>
+                                                    <p className="text-sm font-bold text-gray-800">{p.nome}</p>
                                                     {p.ingredienti.length > 0 && (
                                                       <p className="text-[10px] text-gray-500 mt-0.5">{p.ingredienti.join(', ')}</p>
                                                     )}
@@ -329,7 +322,7 @@ export default function PublicMenuView() {
                                                     <img src={p.immagine} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0 mt-0.5 border border-gray-100" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                   )}
                                                   <div>
-                                                    <p className="text-sm font-bold text-gray-800">{getTranslatedName(p)}</p>
+                                                    <p className="text-sm font-bold text-gray-800">{p.nome}</p>
                                                     {p.ingredienti.length > 0 && (
                                                       <p className="text-[10px] text-gray-500 mt-0.5">{p.ingredienti.join(', ')}</p>
                                                     )}
@@ -354,7 +347,7 @@ export default function PublicMenuView() {
                                           <img src={p.immagine} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0 mt-0.5 border border-gray-100" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                         )}
                                         <div>
-                                          <p className="text-sm font-bold text-gray-800">{getTranslatedName(p)}</p>
+                                          <p className="text-sm font-bold text-gray-800">{p.nome}</p>
                                           {p.ingredienti.length > 0 && (
                                             <p className="text-[10px] text-gray-500 mt-0.5">{p.ingredienti.join(', ')}</p>
                                           )}
@@ -381,7 +374,7 @@ export default function PublicMenuView() {
                                 <img src={p.immagine} alt="" className="w-11 h-11 rounded-xl object-cover shrink-0 mt-0.5 border border-gray-100" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               )}
                               <div>
-                                <p className="text-sm font-bold text-gray-800">{getTranslatedName(p)}</p>
+                                <p className="text-sm font-bold text-gray-800">{p.nome}</p>
                                 {p.ingredienti.length > 0 && (
                                   <p className="text-[10px] text-gray-500 mt-0.5">{p.ingredienti.join(', ')}</p>
                                 )}
@@ -426,14 +419,14 @@ export default function PublicMenuView() {
             )}
             <div className="px-6 pt-5 pb-8">
               <div className="flex items-start justify-between gap-4">
-                <h2 className="text-xl font-black text-gray-800">{getTranslatedName(selectedProduct)}</h2>
+                <h2 className="text-xl font-black text-gray-800">{selectedProduct.nome}</h2>
                 <span className="text-lg font-black text-[#ebc22d] shrink-0">€{selectedProduct.prezzo.toFixed(2)}</span>
               </div>
 
               {selectedProduct.ingredienti.length > 0 && (
                 <div className="mt-5">
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2">
-                    {lang === 'it' ? 'Ingredienti' : 'Ingredients'}
+                    {currentLang === 'it' ? 'Ingredienti' : 'Ingredients'}
                   </p>
                   <p className="text-sm text-gray-600 leading-relaxed">{selectedProduct.ingredienti.join(', ')}</p>
                 </div>
@@ -442,7 +435,7 @@ export default function PublicMenuView() {
               {selectedProduct.allergeni && selectedProduct.allergeni.length > 0 && (
                 <div className="mt-5">
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2.5">
-                    {lang === 'it' ? 'Allergeni' : 'Allergens'}
+                    {currentLang === 'it' ? 'Allergeni' : 'Allergens'}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {selectedProduct.allergeni.map(a => {
@@ -468,7 +461,7 @@ export default function PublicMenuView() {
           Il Girasole — Menu Digitale
         </p>
         <p className="text-[7px] text-gray-300 font-bold mt-0.5">
-          {lang === 'it' ? 'Prezzi e disponibilità aggiornati in tempo reale' : 'Real-time prices and availability'}
+          {currentLang === 'it' ? 'Prezzi e disponibilità aggiornati in tempo reale' : 'Real-time prices and availability'}
         </p>
       </footer>
     </div>
