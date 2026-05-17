@@ -6,7 +6,7 @@ import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart
 
 const SALE = ['Principale', 'Verde', 'Rotonda', 'Terrazza'];
 
-export default function TableMapView({ onSelectTable, freedTableIds }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string> }) {
+export default function TableMapView({ onSelectTable, freedTableIds, onNavigateHome }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string>; onNavigateHome?: () => void }) {
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
   const [activeSala, setActiveSala] = useState(SALE[0]);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
@@ -270,9 +270,15 @@ export default function TableMapView({ onSelectTable, freedTableIds }: { onSelec
       {/* View Header & Toggles */}
       <header className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start shrink-0 mb-3 sm:mb-4">
         <div className="flex gap-4">
-          <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
-             <LayoutDashboard size={24} />
-          </Link>
+          {onNavigateHome ? (
+            <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+               <LayoutDashboard size={24} />
+            </button>
+          ) : (
+            <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+               <LayoutDashboard size={24} />
+            </Link>
+          )}
           <div>
             <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase">Gestione Sala</h2>
             <h1 className="text-3xl font-black text-white mt-1">MAPPA TAVOLI</h1>

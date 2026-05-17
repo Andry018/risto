@@ -53,6 +53,7 @@ export interface Tavolo {
   status: 'LIBERO' | 'OCCUPATO' | 'PRENOTATO';
   shape: 'SQUARE' | 'ROUND' | 'RECTANGLE';
   sala: string;
+  note?: string;
   created_at?: string;
 }
 
@@ -64,6 +65,8 @@ export type Product = {
   sottocategoria?: string;
   disponibile: boolean;
   ingredienti: string[];
+  immagine?: string;
+  allergeni?: string[];
 };
 
 export type Ingredient = {
@@ -129,6 +132,25 @@ export type DocumentoEmesso = {
   order_id?: string;
   created_at: string;
 };
+
+export const ALLERGEN_META: { label: string; icon: string; color: string; bg: string }[] = [
+  { label: 'Glutine', icon: '🌾', color: '#92400e', bg: '#fef3c7' },
+  { label: 'Lattosio', icon: '🥛', color: '#1e40af', bg: '#dbeafe' },
+  { label: 'Uova', icon: '🥚', color: '#9a3412', bg: '#ffedd5' },
+  { label: 'Pesce', icon: '🐟', color: '#075985', bg: '#e0f2fe' },
+  { label: 'Crostacei', icon: '🦐', color: '#991b1b', bg: '#fee2e2' },
+  { label: 'Arachidi', icon: '🥜', color: '#78350f', bg: '#fef3c7' },
+  { label: 'Soia', icon: '🫘', color: '#166534', bg: '#dcfce7' },
+  { label: 'Frutta a Guscio', icon: '🌰', color: '#44403c', bg: '#f5f5f4' },
+  { label: 'Sedano', icon: '🥬', color: '#15803d', bg: '#f0fdf4' },
+  { label: 'Senape', icon: '🌿', color: '#854d0e', bg: '#fef9c3' },
+  { label: 'Sesamo', icon: '🫓', color: '#713f12', bg: '#fefce8' },
+  { label: 'Solfiti', icon: '🧪', color: '#6b21a8', bg: '#f3e8ff' },
+  { label: 'Lupini', icon: '🫘', color: '#3f6212', bg: '#ecfccb' },
+  { label: 'Molluschi', icon: '🐚', color: '#115e59', bg: '#ccfbf1' },
+  { label: 'Vegano', icon: '🌱', color: '#166534', bg: '#dcfce7' },
+  { label: 'Vegetariano', icon: '🥗', color: '#15803d', bg: '#f0fdf4' },
+];
 
 export const IS_DEMO_MODE = localStorage.getItem('demo_mode') === 'true';
 

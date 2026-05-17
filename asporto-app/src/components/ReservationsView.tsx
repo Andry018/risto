@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase, type Reservation, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
-import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save } from 'lucide-react';
+import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, LayoutDashboard } from 'lucide-react';
 
-export default function ReservationsView() {
+export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void } = {}) {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -156,9 +156,16 @@ export default function ReservationsView() {
   return (
     <div className="flex-1 flex flex-col bg-charcoal text-white h-full overflow-hidden p-8">
       <header className="flex justify-between items-center mb-10">
-        <div>
-          <h2 className="text-sm text-gold font-black tracking-widest uppercase italic">Gestione Clienti</h2>
-          <h1 className="text-4xl font-black text-white uppercase italic">Libro Prenotazioni</h1>
+        <div className="flex items-center gap-6">
+          {onNavigateHome && (
+            <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+              <LayoutDashboard size={24} />
+            </button>
+          )}
+          <div>
+            <h2 className="text-sm text-gold font-black tracking-widest uppercase italic">Gestione Clienti</h2>
+            <h1 className="text-4xl font-black text-white uppercase italic">Libro Prenotazioni</h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-6">

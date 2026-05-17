@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import WaiterMobileView from './components/WaiterMobileView';
 import TabletDashboardView from './components/TabletDashboardView';
 import CustomerView from './components/CustomerView';
-import StaffDashboard from './components/StaffDashboard';
 import TableMapView from './components/TableMapView';
 import AdminView from './components/AdminView';
 import POSView from './components/POSView';
@@ -18,7 +17,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 
 function RootRoute() {
-  return isTablet() ? <StaffDashboard /> : <WaiterMobileView />;
+  return isTablet() ? <TabletDashboardView /> : <WaiterMobileView />;
 }
 
 export default function App() {
@@ -39,7 +38,6 @@ export default function App() {
             <Route path="/map" element={<TableMapView />} />
             <Route path="/kitchen" element={<AdminView />} />
             <Route path="/pos" element={<POSView />} />
-            <Route path="/admin" element={<TabletDashboardView />} />
             <Route path="/reports" element={<ReportsView />} />
           </Route>
         </Routes>

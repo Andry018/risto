@@ -19,7 +19,7 @@ import {
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
 
-export default function POSView({ tableId: propTableId, tableName: propTableName, onOrderFinished }: { tableId?: string, tableName?: string, onOrderFinished?: () => void }) {
+export default function POSView({ tableId: propTableId, tableName: propTableName, onOrderFinished, onNavigateHome }: { tableId?: string, tableName?: string, onOrderFinished?: () => void, onNavigateHome?: () => void }) {
   const navigate = useNavigate();
   useEffect(() => {
     const user = getCurrentUser();
@@ -701,9 +701,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         <header className="mb-8 flex flex-col gap-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
-              <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
-                 <LayoutDashboard size={24} />
-              </Link>
+              {onNavigateHome ? (
+                <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+                   <LayoutDashboard size={24} />
+                </button>
+              ) : (
+                <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+                   <LayoutDashboard size={24} />
+                </Link>
+              )}
               <div>
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Comanda & Conto</h2>

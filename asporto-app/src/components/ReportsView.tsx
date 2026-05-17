@@ -21,7 +21,7 @@ interface CategoryStat {
   count: number;
 }
 
-export default function ReportsView() {
+export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () => void } = {}) {
   const navigate = useNavigate();
   useEffect(() => {
     const user = getCurrentUser();
@@ -125,9 +125,15 @@ export default function ReportsView() {
       <div className="max-w-7xl mx-auto">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
           <div className="flex items-center gap-6">
-            <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all">
-              <LayoutDashboard size={24} />
-            </Link>
+            {onNavigateHome ? (
+              <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all">
+                <LayoutDashboard size={24} />
+              </button>
+            ) : (
+              <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all">
+                <LayoutDashboard size={24} />
+              </Link>
+            )}
             <div>
               <h1 className="text-4xl font-black italic uppercase tracking-tighter">Report <span className="text-gold">& Analytics</span></h1>
               <p className="text-xs font-black text-gray-500 uppercase tracking-widest mt-1">{periodLabel}</p>

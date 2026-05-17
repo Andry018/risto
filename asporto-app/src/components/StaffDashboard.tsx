@@ -7,7 +7,6 @@ import {
   Calculator, 
   Settings, 
   Clock, 
-  TrendingUp,
   Activity,
   ArrowRight,
   X,
@@ -141,8 +140,7 @@ export default function StaffDashboard() {
       icon: Calculator,
       path: "/pos",
       color: "from-fuchsia-500/20 to-fuchsia-500/5",
-      iconColor: "text-fuchsia-400",
-      badge: "Desktop"
+      iconColor: "text-fuchsia-400"
     },
     {
       title: "Report & Analytics",
@@ -150,8 +148,7 @@ export default function StaffDashboard() {
       icon: BarChart3,
       path: "/reports",
       color: "from-emerald-500/20 to-emerald-500/5",
-      iconColor: "text-emerald-400",
-      badge: `€${stats.totalToday.toFixed(0)} oggi`
+      iconColor: "text-emerald-400"
     }
   ];
 
@@ -190,16 +187,6 @@ export default function StaffDashboard() {
           </div>
 
           <div className="flex gap-4">
-             <div className="bg-surface/50 backdrop-blur-md border border-surface-light p-4 px-6 rounded-3xl shadow-xl flex items-center gap-4">
-                <div className="p-3 bg-emerald-500/10 rounded-2xl">
-                   <TrendingUp className="text-emerald-400" size={20} />
-                </div>
-                <div>
-                   <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Incasso Odierno</p>
-                   <p className="text-2xl font-black italic">€{stats.totalToday.toFixed(2)}</p>
-                </div>
-             </div>
-             
              <div className="bg-surface/50 backdrop-blur-md border border-surface-light p-4 px-6 rounded-3xl shadow-xl flex items-center gap-4">
                 <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400">
                    <Clock size={20} className="animate-pulse" />
