@@ -1,4 +1,4 @@
-import type { Ingredient } from './supabase';
+import type { Ingredient } from '../types/entities';
 
 export interface PriceCalculableItem {
   prezzo: number;

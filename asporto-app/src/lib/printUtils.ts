@@ -1,4 +1,4 @@
-import { type CustomizedItem } from './supabase';
+import type { CustomizedItem } from '../types/app';
 
 const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio'];
 

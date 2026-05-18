@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Product, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Product } from '../types/entities';
 import { MOCK_PRODUCTS } from '../lib/MockData';
 
 export function useProducts() {

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, type Product, type Ingredient, type Tavolo, type OrderCarrelloItem, type Order, type CustomizedItem, type Portata, type Reservation, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Product, Ingredient, Tavolo, OrderCarrelloItem, Order, CustomizedItem, Portata, Reservation } from '../types/entities';
+import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, BookOpen, X, CheckCircle2 } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, BookOpen, X, CheckCircle2, Clock } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { syncManager } from '../lib/OfflineSync';
@@ -16,6 +18,8 @@ import {
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
 import SyncStatusIndicator from './SyncStatusIndicator';
+import OrderHistoryModal from './OrderHistoryModal';
+import { parseAperturaFromNote, getDisplayNote, setAperturaInNote, setNoteText } from '../lib/tableUtils';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
 import PaninoBuilderModal from './PaninoBuilderModal';
@@ -51,6 +55,7 @@ export default function WaiterMobileView() {
   const currentUser = getCurrentUser();
   const [tableDrafts, setTableDrafts] = useState<Record<string, { cart: CustomizedItem[]; covers: number }>>({});
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
+  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
@@ -138,15 +143,21 @@ export default function WaiterMobileView() {
       const aperturaMap: Record<string, string> = {};
       await Promise.all(data.map(async (t) => {
         if (t.status === 'OCCUPATO') {
-          const { data: ord } = await sb
-            .from('ordini')
-            .select('created_at')
-            .eq('nome_cliente', t.nome)
-            .eq('status', 'IN_ATTESA')
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          if (ord?.created_at) aperturaMap[t.id] = ord.created_at;
+          const fromNote = parseAperturaFromNote(t.note);
+          if (fromNote) {
+            aperturaMap[t.id] = fromNote;
+          } else {
+            // fallback: first IN_ATTESA order
+            const { data: ord } = await sb
+              .from('ordini')
+              .select('created_at')
+              .eq('nome_cliente', t.nome)
+              .eq('status', 'IN_ATTESA')
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (ord?.created_at) aperturaMap[t.id] = ord.created_at;
+          }
         }
       }));
       setTableApertura(prev => ({ ...prev, ...aperturaMap }));
@@ -362,7 +373,23 @@ export default function WaiterMobileView() {
     setSelectedTable(table);
     setCart([]);
     setActiveOrderId(null);
-    void loadOpenOrderForTable(table);
+    (async () => {
+      const hadOrder = await loadOpenOrderForTable(table);
+      if (!hadOrder) {
+        const copertoProd = products.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+        if (copertoProd) {
+          setCart([{
+            ...copertoProd,
+            quantity: table.clienti || 2,
+            addedIngredients: [],
+            removedIngredients: [],
+            notes: '',
+            uniqueId: 'initial-coperto'
+          }]);
+        }
+        setActiveTab('MENU');
+      }
+    })();
   };
 
   const loadLastOrder = async () => {
@@ -385,32 +412,53 @@ export default function WaiterMobileView() {
         uniqueId: newUniqueId()
       };
     });
-    setCart(mappedCart);
+    const copertoProd = prods.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+    const hasCoperto = mappedCart.some(i => i.id === copertoProd?.id || i.nome === 'COPERTO');
+    const finalCart = [...mappedCart];
+    if (!hasCoperto && copertoProd) {
+      finalCart.unshift({
+        ...copertoProd,
+        quantity: selectedTable.clienti || tempCovers || 2,
+        addedIngredients: [],
+        removedIngredients: [],
+        notes: '',
+        uniqueId: 'initial-coperto',
+        portata: undefined,
+      });
+    }
+    setCart(finalCart);
     setActiveOrderId(null);
     setActiveTab('RIEPILOGO');
     setIsCoversModalOpen(false);
     setLastOrderForTable(null);
     localUpdateRef.current = true;
-    // mark table as occupied
+    // mark table as occupied and save apertura
     const covers = selectedTable.clienti || tempCovers;
-    const updatedTable = { ...selectedTable, status: 'OCCUPATO' as const, clienti: covers };
+    const nowISO = new Date().toISOString();
+    const newNote = setAperturaInNote(selectedTable.note, nowISO);
+    const updatedTable = { ...selectedTable, status: 'OCCUPATO' as const, clienti: covers, note: newNote };
     setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
     setSelectedTable(updatedTable);
-    await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', clienti: covers });
+    setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
+    await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', clienti: covers, note: newNote });
   };
 
   const confirmCovers = async () => {
     if (!selectedTable) return;
     
+    const nowISO = new Date().toISOString();
+    const newNote = setAperturaInNote(selectedTable.note, nowISO);
+    
     // Update table with guests and mark as occupied
-    const updatedTable = { ...selectedTable, clienti: tempCovers, status: 'OCCUPATO' as const };
+    const updatedTable = { ...selectedTable, clienti: tempCovers, status: 'OCCUPATO' as const, note: newNote };
     setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
     setSelectedTable(updatedTable);
     setIsCoversModalOpen(false);
+    setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
 
     localUpdateRef.current = true;
     if (!IS_DEMO_MODE) {
-      await syncManager.pushTableUpdate(selectedTable.id, { clienti: tempCovers, status: 'OCCUPATO' });
+      await syncManager.pushTableUpdate(selectedTable.id, { clienti: tempCovers, status: 'OCCUPATO', note: newNote });
     }
 
     // Automatically add "Coperto" to cart
@@ -532,8 +580,12 @@ export default function WaiterMobileView() {
       } else {
         const nowISO = new Date().toISOString();
         await syncManager.pushOrder(orderData);
-        await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO' });
+        const newNote = setAperturaInNote(selectedTable.note, nowISO);
+        await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', note: newNote });
         setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
+        // Update local table state with new note
+        setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, note: newNote } : t));
+        setSelectedTable(prev => prev ? { ...prev, note: newNote } : prev);
       }
 
       clearDraft(selectedTable.id);
@@ -897,13 +949,14 @@ export default function WaiterMobileView() {
 
             <textarea
               placeholder="Note sul tavolo (opzionale)..."
-              value={selectedTable?.note || ''}
+              value={selectedTable ? getDisplayNote(selectedTable.note) : ''}
               onChange={e => {
                 if (!selectedTable) return;
-                const updated = { ...selectedTable, note: e.target.value };
+                const newNote = setNoteText(selectedTable.note, e.target.value);
+                const updated = { ...selectedTable, note: newNote || undefined };
                 setSelectedTable(updated);
                 if (!IS_DEMO_MODE && supabase) {
-                  supabase.from('tavoli').update({note: e.target.value || null}).eq('id', selectedTable.id).then(() => {});
+                  supabase.from('tavoli').update({note: newNote || null}).eq('id', selectedTable.id).then(() => {});
                 }
               }}
               className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white text-xs outline-none mb-6 resize-none h-20 placeholder:text-gray-600"
@@ -923,6 +976,12 @@ export default function WaiterMobileView() {
                 <RotateCcw size={14} className="inline mr-2" />PRENDI ULTIMA COMANDA
               </button>
             )}
+            <button 
+              onClick={() => { setOrderHistoryOpen(true); }}
+              className="w-full mt-3 bg-charcoal border border-white/10 text-gray-400 font-bold py-3 rounded-2xl text-xs uppercase tracking-widest hover:text-white hover:border-white/20 active:scale-95 transition-all"
+            >
+              <Clock size={14} className="inline mr-2" />STORICO ORDINI
+            </button>
             <button 
               onClick={() => { setSelectedTable(null); setIsCoversModalOpen(false); }}
               className="w-full mt-4 text-gray-500 font-bold uppercase text-[10px] tracking-widest hover:text-white"
@@ -966,6 +1025,12 @@ export default function WaiterMobileView() {
         onClose={() => setBillsTableOpen(false)}
         variant="table"
         tableName={selectedTable?.nome}
+      />
+
+      <OrderHistoryModal
+        isOpen={orderHistoryOpen}
+        onClose={() => setOrderHistoryOpen(false)}
+        tableName={selectedTable?.nome || ''}
       />
 
       <PaninoBuilderModal

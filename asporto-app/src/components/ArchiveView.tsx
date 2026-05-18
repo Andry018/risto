@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FileText, Download, Share2, Plus, Search } from 'lucide-react';
-import type { DocumentoEmesso } from '../lib/supabase';
+import type { DocumentoEmesso } from '../types/entities';
 import { fetchDocuments } from '../lib/billingUtils';
 import BillingModal from './BillingModal';
 

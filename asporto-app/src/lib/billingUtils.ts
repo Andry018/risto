@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { supabase, type DocumentoEmesso } from './supabase';
+import { supabase } from './supabase';
+import type { DocumentoEmesso } from '../types/entities';
 
 function loadImage(src: string, timeoutMs: number): Promise<HTMLImageElement | null> {
   return new Promise(resolve => {

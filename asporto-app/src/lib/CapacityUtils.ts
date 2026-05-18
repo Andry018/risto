@@ -1,4 +1,4 @@
-import type { Order, OrderCarrelloItem } from './supabase';
+import type { Order, OrderCarrelloItem } from '../types/entities';
 
 export const CAPACITY_CONFIG = {
   MAX_PIZZAS_PER_SLOT: 10,

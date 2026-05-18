@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Tavolo } from '../types/entities';
 import { MOCK_TABLES } from '../lib/MockData';
 
 export function useTables() {

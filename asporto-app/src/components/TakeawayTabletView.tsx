@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
-import { supabase, type Product, type Ingredient, type Order, type CustomizedItem, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Product, Ingredient, Order, CustomizedItem } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
 import { capacityUtils, CAPACITY_CONFIG } from '../lib/CapacityUtils';
 import { calculateItemPrice } from '../lib/priceUtils';

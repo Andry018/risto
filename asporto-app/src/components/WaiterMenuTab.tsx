@@ -1,4 +1,5 @@
-import { type Product, type CustomizedItem, type Portata, PORTATE } from '../lib/supabase';
+import type { Product, CustomizedItem, Portata } from '../types/entities';
+import { PORTATE } from '../types/entities';
 import { Search, Edit3, Plus, Sandwich } from 'lucide-react';
 
 interface Props {

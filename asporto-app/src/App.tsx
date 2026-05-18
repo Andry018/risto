@@ -11,6 +11,7 @@ import MenuQRView from './components/MenuQRView';
 import MenuQRPrint from './components/MenuQRPrint';
 import ReportsView from './components/ReportsView';
 import StaffPinGuard from './components/StaffPinGuard';
+import ExitGuard from './components/ExitGuard';
 import { isTablet } from './lib/DeviceUtils';
 import DatabaseStatusGuard from './components/DatabaseStatusGuard';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -26,6 +27,7 @@ export default function App() {
       <ErrorBoundary>
       <DatabaseStatusGuard>
         <ToastProvider>
+        <ExitGuard>
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
           <Route path="/menu" element={<PublicMenuView />} />
@@ -41,6 +43,7 @@ export default function App() {
             <Route path="/reports" element={<ReportsView />} />
           </Route>
         </Routes>
+        </ExitGuard>
         </ToastProvider>
       </DatabaseStatusGuard>
       </ErrorBoundary>

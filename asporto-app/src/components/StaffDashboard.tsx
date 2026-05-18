@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
-import { 
+import {
   PhoneCall,
-  LayoutDashboard, 
-  Map, 
-  ChefHat, 
-  Calculator, 
-  Settings, 
-  Clock, 
+  LayoutDashboard,
+  Map,
+  ChefHat,
+  Calculator,
+  Settings,
+  Clock,
   Activity,
   ArrowRight,
   X,
@@ -15,8 +15,8 @@ import {
   RefreshCw,
   Trash2,
   LogOut,
-  BarChart3,
-  Users
+  Users,
+  Sun
 } from 'lucide-react';
 import { staffLogout, getCurrentUser, getStaffUsers, removeStaffUser, updateStaffUser, type StaffUser, type StaffRole } from '../lib/staffAuth';
 import { useEffect, useState } from 'react';
@@ -108,15 +108,6 @@ export default function StaffDashboard() {
 
   const allModules = [
     {
-      title: "Nuovo Asporto",
-      desc: "Gestione chiamate tablet",
-      icon: PhoneCall,
-      path: "/takeaway",
-      color: "from-amber-500/20 to-amber-500/5",
-      iconColor: "text-amber-400",
-      badge: "Phone"
-    },
-    {
       title: "Mappa Tavoli",
       desc: "Gestione visiva della sala",
       icon: Map,
@@ -143,19 +134,29 @@ export default function StaffDashboard() {
       iconColor: "text-fuchsia-400"
     },
     {
-      title: "Report & Analytics",
-      desc: "Vendite, statistiche e trend",
-      icon: BarChart3,
-      path: "/reports",
+      title: "Amministrazione",
+      desc: "Prenotazioni, report, menu, stato ordini",
+      icon: LayoutDashboard,
+      path: "/admin",
       color: "from-emerald-500/20 to-emerald-500/5",
-      iconColor: "text-emerald-400"
+      iconColor: "text-emerald-400",
+      badge: "Full"
+    },
+    {
+      title: "Telefono",
+      desc: "Ordini telefonici da asporto",
+      icon: PhoneCall,
+      path: "/takeaway",
+      color: "from-amber-500/20 to-amber-500/5",
+      iconColor: "text-amber-400",
+      badge: "Phone"
     }
   ];
 
   const roleModules: Record<string, string[]> = {
     waiter: ['/map'],
     kitchen: ['/kitchen'],
-    admin: ['/takeaway', '/map', '/kitchen', '/pos', '/reports'],
+    admin: ['/takeaway', '/map', '/kitchen', '/pos', '/admin'],
   };
 
   const modules = allModules.filter(m => (roleModules[currentUser?.role || ''] || []).includes(m.path));
@@ -170,17 +171,19 @@ export default function StaffDashboard() {
         {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-surface rounded-xl border border-surface-light shadow-xl">
-                 <LayoutDashboard className="text-gold" size={24} />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2.5 bg-gradient-to-br from-gold/20 to-amber-500/10 rounded-2xl border border-gold/30 shadow-xl shadow-gold/10">
+                 <Sun className="text-gold" size={22} strokeWidth={2.5} />
               </div>
-              <span className="text-xs font-black uppercase tracking-[0.3em] text-gray-500">Control Center</span>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-black italic tracking-tight text-white leading-none">
+                  Il <span className="text-gold">Girasole</span>
+                </h1>
+                <p className="text-[8px] font-black uppercase tracking-[0.3em] text-gray-600 mt-0.5">Ristorante · Pizzeria</p>
+              </div>
             </div>
-              <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter">
-               Risto<span className="text-gold">Premium</span>
-              </h1>
               {currentUser && (
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-2">
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1 ml-1">
                   {currentUser.name} • <span className="text-gold">{currentUser.role.toUpperCase()}</span>
                 </p>
               )}
@@ -249,9 +252,6 @@ export default function StaffDashboard() {
            </div>
 
            <div className="flex items-center gap-4">
-              <Link to="/asporto" className="flex items-center gap-2 px-6 py-3 bg-charcoal hover:bg-surface-light border border-surface-light rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
-                Vista Cliente <ArrowRight size={14} />
-              </Link>
               <button 
                 onClick={() => { setStaffUsers(getStaffUsers()); setIsSettingsOpen(true); }}
                 className="p-3 bg-charcoal hover:bg-surface-light border border-surface-light rounded-2xl text-gray-500 transition-all hover:text-gold active:scale-95"
@@ -394,7 +394,7 @@ export default function StaffDashboard() {
               </div>
 
               <div className="mt-12 flex justify-center">
-                 <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">RistoPremium v1.0.4 • Stable Build</p>
+                 <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">Il Girasole · Ristorante Pizzeria</p>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Reservation, type Tavolo, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Reservation, Tavolo } from '../types/entities';
 import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, LayoutDashboard } from 'lucide-react';
 
 export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void } = {}) {

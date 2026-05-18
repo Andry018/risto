@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
-import { supabase, type Order, type OrderCarrelloItem, type DocumentoEmesso, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Order, OrderCarrelloItem, DocumentoEmesso } from '../types/entities';
 import { MOCK_ORDERS } from '../lib/MockData';
 import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2, LogOut, AlertTriangle } from 'lucide-react';
 import BillingModal from './BillingModal';
@@ -395,7 +396,7 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
         )}
 
         <footer className="text-center py-8">
-          <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">RistoPremium Reports</p>
+          <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">Il Girasole · Reports</p>
         </footer>
       </div>
 

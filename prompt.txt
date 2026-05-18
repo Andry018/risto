@@ -1,0 +1,23 @@
+Continua il lavoro su risto asporto-app.
+
+## Stato attuale
+
+### Fatto nell'ultima sessione
+1. **Categorie dinamiche in AdminView**: persistenza in localStorage (`risto_category_order` + `risto_extra_categories`), pulsanti rename/edit/delete/sposta su/giù su ogni categoria nella filter bar. Helper in `src/lib/categoryUtils.ts`.
+2. **Persistenza apertura tavoli**: salvataggio in campo `note` come JSON (`{"apertura":"...","text":"..."}`) tramite `src/lib/tableUtils.ts`. Letto in `fetchTables`, scritto in `confirmCovers`, `loadLastOrder` e al salvataggio primo ordine in `WaiterMobileView.tsx`.
+3. **ReceiptPreview riscritto per cucina**: raggruppa per portata, nasconde prezzi e Coperto, ogni aggiunta (es. Bocconcino) su riga separata `+ 1 BOCCONCINO`, rimozioni con `- NO ...`, note con `※ ...`. Rimosse prop `total`, `scontoTipo`, `scontoValore`, `ingredients` dall'interfaccia.
+4. **Storico ordini per tavolo**: `OrderHistoryModal.tsx` mostra ultimi 20 ordini di un tavolo, accessibile dal modale coperti in WaiterMobileView.
+5. **Build pulita**: rimossi import e variabili inutilizzati in AdminView, BillingModal, DatabaseStatusGuard, ExitGuard, ProductCustomizationModal, useRealtimeChannel.
+
+### Da fare / miglioramenti possibili
+- Sync real-time stato tavoli (Realtime Channel) — hook `useRealtimeChannel.ts` esiste ma non è integrato
+- Aggiungere "reset ordine" in AdminView per categorie
+- Aggiungere pulsante "reset ordine categorie" (usa `resetCategoryOrder()` da `categoryUtils.ts`)
+- Completare integrazione PaninoBuilder con varianti prodotto
+- Testing su iPad A16 2025 (10.9", 2360×1640) del layout ReceiptPreview e AdminView
+
+### Note chiave
+- `supabase` va sempre riassegnato a const locale nelle closure (`const sb = supabase; if (!sb) return`)
+- Tavolo.note è `string | undefined` — le funzioni in tableUtils.ts accettano `string | null | undefined`
+- Per DB si usa `newNote || null`, per stato React `newNote || undefined`
+- Build con `npm run build` (tsc + vite), ~2217 moduli

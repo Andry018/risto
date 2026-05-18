@@ -76,25 +76,25 @@ export function verifyStaffPin(userId: string, pin: string): boolean {
 
 export function getCurrentUser(): StaffUser | null {
   try {
-    const raw = sessionStorage.getItem(USER_KEY);
+    const raw = localStorage.getItem(USER_KEY);
     if (raw) return JSON.parse(raw) as StaffUser;
   } catch { /* ignore */ }
   return null;
 }
 
 export function isStaffSessionValid(): boolean {
-  if (typeof sessionStorage === 'undefined') return false;
-  return sessionStorage.getItem(SESSION_KEY) === '1';
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(SESSION_KEY) === '1';
 }
 
 export function setStaffSessionValid(user: StaffUser): void {
-  sessionStorage.setItem(SESSION_KEY, '1');
-  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(SESSION_KEY, '1');
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function clearStaffSession(): void {
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(USER_KEY);
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
 export function staffLogout(): void {

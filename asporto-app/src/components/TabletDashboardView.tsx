@@ -332,7 +332,7 @@ export default function TabletDashboardView() {
                 </div>
 
                 <div className="mt-12 flex justify-center">
-                   <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">RistoPremium v1.0.4 • Stable Build</p>
+                   <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">Il Girasole · Ristorante Pizzeria</p>
                 </div>
               </div>
             </div>

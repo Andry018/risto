@@ -1,4 +1,4 @@
-import type { Ingredient, OrderCarrelloItem, Product } from './supabase';
+import type { Ingredient, OrderCarrelloItem, Product } from '../types/entities';
 
 const norm = (s: string) => s.trim().toLowerCase();
 

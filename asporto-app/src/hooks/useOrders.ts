@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Order, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Order } from '../types/entities';
 import { MOCK_ORDERS } from '../lib/MockData';
 
 export function useOrders() {

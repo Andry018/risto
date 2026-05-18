@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { X, Plus } from 'lucide-react';
-import { type Product, type CustomizedItem, type Portata, PORTATE } from '../lib/supabase';
+import type { Product, CustomizedItem, Portata } from '../types/entities';
+import { PORTATE } from '../types/entities';
 import { PANINO_CATEGORIES, PANINO_BASE_PRICE, COTTURE } from '../lib/paninoConfig';
 import { newUniqueId } from '../lib/id';
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase, type Ingredient, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Ingredient } from '../types/entities';
 import { MOCK_INGREDIENTS } from '../lib/MockData';
 
 export function useIngredients() {

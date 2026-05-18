@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type Tavolo } from '../lib/supabase';
+import type { Tavolo } from '../types/entities';
 import { Users, X } from 'lucide-react';
 
 interface Props {

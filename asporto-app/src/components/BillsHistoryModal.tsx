@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Receipt, Clock } from 'lucide-react';
-import { supabase, type Order, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Order } from '../types/entities';
 
 type Props = {
   open: boolean;

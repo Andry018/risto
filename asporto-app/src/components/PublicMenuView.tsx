@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { supabase, type Product, ALLERGEN_META } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import type { Product } from '../types/entities';
+import { ALLERGEN_META } from '../types/entities';
 import { Search, X, Globe } from 'lucide-react';
 
 const CATEGORY_ORDER = ['Antipasti', 'Fritti', 'Primi', 'Secondi', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Dolci', 'Caffè e Liquori', 'Bevande'];

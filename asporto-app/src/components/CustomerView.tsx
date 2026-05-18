@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { supabase, type Product } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import type { Product } from '../types/entities';
 import { ShoppingCart, Plus, Minus, Clock, User, CheckCircle, ChevronRight, X, Utensils } from 'lucide-react';
 
 type CartItem = Product & { quantity: number };

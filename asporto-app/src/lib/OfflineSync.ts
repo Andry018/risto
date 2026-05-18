@@ -1,4 +1,5 @@
-import { supabase, type Order, type Tavolo } from './supabase';
+import { supabase } from './supabase';
+import type { Order, Tavolo } from '../types/entities';
 
 const QUEUE_KEY = 'risto_pending_sync';
 

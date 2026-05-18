@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
-import { supabase, type Order, type Product, type Ingredient, type OrderCarrelloItem, type CustomizedItem, PORTATE, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
+import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
 import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich, Percent } from 'lucide-react';
@@ -1174,10 +1176,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         customerName={tableName || 'POS'}
         pickupTime={new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
         items={cart}
-        ingredients={ingredients}
-        total={discountedTotal}
-        scontoTipo={scontoTipo ?? undefined}
-        scontoValore={scontoTipo ? scontoValore : undefined}
       />
       <PaninoBuilderModal
         isOpen={paninoModalOpen}

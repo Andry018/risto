@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'RistoPremium POS',
-        short_name: 'RistoPOS',
+        name: 'Il Girasole · Ristorante Pizzeria',
+        short_name: 'Girasole POS',
         description: 'Restaurant Management POS & Table Service',
         theme_color: '#121212',
         background_color: '#121212',

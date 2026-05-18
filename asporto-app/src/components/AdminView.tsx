@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
-import { supabase, type Product, type Ingredient, IS_DEMO_MODE, ALLERGEN_META } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Product, Ingredient } from '../types/entities';
+import { ALLERGEN_META } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
-import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, Upload } from 'lucide-react';
+import { getProductVariants, saveProductVariants, type ProductVariant } from '../lib/productVariants';
+import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
+import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Edit3, Trash2, X, Save, Search, Upload, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface AdminViewProps {
   onNavigateHome?: () => void;
@@ -19,7 +23,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals'>('menu');
+  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals' | 'variants'>('menu');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -43,17 +47,55 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const [removalPriceDrafts, setRemovalPriceDrafts] = useState<Record<string, string>>({});
   const [additionPriceDrafts, setAdditionPriceDrafts] = useState<Record<string, string>>({});
   const [menuSearch, setMenuSearch] = useState('');
+  const CATEGORY_STORAGE_KEY = 'risto_extra_categories';
   const [menuCategory, setMenuCategory] = useState<string | null>(null);
   const [showNewCatInput, setShowNewCatInput] = useState(false);
   const [newCatName, setNewCatName] = useState('');
-  const [extraCategories, setExtraCategories] = useState<string[]>([]);
-  const menuCategories = [...new Set(products.map(p => p.categoria).filter(Boolean))].sort((a, b) => {
-    const order = ['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Fritti', 'Bevande', 'Caffè e Liquori', 'Dolci', 'EXTRA', 'Servizio'];
-    return order.indexOf(a) - order.indexOf(b);
+  const [extraCategories, setExtraCategories] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CATEGORY_STORAGE_KEY) || '[]'); } catch { return []; }
   });
-  const allCategories = [...new Set([...menuCategories, ...extraCategories])];
+  const persistExtraCat = (cats: string[]) => {
+    setExtraCategories(cats);
+    localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(cats));
+    const currentOrder = getCategoryOrder();
+    const menuCats = [...new Set(products.map(p => p.categoria).filter(Boolean))];
+    const keep = new Set([...menuCats, ...cats, 'EXTRA']);
+    const newOrder = currentOrder.filter(c => keep.has(c));
+    cats.forEach(c => { if (!newOrder.includes(c)) newOrder.push(c); });
+    setCategoryOrderState(newOrder);
+    saveCategoryOrder(newOrder);
+  };
+  const [categoryOrder, setCategoryOrderState] = useState<string[]>(() => {
+    const order = getCategoryOrder();
+    // Ensure all products' categories are in the order
+    const prodCats = [...new Set(products.map(p => p.categoria).filter(Boolean))];
+    const missing = prodCats.filter(c => !order.includes(c));
+    if (missing.length > 0) {
+      const merged = [...order, ...missing];
+      saveCategoryOrder(merged);
+      return merged;
+    }
+    return order;
+  });
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryDraft, setEditCategoryDraft] = useState('');
+  const menuCategories = [...new Set(products.map(p => p.categoria).filter(Boolean))];
+  // Use categoryOrder for sorting, then append any extras not in the order
+  const allCategories = (() => {
+    const cats = [...new Set([...menuCategories, ...extraCategories])];
+    const ordered = categoryOrder.filter(c => cats.includes(c));
+    const unordered = cats.filter(c => !ordered.includes(c));
+    // Move EXTRA to the very end
+    const extraIdx = unordered.indexOf('EXTRA');
+    if (extraIdx > -1) { unordered.splice(extraIdx, 1); unordered.push('EXTRA'); }
+    return [...ordered, ...unordered.sort()];
+  })();
   const [ingredientSearch, setIngredientSearch] = useState('');
   const [isIngredientsModalOpen, setIsIngredientsModalOpen] = useState(false);
+  const [variants, setVariants] = useState<ProductVariant[]>(() => getProductVariants());
+  const [variantEditingId, setVariantEditingId] = useState<string | null>(null);
+  const [variantEditDraft, setVariantEditDraft] = useState<Partial<ProductVariant>>({});
+  const [variantCategoryFilter, setVariantCategoryFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -61,6 +103,11 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
       setProductPriceDraft(String(val));
     }
   }, [isModalOpen]);
+
+  const persistVariants = (newVariants: ProductVariant[]) => {
+    setVariants(newVariants);
+    saveProductVariants(newVariants);
+  };
 
   useEffect(() => {
     if (isIngredientsModalOpen) {
@@ -261,6 +308,23 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 Gestione Rimozioni
               </div>
             </button>
+            <button 
+              onClick={() => setActiveTab('variants')} 
+              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+                activeTab === 'variants' 
+                  ? isEmbedded
+                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
+                  : isEmbedded
+                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3 font-medium">
+                <SlidersHorizontal size={20} className={activeTab === 'variants' ? (isEmbedded ? 'text-gold' : 'text-sky-400') : ''} />
+                Gestione Varianti
+              </div>
+            </button>
           </nav>
           
           <div className={`mt-auto p-4 ${isEmbedded ? 'bg-gold/10 border-gold/20' : 'bg-emerald-500/10 border-emerald-500/20'} border rounded-xl flex items-center gap-3`}>
@@ -317,21 +381,81 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   Tutte
                 </button>
                 {allCategories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setMenuCategory(menuCategory === cat ? null : cat)}
-                    className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                      menuCategory === cat
-                        ? isEmbedded
-                          ? 'bg-gold text-black'
-                          : 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                        : isEmbedded
-                          ? 'bg-surface text-gray-500 hover:text-white'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {cat}
-                  </button>
+                  <div key={cat} className="shrink-0 relative group">
+                    <button
+                      onClick={() => setMenuCategory(menuCategory === cat ? null : cat)}
+                      className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                        menuCategory === cat
+                          ? isEmbedded
+                            ? 'bg-gold text-black'
+                            : 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                          : isEmbedded
+                            ? 'bg-surface text-gray-500 hover:text-white'
+                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {editingCategory === cat ? (
+                        <input
+                          type="text"
+                          value={editCategoryDraft}
+                          onChange={e => setEditCategoryDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && editCategoryDraft.trim() && editCategoryDraft.trim() !== cat) {
+                              const newName = editCategoryDraft.trim();
+                              const newOrder = categoryOrder.map(c => c === cat ? newName : c);
+                              setCategoryOrderState(newOrder);
+                              saveCategoryOrder(newOrder);
+                              if (extraCategories.includes(cat)) {
+                                persistExtraCat(extraCategories.map(c => c === cat ? newName : c));
+                              }
+                              setEditingCategory(null);
+                            }
+                            if (e.key === 'Escape') setEditingCategory(null);
+                          }}
+                          onBlur={() => setEditingCategory(null)}
+                          className="w-20 bg-transparent text-white border-b border-current outline-none text-sm"
+                          autoFocus
+                          onClick={e => e.stopPropagation()}
+                        />
+                      ) : (
+                        cat
+                      )}
+                    </button>
+                    {editingCategory !== cat && (
+                      <div className="inline-flex ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditingCategory(cat); setEditCategoryDraft(cat); }}
+                          className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-500'} transition-all`}
+                          title="Rinomina"
+                        >
+                          <Edit3 size={12} />
+                        </button>
+                        {(extraCategories.includes(cat) || !getCategoryOrder().includes(cat)) && (
+                          <button
+                            onClick={e => { e.stopPropagation(); persistExtraCat(extraCategories.filter(c => c !== cat)); }}
+                            className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-500'} transition-all`}
+                            title="Elimina"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                        <button
+                          onClick={e => { e.stopPropagation(); const idx = allCategories.indexOf(cat); if (idx > 0) { const newOrder = [...allCategories]; [newOrder[idx-1], newOrder[idx]] = [newOrder[idx], newOrder[idx-1]]; setCategoryOrderState(newOrder); saveCategoryOrder(newOrder); } }}
+                          className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-500'} transition-all`}
+                          title="Sposta su"
+                        >
+                          <ChevronUp size={12} />
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); const idx = allCategories.indexOf(cat); if (idx < allCategories.length - 1) { const newOrder = [...allCategories]; [newOrder[idx], newOrder[idx+1]] = [newOrder[idx+1], newOrder[idx]]; setCategoryOrderState(newOrder); saveCategoryOrder(newOrder); } }}
+                          className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-500'} transition-all`}
+                          title="Sposta giù"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))}
                 {showNewCatInput ? (
                   <div className="shrink-0 flex items-center gap-1">
@@ -343,7 +467,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                         if (e.key === 'Enter' && newCatName.trim()) {
                           const name = newCatName.trim();
                           if (!allCategories.includes(name)) {
-                            setExtraCategories(prev => [...prev, name]);
+                            persistExtraCat([...extraCategories, name]);
                           }
                           setNewProduct({ ...newProduct, categoria: name });
                           setMenuCategory(name);
@@ -364,7 +488,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                         if (newCatName.trim()) {
                           const name = newCatName.trim();
                           if (!allCategories.includes(name)) {
-                            setExtraCategories(prev => [...prev, name]);
+                            persistExtraCat([...extraCategories, name]);
                           }
                           setNewProduct({ ...newProduct, categoria: name });
                           setMenuCategory(name);
@@ -631,6 +755,226 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                        </div>
                     </div>
                   ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'variants' && (
+            <div className={`max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500`}>
+              <header className="mb-8 flex justify-between items-center">
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-2">Gestione Varianti</h2>
+                  <p className={isEmbedded ? 'text-gray-500' : 'text-slate-400'}>Modifica le varianti rapide per ogni categoria di piatti.</p>
+                </div>
+                <div className="flex gap-3">
+                  <select
+                    value={variantCategoryFilter || ''}
+                    onChange={e => setVariantCategoryFilter(e.target.value || null)}
+                    className={`${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-xl py-2.5 px-4 text-white font-bold text-sm outline-none transition-all`}
+                  >
+                    <option value="">Tutte le categorie</option>
+                    <option value="Pizze">Pizze</option>
+                    <option value="Antipasti">Antipasti</option>
+                    <option value="Primi">Primi</option>
+                    <option value="Secondi">Secondi</option>
+                    <option value="Contorni">Contorni</option>
+                  </select>
+                  <button
+                    onClick={() => {
+                      const newV: ProductVariant = {
+                        id: `v_${Date.now()}`,
+                        label: '',
+                        price: 0,
+                        categories: variantCategoryFilter || 'Antipasti',
+                        section: 'EXTRA',
+                        style: 'gold',
+                        stackable: false,
+                        order: variants.length + 1,
+                      };
+                      persistVariants([...variants, newV]);
+                      setVariantEditingId(newV.id);
+                      setVariantEditDraft(newV);
+                    }}
+                    className={`${isEmbedded ? 'bg-gold text-black' : 'bg-sky-500 hover:bg-sky-400 text-white shadow-lg shadow-sky-500/20'} font-bold py-2.5 px-5 rounded-2xl flex items-center gap-2 transition-all`}
+                  >
+                    <Plus size={18} /> Nuova Variante
+                  </button>
+                </div>
+              </header>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {variants
+                  .filter(v => !variantCategoryFilter || v.categories.includes(variantCategoryFilter))
+                  .map(v => {
+                    const isEditing = variantEditingId === v.id;
+                    return (
+                      <div key={v.id} className={`group relative ${isEmbedded ? 'bg-surface border-surface-light hover:border-gold/30' : 'bg-slate-900 border-slate-800 hover:border-sky-700'} border rounded-2xl p-5 transition-all ${isEditing ? (isEmbedded ? 'ring-2 ring-gold/40 border-gold/30' : 'ring-2 ring-sky-400/40 border-sky-500/30') : ''}`}>
+                        {isEditing ? (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={variantEditDraft.label ?? ''}
+                              onChange={e => setVariantEditDraft(prev => ({ ...prev, label: e.target.value }))}
+                              placeholder="Nome variante"
+                              className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-xl py-2 px-3 text-white font-bold text-sm outline-none transition-all`}
+                            />
+                            <div className="flex gap-2">
+                              <div className="flex-1">
+                                <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Prezzo</label>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={variantEditDraft.price ?? 0}
+                                  onChange={e => {
+                                    const raw = e.target.value.replace(',', '.');
+                                    const val = parseFloat(raw);
+                                    setVariantEditDraft(prev => ({ ...prev, price: isNaN(val) ? 0 : val }));
+                                  }}
+                                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Ordine</label>
+                                <input
+                                  type="number"
+                                  value={variantEditDraft.order ?? 0}
+                                  onChange={e => setVariantEditDraft(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
+                                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <div className="flex-1">
+                                <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Sezione</label>
+                                <select
+                                  value={variantEditDraft.section ?? 'EXTRA'}
+                                  onChange={e => setVariantEditDraft(prev => ({ ...prev, section: e.target.value }))}
+                                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
+                                >
+                                  <option value="VARIANTI RAPIDE">VARIANTI RAPIDE</option>
+                                  <option value="MODIFICHE">MODIFICHE</option>
+                                  <option value="COTTURA">COTTURA</option>
+                                  <option value="GLASSA / CONDIMENTI">GLASSA / CONDIMENTI</option>
+                                  <option value="PREPARAZIONE">PREPARAZIONE</option>
+                                  <option value="EXTRA">EXTRA</option>
+                                  <option value="CONDIMENTI">CONDIMENTI</option>
+                                </select>
+                              </div>
+                              <div className="flex-1">
+                                <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Stile</label>
+                                <select
+                                  value={variantEditDraft.style ?? 'gold'}
+                                  onChange={e => setVariantEditDraft(prev => ({ ...prev, style: e.target.value as 'gold' | 'emerald' | 'rose' }))}
+                                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
+                                >
+                                  <option value="gold">Gold</option>
+                                  <option value="emerald">Emerald</option>
+                                  <option value="rose">Rose</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-3">
+                              <div className="flex-1">
+                                <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Categorie</label>
+                                <input
+                                  type="text"
+                                  value={variantEditDraft.categories ?? ''}
+                                  onChange={e => setVariantEditDraft(prev => ({ ...prev, categories: e.target.value }))}
+                                  placeholder="es: Pizze Rosse,Antipasti"
+                                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
+                                />
+                              </div>
+                              <div className="flex items-end pb-1">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <span className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase`}>Stackable</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={variantEditDraft.stackable ?? false}
+                                    onChange={e => setVariantEditDraft(prev => ({ ...prev, stackable: e.target.checked }))}
+                                    className="w-4 h-4 rounded accent-emerald-500"
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                              <button
+                                onClick={() => {
+                                  if (variantEditDraft.label?.trim()) {
+                                    persistVariants(variants.map(x => x.id === v.id ? { ...v, ...variantEditDraft } as ProductVariant : x));
+                                    setVariantEditingId(null);
+                                    setVariantEditDraft({});
+                                  }
+                                }}
+                                className={`flex-1 ${isEmbedded ? 'bg-emerald-500 text-black' : 'bg-emerald-500 hover:bg-emerald-400 text-white'} font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-all`}
+                              >
+                                <Save size={14} /> Salva
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!v.label) {
+                                    persistVariants(variants.filter(x => x.id !== v.id));
+                                  }
+                                  setVariantEditingId(null);
+                                  setVariantEditDraft({});
+                                }}
+                                className={`flex-1 ${isEmbedded ? 'bg-charcoal border border-surface-light text-gray-500' : 'bg-slate-800 border border-slate-700 text-slate-400'} font-bold py-2 rounded-xl text-xs transition-all`}
+                              >
+                                Annulla
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <h4 className={`font-bold text-white ${isEmbedded ? 'group-hover:text-gold' : 'group-hover:text-sky-400'} transition-colors uppercase text-sm`}>{v.label || '(senza nome)'}</h4>
+                                <p className="text-xs text-gray-500 mt-0.5 font-medium">{v.categories}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => { setVariantEditingId(v.id); setVariantEditDraft({ ...v }); }}
+                                  className={`p-1.5 rounded-lg ${isEmbedded ? 'hover:bg-charcoal text-gray-500 hover:text-gold' : 'hover:bg-slate-800 text-slate-500 hover:text-sky-400'} transition-all`}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
+                                  onClick={() => persistVariants(variants.filter(x => x.id !== v.id))}
+                                  className={`p-1.5 rounded-lg ${isEmbedded ? 'hover:bg-charcoal text-gray-500 hover:text-red-400' : 'hover:bg-slate-800 text-slate-500 hover:text-red-400'} transition-all`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${v.style === 'gold' ? 'bg-gold/10 text-gold' : v.style === 'emerald' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                                {v.section}
+                              </span>
+                              {v.price > 0 && (
+                                <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">+€{v.price.toFixed(2)}</span>
+                              )}
+                              {v.stackable && (
+                                <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Stackable</span>
+                              )}
+                              <span className="text-[10px] text-gray-600 font-bold px-2 py-0.5">ord. {v.order}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={() => {
+                    persistVariants(getProductVariants());
+                    setVariantEditingId(null);
+                    setVariantEditDraft({});
+                  }}
+                  className={`${isEmbedded ? 'text-gray-500 hover:text-red-400 border-surface-light hover:border-red-400/30' : 'text-slate-500 hover:text-red-400 border-slate-800 hover:border-red-400/30'} border rounded-xl py-2 px-6 text-xs font-bold transition-all`}
+                >
+                  Ripristina varianti predefinite
+                </button>
               </div>
             </div>
           )}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase, type Tavolo, type Reservation, IS_DEMO_MODE } from '../lib/supabase';
+import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import type { Tavolo, Reservation } from '../types/entities';
 import { MOCK_TABLES } from '../lib/MockData';
 import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2 } from 'lucide-react';
 
