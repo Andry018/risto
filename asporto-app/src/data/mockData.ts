@@ -73,13 +73,13 @@ export const MOCK_INGREDIENTS: Ingredient[] = [
 ];
 
 export const MOCK_TABLES: Tavolo[] = [
-  { id: 't1', nome: '1', x: 100, y: 100, clienti: 4, status: 'LIBERO', shape: 'SQUARE', sala: 'Principale' },
-  { id: 't2', nome: '2', x: 250, y: 100, clienti: 2, status: 'OCCUPATO', shape: 'SQUARE', sala: 'Principale' },
-  { id: 't3', nome: '3', x: 400, y: 100, clienti: 0, status: 'LIBERO', shape: 'ROUND', sala: 'Principale' },
-  { id: 't4', nome: '4', x: 100, y: 300, clienti: 6, status: 'OCCUPATO', shape: 'RECTANGLE', sala: 'Principale' },
-  { id: 't5', nome: '5', x: 350, y: 300, clienti: 0, status: 'LIBERO', shape: 'SQUARE', sala: 'Principale' },
-  { id: 't6', nome: '6', x: 100, y: 100, clienti: 0, status: 'LIBERO', shape: 'SQUARE', sala: 'Terrazza' },
-  { id: 't7', nome: '7', x: 300, y: 100, clienti: 4, status: 'OCCUPATO', shape: 'ROUND', sala: 'Terrazza' },
+  { id: 't1', nome: '1', x: 10, y: 15, clienti: 4, status: 'LIBERO', shape: 'SQUARE', sala: 'Principale' },
+  { id: 't2', nome: '2', x: 25, y: 15, clienti: 2, status: 'OCCUPATO', shape: 'SQUARE', sala: 'Principale' },
+  { id: 't3', nome: '3', x: 40, y: 15, clienti: 0, status: 'LIBERO', shape: 'ROUND', sala: 'Principale' },
+  { id: 't4', nome: '4', x: 10, y: 45, clienti: 6, status: 'OCCUPATO', shape: 'RECTANGLE', sala: 'Principale' },
+  { id: 't5', nome: '5', x: 35, y: 45, clienti: 0, status: 'LIBERO', shape: 'SQUARE', sala: 'Principale' },
+  { id: 't6', nome: '6', x: 10, y: 15, clienti: 0, status: 'LIBERO', shape: 'SQUARE', sala: 'Terrazza' },
+  { id: 't7', nome: '7', x: 30, y: 15, clienti: 4, status: 'OCCUPATO', shape: 'ROUND', sala: 'Terrazza' },
 ];
 
 export const MOCK_ORDERS: Order[] = [

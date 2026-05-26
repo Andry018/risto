@@ -37,28 +37,52 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   async function fetchTavoli() {
     if (IS_DEMO_MODE) {
+      console.log('[TableMapView] Loading tables in DEMO mode');
       setTavoli(MOCK_TABLES);
       return;
     }
-    if (!supabase) return;
-    const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
-    if (data) {
-      setTavoli(data);
-      const aperturaMap: Record<string, string> = {};
-      await Promise.all(data.map(async (t) => {
-        if (t.status === 'OCCUPATO') {
-          const { data: ord } = await supabase!
-            .from('ordini')
-            .select('created_at')
-            .eq('nome_cliente', t.nome)
-            .eq('status', 'IN_ATTESA')
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          if (ord?.created_at) aperturaMap[t.id] = ord.created_at;
-        }
-      }));
-      setTableApertura(prev => ({ ...prev, ...aperturaMap }));
+    if (!supabase) {
+      console.error('[TableMapView] Supabase client is null!');
+      return;
+    }
+    console.log('[TableMapView] Fetching tables from Supabase...');
+    try {
+      const { data, error } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
+      if (error) {
+        console.error('[TableMapView] Error fetching tables:', error.message, error.details || '');
+        return;
+      }
+      if (data) {
+        console.log(`[TableMapView] Successfully loaded ${data.length} tables from DB`);
+        setTavoli(data);
+        const aperturaMap: Record<string, string> = {};
+        await Promise.all(data.map(async (t) => {
+          if (t.status === 'OCCUPATO') {
+            try {
+              const { data: ord, error: ordErr } = await supabase!
+                .from('ordini')
+                .select('created_at')
+                .eq('nome_cliente', t.nome)
+                .eq('status', 'IN_ATTESA')
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              if (ordErr) {
+                console.warn(`[TableMapView] Error fetching open order for ${t.nome}:`, ordErr.message);
+              } else if (ord?.created_at) {
+                aperturaMap[t.id] = ord.created_at;
+              }
+            } catch (err: any) {
+              console.warn(`[TableMapView] Exception fetching open order for ${t.nome}:`, err.message || err);
+            }
+          }
+        }));
+        setTableApertura(prev => ({ ...prev, ...aperturaMap }));
+      } else {
+        console.warn('[TableMapView] No table data returned from database');
+      }
+    } catch (err: any) {
+      console.error('[TableMapView] Exception during fetchTavoli:', err.message || err);
     }
   }
 

@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { X, Receipt, Clock } from 'lucide-react';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order } from '../types/entities';
+import { MOCK_ORDERS } from '../lib/MockData';
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  variant: 'day' | 'table';
+  variant: 'day' | 'table' | 'suspended';
   /** Richiesto se variant === 'table' */
   tableName?: string | null;
+  onSelect?: (order: Order) => void;
 };
 
 function startOfTodayISO(): string {
@@ -17,7 +19,7 @@ function startOfTodayISO(): string {
   return d.toISOString();
 }
 
-export default function BillsHistoryModal({ open, onClose, variant, tableName }: Props) {
+export default function BillsHistoryModal({ open, onClose, variant, tableName, onSelect }: Props) {
   const [rows, setRows] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -25,13 +27,26 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName }:
     if (!open) return;
 
     async function load() {
-      if (IS_DEMO_MODE || !supabase) {
+      if (IS_DEMO_MODE) {
+        // In demo mode, load suspended bills from MOCK_ORDERS
+        const mockPending = MOCK_ORDERS.filter(o => o.status === 'IN_ATTESA');
+        setRows(mockPending);
+        return;
+      }
+      if (!supabase) {
         setRows([]);
         return;
       }
       setLoading(true);
       try {
-        if (variant === 'day') {
+        if (variant === 'suspended') {
+          const { data } = await supabase
+            .from('ordini')
+            .select('*')
+            .eq('status', 'IN_ATTESA')
+            .order('created_at', { ascending: false });
+          setRows((data as Order[]) || []);
+        } else if (variant === 'day') {
           const { data } = await supabase
             .from('ordini')
             .select('*')
@@ -69,15 +84,26 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName }:
       <>
         Conti di <span className="text-gold">oggi</span>
       </>
-    ) : (
+    ) : variant === 'table' ? (
       <>
         Storico <span className="text-gold">{tableName || 'tavolo'}</span>
       </>
+    ) : (
+      <>
+        Conti in <span className="text-gold">sospeso</span>
+      </>
     );
+
+  const description =
+    variant === 'day'
+      ? 'Ordini registrati da mezzanotte (ora locale server)'
+      : variant === 'table'
+      ? 'Ultimi conti associati al nome tavolo'
+      : 'Tutti i conti aperti e messi in sospeso (in attesa di pagamento)';
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[min(90dvh,900px)]">
+      <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[min(90dvh,900px)] animate-in zoom-in-95 duration-200">
         <div className="p-6 sm:p-8 border-b border-surface-light flex justify-between items-start gap-4 bg-surface-light/5 shrink-0">
           <div>
             <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter text-white flex items-center gap-3">
@@ -85,15 +111,13 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName }:
               {title}
             </h2>
             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-2">
-              {variant === 'day'
-                ? 'Ordini registrati da mezzanotte (ora locale server)'
-                : 'Ultimi conti associati al nome tavolo'}
+              {description}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light shrink-0"
+            className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light shrink-0 cursor-pointer"
             aria-label="Chiudi"
           >
             <X size={22} />
@@ -121,7 +145,7 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName }:
                           o.status === 'COMPLETATO' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
                         }`}
                       >
-                        {o.status}
+                        {o.status === 'IN_ATTESA' ? 'IN SOSPESO' : o.status}
                       </span>
                       <span className="text-white font-black truncate">{o.nome_cliente}</span>
                     </div>
@@ -136,11 +160,21 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName }:
                       {o.orario_ritiro ? ` · ${o.orario_ritiro}` : ''}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-2xl font-black text-gold italic">€{Number(o.totale).toFixed(2)}</p>
-                    <p className="text-[9px] font-black text-gray-600 uppercase">
-                      {(o.carrello?.length ?? 0)} voci
-                    </p>
+                  <div className="flex items-center gap-4 ml-auto sm:ml-0 shrink-0">
+                    <div className="text-right">
+                      <p className="text-2xl font-black text-gold italic">€{Number(o.totale).toFixed(2)}</p>
+                      <p className="text-[9px] font-black text-gray-600 uppercase">
+                        {(o.carrello?.length ?? 0)} voci
+                      </p>
+                    </div>
+                    {o.status === 'IN_ATTESA' && onSelect && (
+                      <button
+                        onClick={() => onSelect(o)}
+                        className="px-4 py-2 bg-gold hover:bg-gold-hover text-black font-black text-xs rounded-xl transition active:scale-95 cursor-pointer uppercase tracking-wider"
+                      >
+                        Riprendi
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}

@@ -44,6 +44,21 @@ export default function DatabaseStatusGuard({ children }: Props) {
 
   return (
     <>
+      {IS_DEMO_MODE && (
+        <div className="fixed top-0 left-0 right-0 z-[200] flex items-center justify-between gap-3 px-4 py-2.5 text-xs font-bold bg-amber-500 text-black shadow-lg">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0" />
+            <span>Stai visualizzando la <strong>Modalità Demo</strong> (dati simulati offline).</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleDemoMode(false)}
+            className="bg-black text-white hover:bg-neutral-800 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+          >
+            Usa Database Real-time
+          </button>
+        </div>
+      )}
       {showBanner && (
         <div
           className={`fixed top-0 left-0 right-0 z-[200] flex items-center gap-3 px-4 py-3 text-sm font-medium shadow-lg ${

@@ -6,7 +6,7 @@ import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } fr
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich, Percent } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich, Percent, Pause } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import ReceiptPreview from './ReceiptPreview';
@@ -47,6 +47,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [billsDayOpen, setBillsDayOpen] = useState(false);
   const [billsTableOpen, setBillsTableOpen] = useState(false);
+  const [billsSuspendedOpen, setBillsSuspendedOpen] = useState(false);
   const [finishingOrder, setFinishingOrder] = useState(false);
   const [tableClienti, setTableClienti] = useState(0);
   const [splitResult, setSplitResult] = useState<{ parts: number; eachAmount: number } | null>(null);
@@ -206,6 +207,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       void fetchExistingOrder();
     }
   }, [tableId, products.length]);
+
+  useEffect(() => {
+    if (searchParams.get('showHold') === 'true') {
+      setBillsSuspendedOpen(true);
+    }
+  }, [searchParams]);
 
   /** Sync conto tavolo da altri dispositivi (es. telefono cameriere) senza ricaricare. */
   useEffect(() => {
@@ -492,6 +499,104 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     }
   };
 
+  const resumeOrder = (order: Order) => {
+    setActiveOrderId(order.id);
+    const prods = productsRef.current;
+    const ings = ingredientsRef.current;
+    const mappedCart = (order.carrello || []).map((item: OrderCarrelloItem) => {
+      const product = findProductForOrderLine(prods, item.nome);
+      const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
+      const rimozioni = item.modifiche?.rimozioni || [];
+      const removalsPrice = calculateRemovalsPrice(rimozioni, ings);
+      return {
+        ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
+        quantity: item.quantity,
+        addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo, removalsPrice),
+        removedIngredients: rimozioni,
+        notes: item.modifiche?.note || '',
+        portata: item.portata,
+        uniqueId: newUniqueId()
+      };
+    });
+    setCart(mappedCart);
+    setScontotipo(order.sconto_tipo || null);
+    setScontoValore(order.sconto_valore || 0);
+    setBillsTableOpen(false);
+    setBillsDayOpen(false);
+    setBillsSuspendedOpen(false);
+    toast.addToast({
+      type: 'success',
+      title: 'Conto caricato',
+      message: `Caricato l'ordine di "${order.nome_cliente}"`,
+      duration: 3000,
+    });
+  };
+
+  const handleHoldBill = async () => {
+    if (cart.length === 0 || finishingOrder) return;
+    
+    let name = tableName;
+    if (!name) {
+      const enteredName = prompt("Inserisci un riferimento per il conto in sospeso (es. Asporto 1, Mario...):");
+      if (enteredName === null) return; // Annullato dall'utente
+      name = enteredName.trim() || `Asporto #${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    localUpdateRef.current = true;
+    setFinishingOrder(true);
+    try {
+      const orderData = {
+        nome_cliente: name,
+        orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        totale: discountedTotal,
+        status: 'IN_ATTESA' as const,
+        carrello: cart.map(i => {
+          const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+          const removals = i.removedIngredients.reduce((s, rName) => {
+            const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
+            return s + (ing?.prezzo_rimozione || 0);
+          }, 0);
+          return {
+            nome: i.nome,
+            quantity: i.quantity,
+            prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            modifiche: {
+              aggiunte: i.addedIngredients.map(a => a.nome),
+              rimozioni: i.removedIngredients,
+              note: i.notes
+            }
+          };
+        }),
+        ...(scontoTipo ? { sconto_tipo: scontoTipo, sconto_valore: scontoValore } : {}),
+      };
+
+      if (activeOrderId) {
+        await syncManager.pushOrder({ ...orderData, id: activeOrderId });
+      } else {
+        await syncManager.pushOrder(orderData);
+      }
+
+      if (tableId) {
+        await syncManager.pushTableUpdate(tableId, { status: 'OCCUPATO' });
+      }
+
+      setActiveOrderId(null);
+      setCart([]);
+      toast.addToast({
+        type: 'success',
+        title: 'Conto in Sospeso',
+        message: `Conto per "${name}" salvato nei sospesi.`,
+        duration: 3000,
+      });
+      if (onOrderFinished) onOrderFinished();
+    } catch (error) {
+      console.error('Error suspending bill:', error);
+      alert('Errore durante il salvataggio in sospeso.');
+    } finally {
+      setFinishingOrder(false);
+    }
+  };
+
   const categoryDefs: { label: string; match: string[] }[] = [
     { label: 'Antipasto', match: ['Antipasto', 'Antipasti'] },
     { label: 'Primo', match: ['Primo', 'Primi'] },
@@ -729,6 +834,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
                   >
                     <Receipt size={14} /> Conti oggi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillsSuspendedOpen(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/30 transition-all"
+                  >
+                    <Pause size={14} /> Conti Sospesi
                   </button>
                   {tableName && (
                     <button
@@ -1007,30 +1119,52 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   <Receipt size={14} /> ANTEPRIMA RICEVUTA
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {tableId && (
+              {tableId ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleUpdateBill}
+                      disabled={cart.length === 0 || finishingOrder}
+                      className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                      title="Salva la comanda sul tavolo senza chiudere"
+                    >
+                      Salva Comanda <Save size={16} />
+                    </button>
+                    <button
+                      onClick={handleHoldBill}
+                      disabled={cart.length === 0 || finishingOrder}
+                      className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                      title="Metti in sospeso e libera lo schermo"
+                    >
+                      Metti in Sospeso <Pause size={16} />
+                    </button>
+                  </div>
                   <button
-                    onClick={handleUpdateBill}
+                    onClick={handleFinishOrder}
                     disabled={cart.length === 0 || finishingOrder}
-                    className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-base py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                   >
-                    Salva Comanda <Save size={16} />
+                    {finishingOrder ? <>Attendi…</> : <>Chiudi Conto <CheckCircle size={20} /></>}
                   </button>
-                )}
-                <button
-                  onClick={handleFinishOrder}
-                  disabled={cart.length === 0 || finishingOrder}
-                  className={`w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale ${tableId ? '' : 'col-span-2'}`}
-                >
-                  {finishingOrder ? (
-                    <>Attendi…</>
-                  ) : (
-                  <>
-                    Chiudi Conto <CheckCircle size={20} />
-                  </>
-                )}
-                </button>
-              </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handleHoldBill}
+                    disabled={cart.length === 0 || finishingOrder}
+                    className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    Metti in Sospeso <Pause size={16} />
+                  </button>
+                  <button
+                    onClick={handleFinishOrder}
+                    disabled={cart.length === 0 || finishingOrder}
+                    className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
+                  >
+                    {finishingOrder ? <>Attendi…</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1185,12 +1319,19 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         onClose={() => setPaninoModalOpen(false)}
         onSave={addPaninoToCart}
       />
-      <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" />
+      <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" onSelect={resumeOrder} />
       <BillsHistoryModal
         open={billsTableOpen}
         onClose={() => setBillsTableOpen(false)}
         variant="table"
         tableName={tableName}
+        onSelect={resumeOrder}
+      />
+      <BillsHistoryModal
+        open={billsSuspendedOpen}
+        onClose={() => setBillsSuspendedOpen(false)}
+        variant="suspended"
+        onSelect={resumeOrder}
       />
     </>
   );
