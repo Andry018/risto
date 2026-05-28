@@ -1,6 +1,6 @@
 import type { CustomizedItem } from '../types/entities';
 import { PORTATE } from '../types/entities';
-import { X } from 'lucide-react';
+import { Printer, X } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -9,81 +9,153 @@ interface Props {
   pickupTime: string;
   items: CustomizedItem[];
   variant?: 'kitchen' | 'receipt';
+  onPrint?: () => void;
 }
 
-const PORTATA_ORDER = ['0', '1', '2', '3', '4', 'B', 'D', 'C'];
+const PORTATA_ORDER = ['1', '2', '3', '4', '5', '_'];
+const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio'];
+const VARIANT_NOISE = ['Pizze Bianca', 'Pizze Rosse', 'Pizze', 'Impasto'];
 
 function portataLabel(key: string): string {
-  const p = PORTATE.find(p => p.value === key);
-  return p?.label || key;
+  const p = PORTATE.find(portata => portata.value === key);
+  return p?.label || (key === '_' ? 'Senza uscita' : key);
 }
 
-export default function ReceiptPreview({ isOpen, onClose, customerName, pickupTime, items, variant = 'kitchen' }: Props) {
+function truncate(text: string, max = 34): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+}
+
+function groupItems(items: CustomizedItem[]) {
+  const grouped = new Map<string, CustomizedItem[]>();
+  for (const item of items) {
+    const key = item.portata || '_';
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(item);
+  }
+  return [...grouped.entries()].sort((a, b) => PORTATA_ORDER.indexOf(a[0]) - PORTATA_ORDER.indexOf(b[0]));
+}
+
+function getItemExtras(item: CustomizedItem) {
+  return item.addedIngredients.filter(a => !VARIANT_NOISE.includes(a.nome));
+}
+
+export default function ReceiptPreview({ isOpen, onClose, customerName, pickupTime, items, variant = 'kitchen', onPrint }: Props) {
   if (!isOpen) return null;
 
-  const filteredItems = items.filter(i => i.nome !== 'COPERTO');
-  const grouped = new Map<string, CustomizedItem[]>();
-  for (const item of filteredItems) {
-    const pk = item.portata || '0';
-    if (!grouped.has(pk)) grouped.set(pk, []);
-    grouped.get(pk)!.push(item);
-  }
-  const sortedGroups = [...grouped.entries()].sort(
-    (a, b) => PORTATA_ORDER.indexOf(a[0]) - PORTATA_ORDER.indexOf(b[0])
-  );
+  const filteredItems = items.filter(i => i.nome !== 'COPERTO' && (variant === 'receipt' || !CATEGORIES_NO_KITCHEN.includes(i.categoria)));
+  const sortedGroups = groupItems(filteredItems);
+  const isKitchen = variant === 'kitchen';
+  const timeLabel = isKitchen ? 'ORARIO ORDINE' : 'ORARIO USCITA';
+  const headerLabel = isKitchen ? 'TAVOLO' : 'CLIENTE';
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-white text-black w-full max-w-sm rounded-sm p-6 font-mono shadow-[0_0_50px_rgba(255,255,255,0.1)] relative max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute -top-12 right-0 text-white flex items-center gap-2 uppercase font-black text-xs tracking-widest">
-          Chiudi <X size={18} />
-        </button>
-
-        <div className="mb-4 bg-black text-white p-4 rounded-sm text-center">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-70 mb-1">{variant === 'kitchen' ? 'COMMESSA IN CUCINA' : 'RICEVUTA'}</p>
-          <p className="text-2xl font-black uppercase tracking-tighter">{customerName || 'N/A'}</p>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+      <div
+        className="relative w-[80mm] max-w-[calc(100vw-1rem)] bg-white text-black border border-black overflow-hidden"
+        style={{ fontFamily: '"Arial Black", Arial, Helvetica, sans-serif' }}
+      >
+        <div className="flex items-start justify-between gap-3 p-3 border-b border-black">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[22px] font-black uppercase leading-none mt-1 truncate">{truncate(customerName || 'TAVOLO', 18)}</h2>
+          </div>
+          <button onClick={onClose} className="shrink-0 w-8 h-8 border border-black/20 flex items-center justify-center active:scale-95">
+            <X size={16} />
+          </button>
         </div>
 
-        <div className="text-center mb-5 border-b-2 border-black pb-3">
-          <p className="text-[10px] font-bold text-gray-500 uppercase">ORARIO USCITA</p>
-          <p className="text-xl font-black">{pickupTime || '--:--'}</p>
-        </div>
-
-        <div className="space-y-5">
-          {sortedGroups.map(([portata, groupItems]) => (
-            <div key={portata}>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 border-b border-dashed border-gray-200 pb-1">
-                {portataLabel(portata)}
-              </p>
-              <div className="space-y-3">
-                {groupItems.map((item, idx) => (
-                  <div key={idx}>
-                    <p className="font-black text-sm uppercase">{item.quantity}x {item.nome}</p>
-                    {item.removedIngredients.length > 0 && item.removedIngredients.map((r, ri) => (
-                      <p key={ri} className="text-[10px] font-bold text-gray-400 line-through ml-3">- NO {r.toUpperCase()}</p>
-                    ))}
-                    {item.addedIngredients.length > 0 && item.addedIngredients.map((a, ai) => (
-                      <p key={ai} className="text-[10px] font-bold text-black ml-3">+ 1 {a.nome.toUpperCase()}</p>
-                    ))}
-                    {item.notes && (
-                      <p className="text-[10px] font-bold italic ml-3 mt-0.5">※ {item.notes.toUpperCase()}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+        <div className="px-3 pt-3 pb-2">
+          <div className="flex items-center justify-between gap-3 border border-black px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-black/55">{headerLabel}</p>
+              <p className="text-[20px] font-black uppercase leading-none mt-1 truncate">{truncate(customerName || 'TAVOLO', 18)}</p>
             </div>
-          ))}
+            <div className="text-right shrink-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-black/55">{timeLabel}</p>
+              <p className="text-[20px] font-black leading-none mt-1">{pickupTime || '--:--'}</p>
+            </div>
+          </div>
         </div>
 
-        {filteredItems.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-8">Nessun piatto da preparare</p>
+        <div className="px-3 pb-3 space-y-2">
+          {sortedGroups.map(([portata, groupItems], index) => {
+            const info = PORTATE.find(p => p.value === portata);
+            return (
+              <div key={portata} className="break-inside-avoid">
+                {index > 0 && <div className="border-t border-black my-2" />}
+                <div className={`inline-flex items-center gap-2 px-2 py-1 border text-[11px] font-black uppercase tracking-[0.3em] ${info?.color || 'text-black border-black/20 bg-black/5'}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                  {portataLabel(portata)}
+                </div>
+
+                <div className="mt-2 space-y-1.5">
+                  {groupItems.map((item, idx) => {
+                    const extras = getItemExtras(item);
+                    const notes = item.notes.trim();
+                    const isLong = item.nome.length > 28 || notes.length > 38;
+                    return (
+                      <div key={`${portata}-${idx}`} className="border border-black/10 px-2.5 py-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[14px] font-black uppercase leading-tight break-words">
+                              <span className="mr-1">{item.quantity}x</span>
+                              {truncate(item.nome.toUpperCase(), isLong ? 26 : 32)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {(extras.length > 0 || item.removedIngredients.length > 0 || notes) && (
+                          <div className="mt-1 space-y-0.5">
+                            {extras.length > 0 && (
+                              <p className="text-[15px] font-bold text-black/80 leading-tight break-words">
+                                + {truncate(extras.map(a => a.nome).join(', '), 44)}
+                              </p>
+                            )}
+                            {item.removedIngredients.length > 0 && (
+                              <p className="text-[15px] font-bold text-black/60 leading-tight break-words">
+                                - {truncate(item.removedIngredients.join(', '), 44)}
+                              </p>
+                            )}
+                            {notes && (
+                              <p className="text-[16px] font-bold italic text-black/80 leading-tight break-words">
+                                NOTE: {truncate(notes.toUpperCase(), 46)}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {sortedGroups.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-lg font-black text-black/50 uppercase tracking-[0.2em]">Nessun piatto da preparare</p>
+            </div>
+          )}
+        </div>
+
+        {!isKitchen && (
+          <div className="px-3 pb-3">
+            <div className="pt-2 border-t border-black text-center">
+              <p className="text-[11px] font-black uppercase tracking-[0.35em] text-black/50">{new Date().toLocaleString('it-IT')}</p>
+            </div>
+          </div>
         )}
 
-        <div className="text-center mt-6 pt-4 border-t-2 border-black">
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-40">
-            {new Date().toLocaleString('it-IT')}
-          </p>
-        </div>
+        {onPrint && (
+          <div className="px-3 pb-3">
+            <button
+              onClick={onPrint}
+              className="w-full py-3 bg-black text-white font-black uppercase text-[12px] tracking-[0.3em] flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Printer size={16} /> STAMPA ORA
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

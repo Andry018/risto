@@ -19,8 +19,19 @@ export default function StaffDashboard() {
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  
+  const [printAgentUrl, setPrintAgentUrl] = useState(() => localStorage.getItem('waiter_print_agent_url') || 'http://127.0.0.1:8787');
+  const [printerIp, setPrinterIp] = useState(() => localStorage.getItem('waiter_printer_ip') || '');
+  const [printerPort, setPrinterPort] = useState(() => Number(localStorage.getItem('waiter_printer_port') || '9100'));
 
+  useEffect(() => {
+    localStorage.setItem('waiter_print_agent_url', printAgentUrl);
+  }, [printAgentUrl]);
+  useEffect(() => {
+    localStorage.setItem('waiter_printer_ip', printerIp);
+  }, [printerIp]);
+  useEffect(() => {
+    localStorage.setItem('waiter_printer_port', String(printerPort || 9100));
+  }, [printerPort]);
   const handleCleanup = async () => {
     if (!confirm('Sei sicuro? Questo eliminerà TUTTI gli ordini e resetterà i tavoli.')) return;
     setLoadingAction('cleanup');
@@ -259,6 +270,56 @@ export default function StaffDashboard() {
              <h2 className="text-2xl font-bold text-white mb-6">Impostazioni & Azioni</h2>
              
              <div className="space-y-4">
+                <div className="border border-surface-light rounded-2xl p-4 bg-charcoal/40 space-y-3">
+                  <div>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Stampa LAN</p>
+                    <h3 className="text-lg font-black text-white mt-1">Configura stampante</h3>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] ml-1">Print Agent URL</label>
+                    <input
+                      type="text"
+                      value={printAgentUrl}
+                      onChange={e => setPrintAgentUrl(e.target.value)}
+                      className="w-full bg-surface-light/20 border border-surface-light rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-gold transition-all"
+                      placeholder="http://192.168.1.50:8787"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] ml-1">IP stampante</label>
+                      <input
+                        type="text"
+                        value={printerIp}
+                        onChange={e => setPrinterIp(e.target.value)}
+                        className="w-full bg-surface-light/20 border border-surface-light rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-gold transition-all"
+                        placeholder="192.168.1.100"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] ml-1">Porta</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={printerPort}
+                        onChange={e => setPrinterPort(Number(e.target.value || 9100))}
+                        className="w-full bg-surface-light/20 border border-surface-light rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-gold transition-all"
+                        placeholder="9100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-3">
+                    <div className="text-amber-400 text-xs font-black uppercase tracking-[0.2em] shrink-0 pt-0.5">Nota</div>
+                    <p className="text-xs text-gray-300 leading-relaxed">
+                      Se puoi, assegna alla stampante un IP statico nel router. Così non cambia e non devi aggiornare le impostazioni ogni volta.
+                    </p>
+                  </div>
+                </div>
+
                 <button
                   onClick={() => { setIsSettingsOpen(false); navigate('/reports'); }}
                   className="w-full bg-surface-light/40 border border-gold/30 text-gold p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gold/10 transition cursor-pointer"

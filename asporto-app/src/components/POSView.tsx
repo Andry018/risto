@@ -3,13 +3,11 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
-import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, AlertTriangle, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, CreditCard, Printer, Sandwich, Percent, Pause } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import ProductCustomizationModal from './ProductCustomizationModal';
-import ReceiptPreview from './ReceiptPreview';
 import PaninoBuilderModal from './PaninoBuilderModal';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
@@ -20,6 +18,14 @@ import {
   calculateRemovalsPrice,
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
+
+const PORTATA_OPTIONS = [
+  { value: '1', label: '1ª Uscita', color: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
+  { value: '2', label: '2ª Uscita', color: 'text-sky-400 border-sky-500/30 bg-sky-500/10' },
+  { value: '3', label: '3ª Uscita', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
+  { value: '4', label: '4ª Uscita', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
+  { value: '5', label: '5ª Uscita', color: 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/10' },
+] as const;
 
 export default function POSView({ tableId: propTableId, tableName: propTableName, onOrderFinished, onNavigateHome }: { tableId?: string, tableName?: string, onOrderFinished?: () => void, onNavigateHome?: () => void }) {
   const navigate = useNavigate();
@@ -51,11 +57,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [finishingOrder, setFinishingOrder] = useState(false);
   const [tableClienti, setTableClienti] = useState(0);
   const [splitResult, setSplitResult] = useState<{ parts: number; eachAmount: number } | null>(null);
-  const [receiptOpen, setReceiptOpen] = useState(false);
   const [showBillReview, setShowBillReview] = useState(false);
   const [scontoTipo, setScontotipo] = useState<'percentuale' | 'fisso' | null>(null);
   const [scontoValore, setScontoValore] = useState(0);
-  const [scontoInputOpen, setScontoInputOpen] = useState(false);
+  const [currentPortata, setCurrentPortata] = useState<(typeof PORTATA_OPTIONS)[number]['value']>('1');
 
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
@@ -68,6 +73,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const localUpdateRef = useRef(false);
   productsRef.current = products;
   ingredientsRef.current = ingredients;
+
+  useEffect(() => {
+    setCurrentPortata('1');
+  }, [tableId, tableName]);
 
   useEffect(() => {
     const handleSyncChange = () => setPendingSyncCount(syncManager.getPendingCount());
@@ -125,6 +134,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           }
         }
       }
+      setCurrentPortata('1');
       return;
     }
     if (!supabase) return;
@@ -178,6 +188,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           }
         }
       }
+      setCurrentPortata('1');
     }
   }
 
@@ -285,6 +296,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     setCart(prev => {
       const existingIdx = prev.findIndex(item => 
         item.id === product.id && 
+        item.portata === currentPortata &&
         item.addedIngredients.length === 0 && 
         item.removedIngredients.length === 0 && 
         !item.notes
@@ -305,6 +317,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         addedIngredients: [],
         removedIngredients: [],
         notes: '',
+        portata: currentPortata,
         uniqueId: newUniqueId()
       };
       return [...prev, newItem];
@@ -318,6 +331,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       addedIngredients: [],
       removedIngredients: [],
       notes: '',
+      portata: currentPortata,
       uniqueId: newUniqueId()
     });
     setIsModalOpen(true);
@@ -356,10 +370,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     setCart(prev => prev.filter(item => item.uniqueId !== uniqueId));
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => {
+    setCart([]);
+    setCurrentPortata('1');
+  };
 
   const addPaninoToCart = (item: CustomizedItem) => {
-    setCart(prev => [...prev, item]);
+    setCart(prev => [...prev, { ...item, portata: item.portata ?? currentPortata }]);
   };
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
@@ -370,33 +387,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     ? Math.max(0, total - scontoValore)
     : total;
 
-  const freeTable = async () => {
-    if (!tableId || finishingOrder) return;
-    if (!confirm(`Sei sicuro di voler liberare il tavolo? I dati del conto andranno persi.`)) return;
-
-    localUpdateRef.current = true;
-    setFinishingOrder(true);
-    try {
-      if (activeOrderId) {
-        await syncManager.pushOrder({
-          nome_cliente: tableName || 'TAVOLO',
-          orario_ritiro: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-          totale: 0,
-          status: 'COMPLETATO',
-          carrello: [],
-          id: activeOrderId,
-        } as Partial<Order>);
-      }
-      await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
-      setActiveOrderId(null);
-      setCart([]);
-      if (onOrderFinished) onOrderFinished();
-    } catch (error) {
-      console.error('Error freeing table:', error);
-      alert('Errore durante la liberazione del tavolo.');
-    } finally {
-      setFinishingOrder(false);
-    }
+  const currentPortataMeta = PORTATA_OPTIONS.find(p => p.value === currentPortata) ?? PORTATA_OPTIONS[0];
+  const advancePortata = () => {
+    const currentIndex = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
+    const nextIndex = Math.min(currentIndex + 1, PORTATA_OPTIONS.length - 1);
+    setCurrentPortata(PORTATA_OPTIONS[nextIndex].value);
   };
 
   const handleFinishOrder = async () => {
@@ -420,6 +415,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             nome: i.nome,
             quantity: i.quantity,
             prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            portata: i.portata,
             modifiche: {
               aggiunte: i.addedIngredients.map(a => a.nome),
               rimozioni: i.removedIngredients,
@@ -474,6 +470,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             nome: i.nome,
             quantity: i.quantity,
             prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            portata: i.portata,
             modifiche: {
               aggiunte: i.addedIngredients.map(a => a.nome),
               rimozioni: i.removedIngredients,
@@ -616,7 +613,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       if (!match.includes(p.categoria)) return false;
     }
     if (searchQuery && !p.nome.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
+    const missingIngredients = p.ingredienti?.filter(ingName => {
+      const ingredient = ingredients.find(i => i.nome === ingName);
+      return ingredient && !ingredient.disponibile;
+    }) || [];
+    return p.disponibile && missingIngredients.length === 0;
   });
 
   if (loading) return <div className="flex-1 flex justify-center items-center bg-charcoal"><div className="w-12 h-12 border-4 border-gold border-t-transparent rounded-full animate-spin"></div></div>;
@@ -625,184 +626,176 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     <>
       {/* Bill Review Overlay */}
       {showBillReview && (
-        <div className="fixed inset-0 z-[100] flex bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="flex-1 flex flex-col px-8 md:px-12 lg:px-20 xl:px-32">
-            {/* Header */}
-            <div className="flex items-center justify-between py-6 border-b border-surface-light">
-              <div className="flex items-center gap-4">
-                <button onClick={() => setShowBillReview(false)} className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white transition-colors">
-                  <X size={22} />
-                </button>
-                <div>
-                  <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">Riepilogo <span className="text-gold">Conto</span></h2>
-                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">{tableName || 'POS'} · coperti {tableClienti || '-'}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-gray-500 uppercase">Totale</p>
-                {scontoTipo ? (
-                  <div className="flex flex-col items-end">
-                    <p className="text-lg font-black text-gray-500 line-through">€{total.toFixed(2)}</p>
-                    <p className="text-4xl font-black text-gold italic">€{discountedTotal.toFixed(2)}</p>
-                    <p className="text-[10px] font-black text-emerald-400">{scontoTipo === 'percentuale' ? `${scontoValore}%` : `-€${scontoValore.toFixed(2)}`}</p>
-                  </div>
-                ) : (
-                  <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Items grouped by portata */}
-            <div className="flex-1 overflow-y-auto py-8 space-y-6">
-              {cart.length === 0 ? (
-                <div className="py-16 text-center text-gray-500 text-lg font-bold">Nessun articolo nel conto</div>
-              ) : (
-                (() => {
-                  const grouped = new Map<string, CustomizedItem[]>();
-                  for (const item of cart) {
-                    const key = item.portata || '_';
-                    if (!grouped.has(key)) grouped.set(key, []);
-                    grouped.get(key)!.push(item);
-                  }
-                  const sortedGroups = Array.from(grouped.entries()).sort(([a], [b]) => {
-                    if (a === '_') return 1; if (b === '_') return -1;
-                    return parseInt(a) - parseInt(b);
-                  });
-                  return sortedGroups.map(([portataKey, items]) => {
-                    const portataInfo = PORTATE.find(p => p.value === portataKey);
-                    const groupTotal = items.reduce((s, i) => s + calculateItemPrice(i, ingredients), 0);
-                    return (
-                      <div key={portataKey}>
-                        <div className={`flex items-center justify-between mb-3 px-5 py-3 rounded-2xl border ${portataInfo?.color || 'border-surface-light bg-charcoal'}`}>
-                          <span className="font-black text-base uppercase tracking-wider">{portataInfo?.label || 'SENZA USCITA'}</span>
-                          <span className="font-black text-base opacity-80">€{groupTotal.toFixed(2)}</span>
+        <div className="fixed inset-0 z-[100] flex bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="flex-1 min-h-0 p-4 md:p-6 xl:p-8">
+            <div className="h-full grid grid-cols-1 lg:grid-cols-[1.4fr_0.6fr] gap-4 md:gap-6 min-h-0">
+              <div className="bg-surface border border-surface-light rounded-[32px] shadow-2xl overflow-hidden flex flex-col min-h-0">
+                <div className="px-5 md:px-8 py-5 md:py-6 border-b border-surface-light bg-surface-light/10">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex items-start gap-4">
+                      <button
+                        onClick={() => setShowBillReview(false)}
+                        className="p-3 bg-charcoal rounded-2xl text-gray-400 hover:text-white border border-surface-light transition-all active:scale-95"
+                        aria-label="Chiudi riepilogo conto"
+                      >
+                        <X size={20} />
+                      </button>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className="px-3 py-1 rounded-full bg-gold/10 text-gold text-[10px] font-black uppercase tracking-[0.25em] border border-gold/20">
+                            Riepilogo conto
+                          </span>
+                          <span className="px-3 py-1 rounded-full bg-charcoal text-gray-300 text-[10px] font-black uppercase tracking-[0.25em] border border-surface-light">
+                            {cart.length} articoli
+                          </span>
                         </div>
-                        <div className="space-y-2">
-                          {items.map(item => (
-                            <div key={item.uniqueId} className="flex items-center justify-between py-2 px-2">
-                              <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <span className="w-8 h-8 bg-charcoal rounded-xl text-sm flex items-center justify-center font-black text-gold shrink-0">{item.quantity}</span>
-                                <span className="font-bold text-white text-base truncate">{item.nome}</span>
-                                {item.addedIngredients.length > 0 && <span className="text-xs text-emerald-400 font-bold truncate">+{item.addedIngredients.map(a => a.nome).join(', ')}</span>}
-                                {item.removedIngredients.length > 0 && <span className="text-xs text-red-400 font-bold truncate">NO {item.removedIngredients.join(', ')}</span>}
-                                {item.portata && (
-                                  <span className={`shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || ''}`}>
-                                    {portataInfo?.label || item.portata}
-                                  </span>
-                                )}
+                        <h2 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-white">
+                          Conto <span className="text-gold">corrente</span>
+                        </h2>
+                        <p className="text-[10px] md:text-xs font-black text-gray-500 uppercase tracking-[0.3em] mt-2">
+                          {tableName || 'POS'} · coperti {tableClienti || '-'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="min-w-[220px] rounded-3xl bg-charcoal border border-surface-light px-5 py-4">
+                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-2">Totale</p>
+                      {scontoTipo ? (
+                        <div className="flex flex-col items-end">
+                          <p className="text-base font-black text-gray-500 line-through">€{total.toFixed(2)}</p>
+                          <p className="text-4xl font-black text-gold italic leading-none">€{discountedTotal.toFixed(2)}</p>
+                          <p className="text-[10px] font-black text-emerald-400 mt-2">
+                            {scontoTipo === 'percentuale' ? `${scontoValore}%` : `-€${scontoValore.toFixed(2)}`}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-4xl font-black text-gold italic leading-none">€{total.toFixed(2)}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 custom-scrollbar">
+                  <div className="space-y-3">
+                    {cart.map(item => (
+                      <div
+                        key={item.uniqueId}
+                        className="bg-charcoal/70 border border-surface-light rounded-3xl px-4 py-4 md:px-5 md:py-5 shadow-lg"
+                      >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-gold font-black shrink-0 w-8 text-center">x{item.quantity}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white text-sm md:text-base truncate">{item.nome.toUpperCase()}</p>
+                          {item.portata && (
+                            <span className={`shrink-0 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-[0.2em] ${PORTATA_OPTIONS.find(p => p.value === item.portata)?.color ?? 'bg-charcoal border-surface-light text-gray-400'}`}>
+                              {PORTATA_OPTIONS.find(p => p.value === item.portata)?.label ?? `Portata ${item.portata}`}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {item.addedIngredients.map(a => <span key={a.nome} className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">+{a.nome}</span>)}
+                          {item.removedIngredients.map(r => <span key={r} className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">NO {r}</span>)}
+                        </div>
                               </div>
-                              <span className="font-black text-white text-base shrink-0 ml-4">€{calculateItemPrice(item, ingredients).toFixed(2)}</span>
                             </div>
-                          ))}
+                            {item.notes && (
+                              <p className="text-[10px] md:text-xs text-amber-400 italic font-bold mt-2 pl-11">
+                                * {item.notes}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-white font-black shrink-0 ml-4 text-sm md:text-base">
+                            €{calculateItemPrice(item, ingredients).toFixed(2)}
+                          </span>
                         </div>
                       </div>
-                    );
-                  });
-                })()
-              )}
-
-              {splitResult && (
-                <div className="bg-charcoal border border-gold/30 rounded-3xl p-6">
-                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Conto diviso</p>
-                  <p className="text-4xl font-black italic text-gold">€{splitResult.eachAmount.toFixed(2)} <span className="text-sm text-gray-500 font-bold">× {splitResult.parts}</span></p>
-                </div>
-              )}
-
-              {/* Discount Section */}
-              <div className="bg-charcoal border border-surface-light rounded-3xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Percent size={18} className="text-gold" />
-                    <span className="font-black text-sm text-white">Sconto</span>
-                    {scontoTipo && (
-                      <span className="text-emerald-400 font-black text-sm">
-                        {scontoTipo === 'percentuale' ? `-${scontoValore}%` : `-€${scontoValore.toFixed(2)}`}
-                        <button onClick={() => { setScontotipo(null); setScontoValore(0); setScontoInputOpen(false); }} className="ml-2 text-gray-500 hover:text-red-400 text-xs">✕</button>
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    {!scontoTipo && (
-                      <>
-                        <button onClick={() => { setScontotipo('percentuale'); setScontoValore(10); setScontoInputOpen(true); }} className="px-3 py-1.5 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black text-gray-300 hover:text-gold hover:border-gold/30 transition-all">%</button>
-                        <button onClick={() => { setScontotipo('fisso'); setScontoValore(5); setScontoInputOpen(true); }} className="px-3 py-1.5 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black text-gray-300 hover:text-gold hover:border-gold/30 transition-all">€</button>
-                      </>
-                    )}
+                    ))}
                   </div>
                 </div>
-                {scontoInputOpen && scontoTipo && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <input
-                      type="number"
-                      value={scontoValore}
-                      onChange={e => setScontoValore(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="w-24 bg-surface border border-surface-light rounded-xl py-2 px-3 text-white font-bold text-sm outline-none focus:border-gold/50"
-                      min="0"
-                      autoFocus
-                    />
-                    <span className="text-sm font-black text-gray-500">{scontoTipo === 'percentuale' ? '%' : '€'}</span>
-                    <span className="text-sm font-black text-gray-500 ml-auto">
-                      -{scontoTipo === 'percentuale' ? (total * scontoValore / 100).toFixed(2) : scontoValore.toFixed(2)} €
-                    </span>
-                  </div>
-                )}
               </div>
-            </div>
 
-            {/* Footer actions */}
-            <div className="py-4 border-t border-surface-light bg-surface-light/5 space-y-3">
-              <div className="flex gap-3">
-                <button
-                  onClick={() => printKitchen(cart, tableName || 'Tavolo')}
-                  disabled={cart.length === 0}
-                  className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest hover:border-amber-500/40 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
-                >
-                  <Printer size={16} /> STAMPA CUCINA
-                </button>
-                <button
-                  onClick={() => printFullReceipt(cart, tableName || 'Tavolo', discountedTotal)}
-                  disabled={cart.length === 0}
-                  className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest hover:border-blue-500/40 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
-                >
-                  <Printer size={16} /> STAMPA SCONTRINO
-                </button>
-              </div>
-              <button
-                onClick={freeTable}
-                disabled={finishingOrder}
-                className="w-full bg-red-500/10 border border-red-500/30 text-red-400 font-black py-2.5 rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-1.5"
-              >
-                LIBERA TAVOLO
-              </button>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowBillReview(false)}
-                  className="flex-1 bg-surface-light border border-white/10 text-white font-black py-5 rounded-2xl text-sm flex items-center justify-center gap-3 hover:bg-white/10 active:scale-95 transition-all"
-                >
-                  <Edit3 size={20} /> MODIFICA
-                </button>
-                <button
-                  onClick={() => setIsSplitModalOpen(true)}
-                  disabled={cart.length === 0}
-                  className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-5 rounded-2xl text-sm uppercase tracking-widest hover:border-gold/30 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
-                >
-                  <Users size={20} /> DIVIDI
-                </button>
-                <button
-                  onClick={() => { if (confirm('Confermi la chiusura del conto?')) { setShowBillReview(false); handleFinishOrder(); } }}
-                  disabled={cart.length === 0 || finishingOrder}
-                  className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl shadow-2xl shadow-gold/20 flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-30 text-lg"
-                >
-                  {finishingOrder ? 'Attendi…' : <><CreditCard size={26} /> PAGA €{discountedTotal.toFixed(2)}</>}
-                </button>
-              </div>
+              <aside className="bg-surface border border-surface-light rounded-[32px] shadow-2xl overflow-hidden flex flex-col min-h-0">
+                <div className="p-5 md:p-6 border-b border-surface-light bg-surface-light/10">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Azioni rapide</p>
+                  <h3 className="text-2xl font-black italic uppercase text-white mt-1">Operazioni</h3>
+                </div>
+
+                <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto custom-scrollbar">
+                  <button
+                    onClick={() => printKitchen(cart, tableName || 'Tavolo')}
+                    disabled={cart.length === 0}
+                    className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                  >
+                    <Printer size={14} /> STAMPA COMANDA
+                  </button>
+                  <button
+                    onClick={() => printFullReceipt(cart, tableName || 'POS', discountedTotal)}
+                    disabled={cart.length === 0}
+                    className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                  >
+                    <Receipt size={14} /> STAMPA RICEVUTA
+                  </button>
+                  <div className="pt-2">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-3">Gestione conto</p>
+                    <div className="space-y-2">
+                      {tableId ? (
+                        <>
+                          <button
+                            onClick={handleUpdateBill}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                            title="Salva la comanda sul tavolo senza chiudere"
+                          >
+                            <Save size={16} /> SALVA COMANDA
+                          </button>
+                          <button
+                            onClick={handleHoldBill}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                            title="Metti in sospeso e libera lo schermo"
+                          >
+                            <Pause size={16} /> METTI IN SOSPESO
+                          </button>
+                          <button
+                            onClick={handleFinishOrder}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
+                          >
+                            {finishingOrder ? <>Attendi...</> : <>CHIUDI CONTO <CheckCircle size={20} /></>}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleHoldBill}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            <Pause size={16} /> METTI IN SOSPESO
+                          </button>
+                          <button
+                            onClick={handleFinishOrder}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
+                          >
+                            {finishingOrder ? <>Attendi...</> : <>CHIUDI CONTO <CheckCircle size={20} /></>}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </aside>
             </div>
           </div>
         </div>
       )}
 
       <div className="h-[100dvh] flex bg-charcoal text-white overflow-hidden">
-      
+
       {/* Left Column: Menu */}
       <div className="flex-1 flex flex-col min-w-0 p-4 md:p-6 lg:p-8 min-h-0">
         <header className="mb-8 flex flex-col gap-6">
@@ -852,15 +845,62 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     </button>
                   )}
                 </div>
+                <div className="mt-4 rounded-3xl border border-surface-light bg-surface/80 p-3 md:p-4 shadow-xl shadow-black/10 backdrop-blur-sm">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.35em]">Portate rapide</p>
+                      <p className="text-xs text-gray-400 mt-1">Seleziona l’uscita attiva prima di aggiungere i piatti.</p>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
+                      {PORTATA_OPTIONS.map(portata => {
+                        const isActive = currentPortata === portata.value;
+                        return (
+                          <button
+                            key={portata.value}
+                            type="button"
+                            onClick={() => setCurrentPortata(portata.value)}
+                            className={`min-w-[96px] px-3 py-2.5 rounded-2xl border text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${
+                              isActive
+                                ? `${portata.color} shadow-lg shadow-black/10`
+                                : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'
+                            }`}
+                          >
+                            {portata.label}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={advancePortata}
+                        className="min-w-[92px] px-3 py-2.5 rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap hover:bg-gold/20"
+                      >
+                        Avanza
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-2xl border ${currentPortataMeta.color}`}>
+                      <span className="w-2.5 h-2.5 rounded-full bg-current" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.25em]">{currentPortataMeta.label}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPortata('1')}
+                      className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 hover:text-white transition-colors"
+                    >
+                      Reset 1ª
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            
+
             {/* Search Bar */}
             <div className="relative w-72">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text" 
-                placeholder="Cerca prodotto..." 
+              <input
+                type="text"
+                placeholder="Cerca prodotto..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none focus:border-gold transition-all"
@@ -891,7 +931,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 .sort();
               return [...categoryDefs, ...extraCats.map(c => ({ label: c, match: [c] }))].filter(def => def.match.some(c => products.some(p => p.categoria === c)));
             })().map(def => (
-              <button 
+              <button
                 key={def.label}
                 onClick={() => setActiveCategory(activeCategory === def.label ? null : def.label)}
                 className={`px-6 py-2.5 rounded-xl font-black text-xs tracking-widest transition-all border whitespace-nowrap shrink-0 ${activeCategory === def.label ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-surface border-surface-light text-gray-500 hover:text-white'}`}
@@ -904,9 +944,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           {/* Panino Builder Button */}
           <button
             onClick={() => setPaninoModalOpen(true)}
-            className="w-full bg-gold/10 border-2 border-dashed border-gold/40 text-gold font-black py-3 rounded-2xl text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-gold/20"
+            className="self-start inline-flex w-auto max-w-full bg-gold/10 border border-gold/30 text-gold font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-[0.22em] flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-gold/20"
           >
-            <Sandwich size={18} /> COMPONI PANINO
+            <Sandwich size={14} /> PANINO
           </button>
         </header>
 
@@ -915,7 +955,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           {(() => {
             const showSub = activeCategory === 'Bevande' || (!activeCategory && filteredProducts.some(p => p.categoria === 'Bevande'));
             const gridClass = 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 xxl:grid-cols-5 gap-4';
-            
+
             if (showSub) {
               const bevande = filteredProducts.filter(p => p.categoria === 'Bevande');
               const other = filteredProducts.filter(p => p.categoria !== 'Bevande');
@@ -938,7 +978,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </>
               );
             }
-            
+
             return <div className={gridClass}>{filteredProducts.map(p => renderProductCard(p))}</div>;
 
             function renderProductCard(product: Product) {
@@ -962,34 +1002,32 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 >
                   {inCart && (
                     <div className="absolute top-2 right-2 z-10">
-                      <span className="bg-gold text-black text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-lg shadow-gold/30">×{cartCount}</span>
+                      <span className="bg-gold text-black text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-lg shadow-gold/30">Ã—{cartCount}</span>
                     </div>
                   )}
                   <div>
                     <h3 className={`font-bold text-lg leading-tight transition-colors ${isTrulyAvailable ? 'group-hover:text-gold' : 'text-gray-500 line-through'}`}>{product.nome}</h3>
                     <p className={`text-[10px] font-black uppercase tracking-widest mt-1 ${isTrulyAvailable ? 'text-gray-500' : 'text-red-500'}`}>
-                      {isTrulyAvailable ? product.categoria : `MANCA: ${missingIngredients.join(', ')}`}
+                      {product.categoria}
                     </p>
                   </div>
                   <div className="flex justify-between items-end">
                     <span className={`text-xl font-black ${isTrulyAvailable ? 'text-white' : 'text-gray-500'}`}>€{product.prezzo.toFixed(2)}</span>
                     <div className="flex items-center gap-1.5">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); if (isTrulyAvailable) openCustomization(product); }}
                         className={`p-2 rounded-xl border transition-all active:scale-95 ${isTrulyAvailable ? 'bg-charcoal border-surface-light text-gold hover:bg-surface-light' : 'opacity-50'}`}
                       >
                         <Edit3 size={16} />
                       </button>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${isTrulyAvailable ? 'bg-charcoal border-surface-light text-gold group-hover:bg-gold group-hover:text-black' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}>
-                        {isTrulyAvailable ? <Plus size={20} /> : <AlertTriangle size={20} />}
-                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (isTrulyAvailable) addToCart(product); }}
+                        className="p-2 rounded-xl bg-gold text-black font-bold shadow-lg shadow-gold/20 active:scale-95 transition-all hover:bg-gold-hover"
+                      >
+                        <Plus size={16} />
+                      </button>
                     </div>
                   </div>
-                  {!isTrulyAvailable && (
-                    <div className="absolute top-2 right-2">
-                       <span className="bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">ESAURITO</span>
-                    </div>
-                  )}
                 </div>
               );
             }
@@ -997,7 +1035,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         </div>
       </div>
 
-      {/* Right Column: Calculator/Cart */}
       <aside className="w-full max-w-[450px] shrink-0 md:w-[420px] lg:w-[450px] bg-surface flex flex-col min-h-0 border-l border-surface-light shadow-2xl relative overflow-hidden">
         {/* Decor */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 blur-3xl pointer-events-none" />
@@ -1025,67 +1062,36 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               <p className="font-black uppercase tracking-widest text-[10px]">Aggiungi prodotti</p>
             </div>
           ) : (
-            (() => {
-              const grouped = new Map<string, CustomizedItem[]>();
-              for (const item of cart) {
-                const key = item.portata || '_';
-                if (!grouped.has(key)) grouped.set(key, []);
-                grouped.get(key)!.push(item);
-              }
-              const sortedGroups = Array.from(grouped.entries()).sort(([a], [b]) => {
-                if (a === '_') return 1; if (b === '_') return -1;
-                return parseInt(a) - parseInt(b);
-              });
-              return sortedGroups.map(([portataKey, items]) => {
-                const portataInfo = PORTATE.find(p => p.value === portataKey);
-                const groupTotal = items.reduce((s, i) => s + calculateItemPrice(i, ingredients), 0);
-                return (
-                  <div key={portataKey}>
-                    <div className={`flex items-center justify-between mb-3 px-4 py-2.5 rounded-2xl border ${portataInfo?.color || 'border-surface-light bg-charcoal'}`}>
-                      <span className="font-black text-xs uppercase tracking-wider">{portataInfo?.label || 'SENZA USCITA'}</span>
-                      <span className="font-black text-sm opacity-80">€{groupTotal.toFixed(2)}</span>
+            <div className="space-y-3">
+              {cart.map(item => (
+                <div key={item.uniqueId} className="bg-charcoal/50 border border-surface-light rounded-2xl p-4 flex flex-col border-l-4 border-l-gold">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <p className="font-bold text-white text-base truncate">{item.nome}</p>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {item.addedIngredients.map(a => <span key={a.nome} className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">+{a.nome}</span>)}
+                        {item.removedIngredients.map(r => <span key={r} className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">NO {r}</span>)}
+                        {item.notes && <p className="text-[10px] text-amber-500 italic w-full font-bold">* {item.notes}</p>}
+                      </div>
                     </div>
-                    <div className="space-y-3">
-                      {items.map(item => (
-                        <div key={item.uniqueId} className="bg-charcoal/50 border border-surface-light rounded-2xl p-4 flex flex-col border-l-4 border-l-gold">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex-1 min-w-0 pr-4">
-                              <div className="flex items-center gap-2">
-                                <p className="font-bold text-white text-base truncate">{item.nome}</p>
-                                {item.portata && (
-                                  <span className={`shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30'}`}>
-                                    {portataInfo?.label || item.portata}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-1 mt-1.5">
-                                {item.addedIngredients.map(a => <span key={a.nome} className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">+{a.nome}</span>)}
-                                {item.removedIngredients.map(r => <span key={r} className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">NO {r}</span>)}
-                                {item.notes && <p className="text-[10px] text-amber-500 italic w-full font-bold">* {item.notes}</p>}
-                              </div>
-                            </div>
-                            <button onClick={() => removeEntireItem(item.uniqueId)} className="p-3 text-gray-600 hover:text-red-500 transition-colors active:scale-90">
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                          <div className="flex items-center justify-between pt-2 border-t border-surface-light/50">
-                            <button onClick={() => editCartItem(item)} className="px-3 py-2 text-[10px] font-black uppercase text-gray-500 hover:text-white flex items-center gap-1.5 bg-charcoal rounded-xl border border-surface-light hover:border-gold/30 transition-all active:scale-90">
-                              <Edit3 size={14} /> MODIFICA
-                            </button>
-                            <div className="flex items-center gap-3 bg-surface p-1.5 rounded-xl border border-surface-light shadow-lg">
-                              <button onClick={() => removeFromCart(item.uniqueId)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Minus size={18} /></button>
-                              <span className="w-8 text-center font-black text-white text-lg">{item.quantity}</span>
-                              <button onClick={() => addToCart(item)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Plus size={18} /></button>
-                            </div>
-                            <p className="text-white font-black text-base">€{calculateItemPrice(item, ingredients).toFixed(2)}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <button onClick={() => removeEntireItem(item.uniqueId)} className="p-3 text-gray-600 hover:text-red-500 transition-colors active:scale-90">
+                      <Trash2 size={18} />
+                    </button>
                   </div>
-                );
-              });
-            })()
+                  <div className="flex items-center justify-between pt-2 border-t border-surface-light/50">
+                    <button onClick={() => editCartItem(item)} className="px-3 py-2 text-[10px] font-black uppercase text-gray-500 hover:text-white flex items-center gap-1.5 bg-charcoal rounded-xl border border-surface-light hover:border-gold/30 transition-all active:scale-90">
+                      <Edit3 size={14} /> MODIFICA
+                    </button>
+                    <div className="flex items-center gap-3 bg-surface p-1.5 rounded-xl border border-surface-light shadow-lg">
+                      <button onClick={() => removeFromCart(item.uniqueId)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Minus size={18} /></button>
+                      <span className="w-8 text-center font-black text-white text-lg">{item.quantity}</span>
+                      <button onClick={() => addToCart(item)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Plus size={18} /></button>
+                    </div>
+                    <p className="text-white font-black text-base">€{calculateItemPrice(item, ingredients).toFixed(2)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -1102,23 +1108,23 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               <CheckCircle size={20} /> OPERAZIONE COMPLETATA!
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setIsSplitModalOpen(true)}
-                  disabled={cart.length === 0 || finishingOrder}
-                  className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-3 rounded-2xl border border-dashed border-gold/30 transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Users size={14} /> DIVISIONE CONTO
-                </button>
-                <button
-                  onClick={() => setReceiptOpen(true)}
-                  disabled={cart.length === 0}
-                  className="w-full bg-charcoal hover:bg-surface-light text-gray-400 hover:text-white font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Receipt size={14} /> ANTEPRIMA RICEVUTA
-                </button>
-              </div>
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => printKitchen(cart, tableName || 'Tavolo')}
+                    disabled={cart.length === 0}
+                    className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                  >
+                    <Printer size={14} /> STAMPA COMANDA
+                  </button>
+                  <button
+                    onClick={() => setIsSplitModalOpen(true)}
+                    disabled={cart.length === 0 || finishingOrder}
+                    className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-3 rounded-2xl border border-dashed border-gold/30 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Users size={14} /> DIVISIONE CONTO
+                  </button>
+                </div>
               {tableId ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
@@ -1144,25 +1150,34 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     disabled={cart.length === 0 || finishingOrder}
                     className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                   >
-                    {finishingOrder ? <>Attendi…</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                    {finishingOrder ? <>Attendiâ€¦</> : <>Chiudi Conto <CheckCircle size={20} /></>}
                   </button>
                 </>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-2">
                   <button
-                    onClick={handleHoldBill}
-                    disabled={cart.length === 0 || finishingOrder}
-                    className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                    onClick={() => printKitchen(cart, tableName || 'Tavolo')}
+                    disabled={cart.length === 0}
+                    className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
-                    Metti in Sospeso <Pause size={16} />
+                    <Printer size={14} /> STAMPA COMANDA
                   </button>
-                  <button
-                    onClick={handleFinishOrder}
-                    disabled={cart.length === 0 || finishingOrder}
-                    className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
-                  >
-                    {finishingOrder ? <>Attendi…</> : <>Chiudi Conto <CheckCircle size={20} /></>}
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleHoldBill}
+                      disabled={cart.length === 0 || finishingOrder}
+                      className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      Metti in Sospeso <Pause size={16} />
+                    </button>
+                    <button
+                      onClick={handleFinishOrder}
+                      disabled={cart.length === 0 || finishingOrder}
+                      className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
+                    >
+                      {finishingOrder ? <>Attendiâ€¦</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1170,7 +1185,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         </div>
       </aside>
 
-    </div>
+      </div>
+
       {/* Payment Split Modal */}
       {isSplitModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
@@ -1253,7 +1269,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             <div className="bg-charcoal border border-surface-light rounded-3xl p-6 mb-8">
               <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Importo per quota</p>
               <p className="text-5xl font-black italic text-gold">€{splitResult.eachAmount.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-2">× {splitResult.parts} persone</p>
+              <p className="text-xs text-gray-500 mt-2">Ã— {splitResult.parts} persone</p>
             </div>
 
             <div className="flex gap-3">
@@ -1272,7 +1288,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 disabled={finishingOrder}
                 className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
               >
-                {finishingOrder ? '…' : 'CONFERMA E CHIUDI CONTO'}
+                {finishingOrder ? 'â€¦' : 'CONFERMA E CHIUDI CONTO'}
               </button>
             </div>
           </div>
@@ -1295,6 +1311,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               addedIngredients: [],
               removedIngredients: [],
               notes: `DUETTO CON: ${item.nome}`,
+              portata: item.portata ?? currentPortata,
               uniqueId: newUniqueId(),
             };
             setCart(prev => [...prev, item, pairedItem]);
@@ -1304,13 +1321,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         }}
       />
 
-      <ReceiptPreview
-        isOpen={receiptOpen}
-        onClose={() => setReceiptOpen(false)}
-        customerName={tableName || 'POS'}
-        pickupTime={new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-        items={cart}
-      />
       <PaninoBuilderModal
         isOpen={paninoModalOpen}
         products={products}

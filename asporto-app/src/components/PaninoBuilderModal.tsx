@@ -1,9 +1,16 @@
 import { useState, useMemo } from 'react';
 import { X, Plus } from 'lucide-react';
 import type { Product, CustomizedItem, Portata } from '../types/entities';
-import { PORTATE } from '../types/entities';
 import { PANINO_CATEGORIES, PANINO_BASE_PRICE, COTTURE } from '../lib/paninoConfig';
 import { newUniqueId } from '../lib/id';
+
+const PORTATA_OPTIONS = [
+  { value: '1', label: '1ª Uscita', color: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
+  { value: '2', label: '2ª Uscita', color: 'text-sky-400 border-sky-500/30 bg-sky-500/10' },
+  { value: '3', label: '3ª Uscita', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
+  { value: '4', label: '4ª Uscita', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
+  { value: '5', label: '5ª Uscita', color: 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/10' },
+] as const;
 
 interface Props {
   isOpen: boolean;
@@ -140,7 +147,7 @@ export default function PaninoBuilderModal({ isOpen, products, currentPortata, v
           {isPos ? (
             <div className="flex gap-4 items-start">
               <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-                {PORTATE.map(p => (
+                {PORTATA_OPTIONS.map(p => (
                   <button
                     key={p.value}
                     onClick={() => setActivePortata(p.value)}
@@ -169,7 +176,7 @@ export default function PaninoBuilderModal({ isOpen, products, currentPortata, v
           ) : (
             <>
               <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-                {PORTATE.map(p => (
+                {PORTATA_OPTIONS.map(p => (
                   <button
                     key={p.value}
                     onClick={() => setActivePortata(p.value)}

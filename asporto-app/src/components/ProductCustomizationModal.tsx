@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
 import type { Product, Ingredient, CustomizedItem } from '../types/entities';
-import { PORTATE } from '../types/entities';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { getVariantsForCategory, type ProductVariant } from '../lib/productVariants';
 import { Minus, Plus, Search, X, AlertCircle, Split } from 'lucide-react';
+
+const PORTATA_OPTIONS = [
+  { value: '1', label: '1ª Uscita', color: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
+  { value: '2', label: '2ª Uscita', color: 'text-sky-400 border-sky-500/30 bg-sky-500/10' },
+  { value: '3', label: '3ª Uscita', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
+  { value: '4', label: '4ª Uscita', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
+  { value: '5', label: '5ª Uscita', color: 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/10' },
+] as const;
 
 interface Props {
   isOpen: boolean;
@@ -49,7 +56,7 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
     <section>
       <h3 className="text-[10px] font-black text-gray-500 tracking-widest uppercase mb-3">Portata</h3>
       <div className="flex flex-wrap gap-2">
-        {PORTATE.map(p => {
+        {PORTATA_OPTIONS.map(p => {
           const isActive = localItem.portata === p.value;
           return (
             <button

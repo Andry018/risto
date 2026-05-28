@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+﻿import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient, Tavolo, OrderCarrelloItem, Order, CustomizedItem, Portata, Reservation } from '../types/entities';
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, BookOpen, X, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
+import { printKitchenViaAgent } from '../lib/lanPrint';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import { useToast } from './Toast';
+import ReceiptPreview from './ReceiptPreview';
 import {
   addedIngredientsFromStoredOrderLine,
   calculateRemovalsPrice,
@@ -56,6 +58,7 @@ export default function WaiterMobileView() {
   const [tableDrafts, setTableDrafts] = useState<Record<string, { cart: CustomizedItem[]; covers: number }>>({});
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
+  const [kitchenPreviewOpen, setKitchenPreviewOpen] = useState(false);
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
@@ -77,6 +80,31 @@ export default function WaiterMobileView() {
     window.addEventListener('sync-status-changed', handleSyncChange);
     return () => window.removeEventListener('sync-status-changed', handleSyncChange);
   }, []);
+
+  const handlePrint = async () => {
+    if (cart.length === 0) return;
+    try {
+      const printAgentUrl = localStorage.getItem('waiter_print_agent_url') || 'http://127.0.0.1:8787';
+      const printerIp = localStorage.getItem('waiter_printer_ip') || '';
+      const printerPort = Number(localStorage.getItem('waiter_printer_port') || '9100');
+      const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      await printKitchenViaAgent(cart, selectedTable?.nome || 'Tavolo', printAgentUrl, printerIp, printerPort, orderTime);
+      toast.addToast({
+        type: 'success',
+        title: 'Comanda stampata',
+        message: 'Inviata alla stampante LAN.',
+        duration: 2500,
+      });
+    } catch (error) {
+      console.error('Print failed:', error);
+      toast.addToast({
+        type: 'error',
+        title: 'Stampa non riuscita',
+        message: 'Controlla print agent, IP stampante e rete LAN.',
+        duration: 4500,
+      });
+    }
+  };
 
   const toast = useToast();
   const productsRef = useRef(products);
@@ -817,6 +845,7 @@ export default function WaiterMobileView() {
           {activeTab === 'MENU' ? (
             <WaiterMenuTab
               products={products}
+              ingredients={ingredients}
               cart={cart}
               searchQuery={searchQuery}
               activeCategory={activeCategory}
@@ -904,17 +933,35 @@ export default function WaiterMobileView() {
 
           {/* Sticky Footer Action Bar */}
           <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl border-t border-white/5 rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] z-40">
-            <button 
-              onClick={() => saveOrder()}
-              disabled={cart.length === 0 || orderActionBusy}
-              className={`w-full py-5 rounded-2xl border font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                success 
-                  ? 'bg-emerald-500 border-emerald-500 text-black' 
-                  : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
-              } disabled:opacity-30`}
-            >
-              {orderActionBusy ? '…' : success ? 'INVIATO!' : <><Save size={22} /> AGGIORNA COMANDA</>}
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setKitchenPreviewOpen(true)}
+                disabled={cart.length === 0}
+                className="py-5 rounded-2xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.25em] flex items-center justify-center gap-2 transition-all active:scale-95 text-white hover:bg-surface-light disabled:opacity-30"
+              >
+                <BookOpen size={18} /> ANTEPRIMA
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={cart.length === 0}
+                className="py-5 rounded-2xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.25em] flex items-center justify-center gap-2 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
+              >
+                <Printer size={18} /> STAMPA
+              </button>
+            </div>
+            <div className="mt-3">
+              <button
+                onClick={() => saveOrder()}
+                disabled={cart.length === 0 || orderActionBusy}
+                className={`py-5 rounded-2xl border font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                  success
+                    ? 'bg-emerald-500 border-emerald-500 text-black'
+                    : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
+                } disabled:opacity-30`}
+              >
+                {orderActionBusy ? '…' : success ? 'INVIATO!' : <><Save size={22} /> AGGIORNA COMANDA</>}
+              </button>
+            </div>
             {IS_DEMO_MODE && (
                <div className="mt-3 text-center">
                  <span className="text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">DEMO MODE</span>
@@ -923,6 +970,16 @@ export default function WaiterMobileView() {
           </div>
         </div>
       )}
+
+      <ReceiptPreview
+        isOpen={kitchenPreviewOpen}
+        onClose={() => setKitchenPreviewOpen(false)}
+        customerName={selectedTable?.nome || 'TAVOLO'}
+        pickupTime={new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        items={cart}
+        variant="kitchen"
+        onPrint={handlePrint}
+      />
 
       {/* Covers Modal */}
       {isCoversModalOpen && (
