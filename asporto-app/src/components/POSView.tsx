@@ -496,6 +496,29 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     }
   };
 
+  const handleFreeTable = async () => {
+    if (!tableId) return;
+    const confirmFree = confirm('Liberare il tavolo elimina la comanda corrente senza registrare una vendita. Continuare?');
+    if (!confirmFree) return;
+
+    localUpdateRef.current = true;
+    try {
+      await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
+      setActiveOrderId(null);
+      setCart([]);
+      setScontotipo(null);
+      setScontoValore(0);
+      setSplitType('NONE');
+      setSplitResult(null);
+      setTableClienti(0);
+      setOrderSuccess(true);
+      setTimeout(() => setOrderSuccess(false), 1500);
+    } catch (error) {
+      console.error('Error freeing table:', error);
+      alert('Errore durante la liberazione del tavolo.');
+    }
+  };
+
   const resumeOrder = (order: Order) => {
     setActiveOrderId(order.id);
     const prods = productsRef.current;
@@ -752,6 +775,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                             <Save size={16} /> SALVA COMANDA
                           </button>
                           <button
+                            onClick={handleFreeTable}
+                            disabled={finishingOrder}
+                            className="w-full bg-surface-light hover:bg-white/10 text-sky-400 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                            title="Libera il tavolo senza registrare una vendita"
+                          >
+                            <Trash2 size={16} /> LIBERA TAVOLO
+                          </button>
+                          <button
                             onClick={handleHoldBill}
                             disabled={cart.length === 0 || finishingOrder}
                             className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
@@ -847,10 +878,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </div>
                 <div className="mt-4 rounded-3xl border border-surface-light bg-surface/80 p-3 md:p-4 shadow-xl shadow-black/10 backdrop-blur-sm">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.35em]">Portate rapide</p>
-                      <p className="text-xs text-gray-400 mt-1">Seleziona l’uscita attiva prima di aggiungere i piatti.</p>
-                    </div>
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
                       {PORTATA_OPTIONS.map(portata => {
                         const isActive = currentPortata === portata.value;
@@ -1150,7 +1177,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     disabled={cart.length === 0 || finishingOrder}
                     className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                   >
-                    {finishingOrder ? <>Attendiâ€¦</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                    {finishingOrder ? <>Attendi...</> : <>Chiudi Conto <CheckCircle size={20} /></>}
                   </button>
                 </>
               ) : (
@@ -1175,7 +1202,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                       disabled={cart.length === 0 || finishingOrder}
                       className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                     >
-                      {finishingOrder ? <>Attendiâ€¦</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                      {finishingOrder ? <>Attendi...</> : <>Chiudi Conto <CheckCircle size={20} /></>}
                     </button>
                   </div>
                 </div>
@@ -1288,7 +1315,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 disabled={finishingOrder}
                 className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
               >
-                {finishingOrder ? 'â€¦' : 'CONFERMA E CHIUDI CONTO'}
+                {finishingOrder ? '?' : 'CONFERMA E CHIUDI CONTO'}
               </button>
             </div>
           </div>

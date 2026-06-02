@@ -17,7 +17,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
   const [quickCoversModal, setQuickCoversModal] = useState<Tavolo | null>(null);
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
   const [transferTable, setTransferTable] = useState<Tavolo | null>(null);
-  const [notePreviewText, setNotePreviewText] = useState<string | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationModal, setReservationModal] = useState<{ table?: Tavolo; reservation?: Reservation; open: boolean }>({ open: false });
   const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
@@ -482,14 +481,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                         <BookOpen size={10} /> P
                       </button>
                     )}
-                    {tavolo.note && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setNotePreviewText(tavolo.note || null); }}
-                        className="absolute -top-2 -left-2 flex items-center gap-1 px-2 py-1 bg-sky-500 rounded-full text-[8px] font-black text-white shadow-lg hover:scale-110 transition-all active:scale-95 z-20"
-                      >
-                        <span className="text-[10px]">📝</span>
-                      </button>
-                    )}
                   </div>
                   {isEditLayoutMode && (
                     <div className="absolute -top-2 -right-2 w-5 h-5 bg-gold rounded-full flex items-center justify-center text-black animate-bounce shadow-lg">
@@ -512,7 +503,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                     <div>
                       <h3 className="text-xl font-bold text-white">
                         {tavolo.nome}
-                        {tavolo.note && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-sky-500/20 text-sky-400 rounded-full text-[8px] font-black uppercase tracking-wider cursor-pointer hover:bg-sky-500/30" onClick={e => { e.stopPropagation(); setNotePreviewText(tavolo.note || null); }}>📝 Note</span>}
                       </h3>
                       <p className="flex items-center gap-2 text-gray-400 font-medium">
                         <span className={`w-2 h-2 rounded-full ${tavolo.status === 'LIBERO' ? 'bg-gray-500' : 'bg-emerald-500 animate-pulse'}`}></span>
@@ -559,20 +549,13 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
               ><Plus /></button>
             </div>
 
-            <textarea
-              placeholder="Note sul tavolo (opzionale)..."
-              value={quickCoversModal.note || ''}
-              onChange={e => setQuickCoversModal({...quickCoversModal, note: e.target.value})}
-              className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white text-xs outline-none mb-6 resize-none h-20 placeholder:text-gray-600"
-            />
-
             <div className="grid gap-3">
               {quickCoversModal.status === 'PRENOTATO' ? (
                 <>
                   <button 
                     onClick={async () => {
                       const covers = quickCoversModal.clienti || 2;
-                      await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers, note: quickCoversModal.note || undefined });
+                      await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
                       if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
                       else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
                       setQuickCoversModal(null);
@@ -585,7 +568,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                     onClick={async () => {
                       const covers = quickCoversModal.clienti || 2;
                       const res = tableReservation(quickCoversModal.id);
-                      await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers, note: quickCoversModal.note || undefined });
+                      await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
                       if (res && supabase) {
                         await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', res.id);
                         void fetchReservationsForDate();
@@ -604,7 +587,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                 <button 
                   onClick={async () => {
                     const covers = quickCoversModal.clienti || 2;
-                    await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers, note: quickCoversModal.note || undefined });
+                    await updateTable(quickCoversModal.id, { status: 'OCCUPATO', clienti: covers });
                     if (onSelectTable) onSelectTable(quickCoversModal.id, quickCoversModal.nome, 'OCCUPATO');
                     else navigate(`/pos?tableId=${quickCoversModal.id}&tableName=${encodeURIComponent(quickCoversModal.nome)}`);
                     setQuickCoversModal(null);
@@ -669,16 +652,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                     </button>
                   </div>
                  </div>
-
-                <div className="space-y-3">
-                  <label className="text-xs font-black text-gray-400 tracking-widest uppercase">Note</label>
-                  <textarea
-                    value={editingTable.note || ''}
-                    onChange={e => setEditingTable({ ...editingTable, note: e.target.value })}
-                    className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white text-sm outline-none focus:border-gold transition-colors resize-none h-24 placeholder:text-gray-600"
-                    placeholder="Note sul tavolo..."
-                  />
-                </div>
 
                  <button
                    onClick={() => { setTransferTable(editingTable); setEditingTable(null); }}
@@ -825,7 +798,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                                  {res.persone} Persone
                                  {res.tavolo_id && tavoli.find(t => t.id === res.tavolo_id) && ` • ${tavoli.find(t => t.id === res.tavolo_id)!.nome}`}
                                </p>
-                               {res.note && <p className="text-xs text-gray-500 italic mt-1">"{res.note}"</p>}
                             </div>
                          </div>
                           {res.status === 'ARRIVATA' ? (
@@ -852,20 +824,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                  </div>
                )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Note Preview Modal */}
-      {notePreviewText && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm" onClick={() => setNotePreviewText(null)}>
-          <div className="bg-surface border border-surface-light rounded-[32px] p-8 max-w-sm w-full shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black italic text-white flex items-center gap-2">📝 Note</h3>
-              <button onClick={() => setNotePreviewText(null)} className="text-gray-500 hover:text-white"><X size={20} /></button>
-            </div>
-            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">{notePreviewText}</p>
-            <button onClick={() => setNotePreviewText(null)} className="w-full mt-6 bg-gold text-black font-black py-3 rounded-2xl text-sm active:scale-95 transition-all">CHIUDI</button>
           </div>
         </div>
       )}

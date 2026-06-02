@@ -22,6 +22,8 @@ export default function StaffDashboard() {
   const [printAgentUrl, setPrintAgentUrl] = useState(() => localStorage.getItem('waiter_print_agent_url') || 'http://127.0.0.1:8787');
   const [printerIp, setPrinterIp] = useState(() => localStorage.getItem('waiter_printer_ip') || '');
   const [printerPort, setPrinterPort] = useState(() => Number(localStorage.getItem('waiter_printer_port') || '9100'));
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('waiter_print_agent_url', printAgentUrl);
@@ -32,6 +34,61 @@ export default function StaffDashboard() {
   useEffect(() => {
     localStorage.setItem('waiter_printer_port', String(printerPort || 9100));
   }, [printerPort]);
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setConnectionTestMessage(null);
+    try {
+      const normalizedAgentUrl = printAgentUrl.trim().replace(/\/+$/, '');
+      if (!normalizedAgentUrl) throw new Error('Print Agent URL mancante');
+
+      const healthResponse = await fetch(`${normalizedAgentUrl}/health`, { method: 'GET' });
+      if (!healthResponse.ok) {
+        throw new Error(`Print Agent non raggiungibile (${healthResponse.status})`);
+      }
+
+      const payload = {
+        kind: 'kitchen',
+        tableName: 'TEST STAMPA',
+        orderTime: new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        printerIp: printerIp.trim(),
+        printerPort: printerPort || 9100,
+        items: [
+          {
+            nome: 'TEST STAMPA',
+            quantity: 1,
+            prezzo: 0,
+            categoria: 'Generale',
+            disponibile: true,
+            ingredienti: [],
+            addedIngredients: [],
+            removedIngredients: [],
+            notes: '',
+            uniqueId: 'printer-test',
+            portata: '1',
+          },
+        ],
+      };
+
+      const printResponse = await fetch(`${normalizedAgentUrl}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!printResponse.ok) {
+        const text = await printResponse.text().catch(() => '');
+        throw new Error(text || `Errore stampa test (${printResponse.status})`);
+      }
+
+      setConnectionTestMessage('Connessione OK. Test stampato.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Connessione non riuscita';
+      setConnectionTestMessage(message);
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
   const handleCleanup = async () => {
     if (!confirm('Sei sicuro? Questo eliminerà TUTTI gli ordini e resetterà i tavoli.')) return;
     setLoadingAction('cleanup');
@@ -317,6 +374,18 @@ export default function StaffDashboard() {
                     <p className="text-xs text-gray-300 leading-relaxed">
                       Se puoi, assegna alla stampante un IP statico nel router. Così non cambia e non devi aggiornare le impostazioni ogni volta.
                     </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleTestConnection}
+                      disabled={isTestingConnection}
+                      className="flex-1 bg-gold hover:bg-gold-hover text-black p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition cursor-pointer disabled:opacity-60"
+                    >
+                      {isTestingConnection ? 'Test in corso...' : 'Test connessione'}
+                    </button>
+                    <div className="flex-1 min-h-[56px] rounded-xl border border-surface-light px-4 py-3 text-xs font-bold flex items-center text-white">
+                      {connectionTestMessage || 'Verifica Print Agent e stampante LAN'}
+                    </div>
                   </div>
                 </div>
 

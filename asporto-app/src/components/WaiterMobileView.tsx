@@ -21,7 +21,7 @@ import {
 } from '../lib/orderCarrelloMap';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import OrderHistoryModal from './OrderHistoryModal';
-import { parseAperturaFromNote, getDisplayNote, setAperturaInNote, setNoteText } from '../lib/tableUtils';
+import { parseAperturaFromNote, setAperturaInNote } from '../lib/tableUtils';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
 import PaninoBuilderModal from './PaninoBuilderModal';
@@ -1004,21 +1004,6 @@ export default function WaiterMobileView() {
               </button>
             </div>
 
-            <textarea
-              placeholder="Note sul tavolo (opzionale)..."
-              value={selectedTable ? getDisplayNote(selectedTable.note) : ''}
-              onChange={e => {
-                if (!selectedTable) return;
-                const newNote = setNoteText(selectedTable.note, e.target.value);
-                const updated = { ...selectedTable, note: newNote || undefined };
-                setSelectedTable(updated);
-                if (!IS_DEMO_MODE && supabase) {
-                  supabase.from('tavoli').update({note: newNote || null}).eq('id', selectedTable.id).then(() => {});
-                }
-              }}
-              className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white text-xs outline-none mb-6 resize-none h-20 placeholder:text-gray-600"
-            />
-            
             <button 
               onClick={confirmCovers}
               className="w-full bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-xl shadow-xl shadow-gold/20 active:scale-95 transition-all"
@@ -1151,8 +1136,6 @@ export default function WaiterMobileView() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Note</label>
-                  <textarea placeholder="Opzionale..." value={resForm.note || ''} onChange={e => setResForm({...resForm, note: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all h-16" />
                 </div>
                 <div className="grid gap-2 mt-4">
                   <button onClick={handleSaveReservation} className="w-full bg-gold text-black font-black py-4 rounded-xl text-base shadow-xl active:scale-95 transition-all">

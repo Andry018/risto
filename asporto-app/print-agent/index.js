@@ -18,6 +18,8 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio'];
 const VARIANT_NOISE = ['Pizze Bianca', 'Pizze Rosse', 'Pizze', 'Impasto'];
+const PIZZA_VARIANTS = new Set(['Bianca', 'Rossa', 'Rosè', 'Rose']);
+const PRIORITY_MODS = ['', ''];
 
 function createPrinter(printerInterface) {
   return new ThermalPrinter({
@@ -51,6 +53,15 @@ function formatDateTime(value) {
 
 function cleanText(text) {
   return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeVariantNotes(text) {
+  return cleanText(text)
+    .replace(/\b(Bianca|Rossa|Ros[eè])\b/gi, '')
+    .replace(/,\s*,/g, ',')
+    .replace(/^,\s*/, '')
+    .replace(/,\s*$/, '')
+    .trim();
 }
 
 function truncate(text, max = 34) {
@@ -100,9 +111,9 @@ function setReadableText(printer) {
 }
 
 function printModLines(printer, item, maxNote = 44) {
-  const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome));
+  const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !PIZZA_VARIANTS.has(a.nome));
   const removed = item.removedIngredients || [];
-  const note = cleanText(item.notes);
+  const note = normalizeVariantNotes(item.notes);
 
   if (extras.length > 0) {
     printer.setTextDoubleWidth();
@@ -123,7 +134,7 @@ function printModLines(printer, item, maxNote = 44) {
 
 function printItemWithHeader(printer, item, maxName) {
   printer.setTextDoubleWidth();
-  printer.println(`${item.quantity}x ${truncate(item.nome, maxName)}`);
+  printer.println(`${item.quantity}x ${truncate(getDisplayName(item), maxName)}`);
   printer.setTextNormal();
   printModLines(printer, item);
 }

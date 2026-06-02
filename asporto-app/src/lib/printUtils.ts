@@ -3,15 +3,39 @@ import { PORTATE } from '../types/entities';
 
 const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio'];
 const VARIANT_NOISE = ['Pizze Bianca', 'Pizze Rosse', 'Pizze', 'Impasto'];
+const PIZZA_VARIANTS = new Set(['Bianca', 'Rossa', 'Rosè', 'Rose']);
+const PRIORITY_MODS = ['Senza Glutine', 'Senza Lattosio'];
 
 function cleanText(text: string): string {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeVariantNotes(text: string): string {
+  return cleanText(text)
+    .replace(/\b(Bianca|Rossa|Ros[eè])\b/gi, '')
+    .replace(/,\s*,/g, ',')
+    .replace(/^,\s*/, '')
+    .replace(/,\s*$/, '')
+    .trim();
+}
+
 function truncate(text: string, max = 30): string {
   const value = cleanText(text);
   if (value.length <= max) return value;
-  return `${value.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+  return `${value.slice(0, Math.max(0, max - 1)).trimEnd()}?`;
+}
+
+function getDisplayName(item: CustomizedItem) {
+  const variant = item.addedIngredients.find(a => PIZZA_VARIANTS.has(a.nome))
+    || { nome: normalizeVariantNotes(item.notes).split(',').map(s => s.trim()).find(name => PIZZA_VARIANTS.has(name)) || '' };
+  if (variant && !item.nome.toLowerCase().includes(variant.nome.toLowerCase())) {
+    return `${item.nome} ${variant.nome}`;
+  }
+  return item.nome;
+}
+
+function getPriorityMods(item: CustomizedItem) {
+  return item.addedIngredients.filter(a => PRIORITY_MODS.includes(a.nome));
 }
 
 function groupByPortata(items: CustomizedItem[]) {
@@ -64,11 +88,14 @@ export function printKitchen(items: CustomizedItem[], tableName: string) {
     html += `<div class="group">`;
     if (portataInfo) html += `<div class="group-label">${portataInfo.label}</div>`;
     for (const item of items) {
-      html += `<div class="item"><div class="item-line"><div class="qty">${item.quantity}x</div><div class="name">${truncate(item.nome.toUpperCase(), 28)}</div></div>`;
-      const extras = item.addedIngredients.filter(a => !VARIANT_NOISE.includes(a.nome));
+      html += `<div class="item"><div class="item-line"><div class="qty">${item.quantity}x</div><div class="name">${truncate(getDisplayName(item).toUpperCase(), 28)}</div></div>`;
+      const priorityMods = getPriorityMods(item);
+      const extras = item.addedIngredients.filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !PIZZA_VARIANTS.has(a.nome));
+      if (priorityMods.length > 0) html += `<div class="mod">${priorityMods.map(a => a.nome).join(" / ")}</div>`;
       if (extras.length > 0) html += `<div class="mod">+ ${truncate(extras.map(a => a.nome).join(', '), 48)}</div>`;
       if (item.removedIngredients.length > 0) html += `<div class="mod">- ${truncate(item.removedIngredients.join(', '), 48)}</div>`;
-      if (item.notes) html += `<div class="mod">NOTE: ${truncate(item.notes, 50)}</div>`;
+      const notes = normalizeVariantNotes(item.notes);
+      if (notes) html += `<div class="mod">NOTE: ${truncate(notes, 50)}</div>`;
       html += `</div>`;
     }
     html += `</div>`;
@@ -106,11 +133,14 @@ export function printFullReceipt(items: CustomizedItem[], tableName: string, tot
 
   for (const item of items) {
     const itemTotal = item.prezzo * item.quantity + item.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
-    html += `<div class="item"><div class="item-line"><div class="qty">${item.quantity}x</div><div class="name">${truncate(item.nome.toUpperCase(), 28)}</div><div class="price">€${itemTotal.toFixed(2)}</div></div>`;
-    const extras = item.addedIngredients.filter(a => !VARIANT_NOISE.includes(a.nome));
+    html += `<div class="item"><div class="item-line"><div class="qty">${item.quantity}x</div><div class="name">${truncate(getDisplayName(item).toUpperCase(), 28)}</div><div class="price">€${itemTotal.toFixed(2)}</div></div>`;
+    const priorityMods = getPriorityMods(item);
+    const extras = item.addedIngredients.filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !PIZZA_VARIANTS.has(a.nome));
+    if (priorityMods.length > 0) html += `<div class="mod">${priorityMods.map(a => a.nome).join(' / ')}</div>`;
     if (extras.length > 0) html += `<div class="mod">+ ${truncate(extras.map(a => a.nome).join(', '), 48)}</div>`;
     if (item.removedIngredients.length > 0) html += `<div class="mod">- ${truncate(item.removedIngredients.join(', '), 48)}</div>`;
-    if (item.notes) html += `<div class="mod">NOTE: ${truncate(item.notes, 50)}</div>`;
+    const notes = normalizeVariantNotes(item.notes);
+    if (notes) html += `<div class="mod">NOTE: ${truncate(notes, 50)}</div>`;
     html += `</div>`;
   }
 
