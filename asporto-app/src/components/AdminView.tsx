@@ -8,7 +8,6 @@ import { getProductVariants, saveProductVariants, type ProductVariant } from '..
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
 import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
-import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
 import CategoryFilterBar from './CategoryFilterBar';
 
@@ -18,7 +17,6 @@ interface AdminViewProps {
 
 export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const { confirm } = useConfirm();
-  const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
