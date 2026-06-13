@@ -1,7 +1,8 @@
 # Deploy Locale — Risto (IL GIRASOLE)
 
-Guida completa per mettere in produzione l'intero sistema su un PC Windows o Linux
-in locale (rete LAN del ristorante), con Supabase eseguito via Docker.
+Guida completa per installare il sistema su un **PC Windows** (server in
+rete LAN del ristorante), con Supabase eseguito via Docker. I comandi Linux
+sono indicati come alternativa tra parentesi `(Linux: ...)`.
 
 ---
 
@@ -15,7 +16,8 @@ in locale (rete LAN del ristorante), con Supabase eseguito via Docker.
 6. [Nginx — Proxy & HTTPS locale](#6-nginx--proxy--https-locale)
 7. [Avvio automatico (servizi)](#7-avvio-automatico-servizi)
 8. [Dump & Ripristino DB](#8-dump--ripristino-db)
-9. [Checklist finale](#9-checklist-finale)
+9. [Auto-update da Git](#9-auto-update-da-git)
+10. [Checklist finale](#10-checklist-finale)
 
 ---
 
@@ -59,16 +61,17 @@ in locale (rete LAN del ristorante), con Supabase eseguito via Docker.
 
 ### Windows
 
+Apri **PowerShell come amministratore** ed esegui:
+
 ```powershell
 # 1. Docker Desktop
 winget install Docker.DockerDesktop
-# Dopo l'installazione, avvia Docker Desktop manualmente e verifica:
+# Dopo l'installazione, avvia Docker Desktop dal menu Start e verifica:
 docker --version
 docker compose version
 
 # 2. Node.js 20 LTS
 winget install OpenJS.NodeJS.LTS
-# (se vuoi una versione specifica: winget install OpenJS.NodeJS.LTS --version 20.18.0)
 node -v
 
 # 3. Git
@@ -77,53 +80,34 @@ git --version
 
 # 4. Nginx
 winget install nginx.nginx
-# Oppure via Docker: docker run --name nginx -p 80:80 nginx
 ```
 
-### Linux (Debian/Ubuntu 22.04+)
-
-```bash
-# Tutto in un colpo
-curl -fsSL https://get.docker.com | sudo bash
-sudo usermod -aG docker $USER && newgrp docker
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs git nginx
-
-# Verifica
-node -v    # >= 20
-npm -v
-docker --version
-docker compose version
-nginx -v
-```
+(Linux: `curl -fsSL https://get.docker.com | sudo bash && sudo apt install -y nodejs git nginx`)
 
 ---
 
 ## 3. Supabase locale (Docker)
 
-### 3.1 — Installazione Supabase CLI (opzionale ma consigliato)
+### 3.1 — Installazione Supabase CLI (opzionale)
 
-```bash
-# Linux
-sudo apt install -y supabase 2>/dev/null || (
-  wget -q https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.deb -O /tmp/supabase.deb
-  sudo dpkg -i /tmp/supabase.deb
-)
-supabase --version 2>/dev/null || echo "CLI opzionale, prosegui con Docker Compose"
-
+```powershell
 # Windows (PowerShell)
-winget install Supabase.cli 2>$null
-# Verifica: supabase --version
+winget install Supabase.cli
+supabase --version
 ```
+
+(Linux: `sudo snap install supabase --classic` o scarica il .deb da GitHub)
 
 ### 3.2 — Avvio Supabase con Docker Compose
 
-Crea la cartella del progetto (se non esiste già una `supabase/` nella root
-del progetto risto):
+Crea la cartella `supabase/` nella root del progetto:
 
-```bash
-cd /opt/risto
-mkdir -p supabase
+```powershell
+# Windows
+cd C:\risto
+mkdir supabase
+
+# (Linux: mkdir -p /opt/risto/supabase)
 ```
 
 Crea `supabase/docker-compose.yml`:
@@ -208,12 +192,14 @@ services:
 
 ### 3.3 — Avvio dei container
 
-```bash
-cd supabase
+```powershell
+cd C:\risto\supabase
 docker compose up -d
 docker compose ps
 # Tutti i container devono essere "Up"
 ```
+
+(Linux: stesso comando, `docker compose up -d` dentro la cartella)
 
 Se funziona, Kong (API gateway Supabase) sarà in ascolto su `localhost:8000`.
 Le API sono raggiungibili a:
@@ -228,12 +214,10 @@ dump seguendo la [sezione 8](#8-dump--ripristino-db).
 
 Oppure via psql:
 
-```bash
-# Connettiti al database Supabase locale
-psql -h localhost -U supabase_user -d postgres
-
+```powershell
+# Connettiti al database Supabase locale (usa lo stesso terminale PowerShell)
+docker exec -it supabase-db-1 psql -U supabase_user -d postgres
 # Incolla le CREATE TABLE del progetto
-\i /opt/risto/docs/schema.sql
 ```
 
 > **Nota:** La password è `supabase_pass` (come da docker-compose sopra).
@@ -258,13 +242,15 @@ per la stampante termica ESC/POS.
 
 ### 4.1 — Installazione
 
-```bash
-cd /opt/risto
-mkdir -p print-agent
+```powershell
+cd C:\risto
+mkdir print-agent
 cd print-agent
 npm init -y
 npm install express net
 ```
+
+(Linux: stessi comandi, percorso `/opt/risto/print-agent`)
 
 ### 4.2 — Codice del Print Agent
 
@@ -330,39 +316,23 @@ app.listen(8787, () => {
 });
 ```
 
-### 4.3 — Avvio
+### 4.3 — Avvio come servizio Windows
 
-```bash
-# Manuale
-node server.js
+Installa [NSSM](https://nssm.cc/) (Non-Sucking Service Manager):
 
-# Con systemd (Linux)
-sudo tee /etc/systemd/system/print-agent.service << 'EOF'
-[Unit]
-Description=Risto Print Agent
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/node /opt/risto/print-agent/server.js
-WorkingDirectory=/opt/risto/print-agent
-Restart=always
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now print-agent
+```powershell
+winget install nssm
 ```
 
-**Windows**: avvia `node server.js` dentro `C:\risto\print-agent\`.
-Per eseguirlo come servizio Windows, usa [NSSM](https://nssm.cc/):
+Poi registra il Print Agent come servizio:
 
 ```powershell
 nssm install RistoPrintAgent "C:\Program Files\nodejs\node.exe" "C:\risto\print-agent\server.js"
+nssm set RistoPrintAgent Start SERVICE_AUTO_START
 nssm start RistoPrintAgent
 ```
+
+(Linux: `sudo tee /etc/systemd/system/print-agent.service ... && sudo systemctl enable --now print-agent`)
 
 ### 4.4 — Verifica
 
@@ -411,99 +381,28 @@ VITE_SUPABASE_URL=http://192.168.1.50/rest/v1
 VITE_PRINT_AGENT_URL=http://192.168.1.50/print-agent
 ```
 
-### 5.2 — Build
+### 5.2 — Build & Deploy
 
-```bash
-cd asporto-app
+```powershell
+cd C:\risto\asporto-app
 npm install
-npm run build    # output in /dist
+npm run build
+
+# Copia i file nella cartella servita da Nginx
+Copy-Item -Path "dist\*" -Destination "C:\nginx\html\risto" -Recurse -Force
 ```
 
-### 5.3 — Deploy su Nginx
-
-```bash
-# Linux
-sudo cp -r dist/* /var/www/risto/
-sudo chown -R www-data:www-data /var/www/risto/
-
-# Windows: copia dist\ in C:\nginx\html\risto\
-```
+(Linux: `cp -r dist/* /var/www/risto/`)
 
 ---
 
 ## 6. Nginx — Proxy & HTTPS locale
 
-### 6.1 — Configurazione Linux
+### 6.1 — Configurazione Windows
 
-Crea `/etc/nginx/sites-available/risto`:
-
-```nginx
-server {
-    listen 80;
-    server_name risto.local;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name risto.local;
-
-    ssl_certificate     /etc/nginx/ssl/risto.crt;
-    ssl_certificate_key /etc/nginx/ssl/risto.key;
-
-    root /var/www/risto;
-    index index.html;
-
-    # SPA — tutte le route al index.html
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Proxy per Supabase API (Kong)
-    location /rest/ {
-        proxy_pass http://127.0.0.1:8000/rest/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    location /auth/ {
-        proxy_pass http://127.0.0.1:8000/auth/;
-        proxy_set_header Host $host;
-    }
-
-    # Proxy per Print Agent
-    location /print-agent/ {
-        rewrite ^/print-agent/(.*) /$1 break;
-        proxy_pass http://127.0.0.1:8787;
-        proxy_set_header Host $host;
-    }
-}
-```
-
-**Genera certificato SSL self-signed:**
-
-```bash
-sudo mkdir -p /etc/nginx/ssl
-sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-  -keyout /etc/nginx/ssl/risto.key \
-  -out /etc/nginx/ssl/risto.crt \
-  -subj "/CN=risto.local"
-```
-
-**Attiva il sito:**
-
-```bash
-sudo ln -s /etc/nginx/sites-available/risto /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 6.2 — Configurazione Windows
+Modifica `C:\nginx\conf\nginx.conf`:
 
 ```nginx
-# C:\nginx\conf\nginx.conf
-
 worker_processes  1;
 events {
     worker_connections  1024;
@@ -524,29 +423,147 @@ http {
             try_files $uri $uri/ /index.html;
         }
 
+        # Proxy per Supabase API (Kong)
         location /rest/ {
             proxy_pass http://127.0.0.1:8000/rest/;
+            proxy_set_header Host $host;
         }
 
         location /auth/ {
             proxy_pass http://127.0.0.1:8000/auth/;
+            proxy_set_header Host $host;
         }
 
+        # Proxy per Print Agent
         location /print-agent/ {
             rewrite ^/print-agent/(.*) /$1 break;
             proxy_pass http://127.0.0.1:8787;
+            proxy_set_header Host $host;
         }
     }
 }
+```
+
+Avvia Nginx:
+
+```powershell
+C:\nginx\nginx.exe
+# Per ricaricare dopo una modifica:
+C:\nginx\nginx.exe -s reload
+```
+
+Per far partire Nginx automaticamente all'avvio di Windows:
+
+```powershell
+# Opzione 1 — startup script (vedi sezione 7)
+# Opzione 2 — registrare come servizio con NSSM:
+nssm install RistoNginx "C:\nginx\nginx.exe"
+nssm set RistoNginx Start SERVICE_AUTO_START
+```
+
+### 6.2 — Configurazione Linux
+
+Crea `/etc/nginx/sites-available/risto`:
+
+```nginx
+server {
+    listen 80;
+    server_name risto.local;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name risto.local;
+
+    ssl_certificate     /etc/nginx/ssl/risto.crt;
+    ssl_certificate_key /etc/nginx/ssl/risto.key;
+
+    root /var/www/risto;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /rest/ {
+        proxy_pass http://127.0.0.1:8000/rest/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /auth/ {
+        proxy_pass http://127.0.0.1:8000/auth/;
+        proxy_set_header Host $host;
+    }
+
+    location /print-agent/ {
+        rewrite ^/print-agent/(.*) /$1 break;
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+**Genera certificato SSL self-signed e attiva:**
+
+```bash
+sudo mkdir -p /etc/nginx/ssl
+sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/risto.key \
+  -out /etc/nginx/ssl/risto.crt \
+  -subj "/CN=risto.local"
+sudo ln -s /etc/nginx/sites-available/risto /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ---
 
 ## 7. Avvio automatico (servizi)
 
-### Linux (systemd)
+### 7.1 — Windows
 
-Crea un target unico per gestire tutto insieme:
+Tutti i servizi devono partire automaticamente all'accensione del PC.
+
+**Passo 1 — Docker Desktop**
+Imposta l'avvio automatico:
+- Apri Docker Desktop → Settings (ingranaggio) → General
+- Spunta **"Start Docker Desktop when you log in"**
+- (opzionale) Spunta **"Start Minimised"**
+
+**Passo 2 — Supabase** (i container con `restart: unless-stopped` nel
+docker-compose.yml ripartono automaticamente con Docker)
+
+**Passo 3 — Print Agent** (già registrato con NSSM, servizio automatico)
+
+**Passo 4 — Nginx** (se registrato con NSSM, servizio automatico)
+
+**Passo 5 — Script di avvio** (per sicurezza)
+
+Crea `C:\risto\start-all.ps1`:
+
+```powershell
+# Avvia Supabase (se Docker Desktop è già partito, i container ripartono da soli)
+cd C:\risto\supabase
+docker compose up -d
+
+# Avvia Print Agent (se servizio NSSM, non serve)
+# Avvia Nginx (se servizio NSSM, non serve)
+```
+
+Aggiungi a **Esecuzione automatica** di Windows:
+
+```powershell
+# Tasto Win + R → shell:startup → incolla collegamento
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Risto.lnk")
+$Shortcut.TargetPath = "powershell.exe"
+$Shortcut.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File C:\risto\start-all.ps1"
+$Shortcut.Save()
+```
+
+### 7.2 — Linux (systemd)
 
 ```bash
 sudo tee /etc/systemd/system/risto.target << 'EOF'
@@ -556,76 +573,27 @@ Wants=docker.service print-agent.service nginx.service
 After=network.target docker.service
 EOF
 
-# Abilita Docker all'avvio (se non già fatto)
-sudo systemctl enable docker
-
-# Abilita Supabase (via Docker) — configura Docker per restart automatico
 docker update --restart=unless-stopped $(docker ps -q)
-
-# Abilita Print Agent e Nginx
-sudo systemctl enable print-agent nginx
+sudo systemctl enable docker print-agent nginx
 ```
-
-Per avviare/fermare tutto:
-
-```bash
-sudo systemctl start risto.target
-sudo systemctl stop risto.target
-```
-
-### Windows (PowerShell)
-
-```powershell
-# Crea C:\risto\start-all.ps1
-@"
-# Avvia Supabase (Docker Desktop deve essere avviato)
-cd C:\risto\supabase
-docker compose up -d
-
-# Avvia Print Agent
-Start-Process "node" -ArgumentList "C:\risto\print-agent\server.js" -WindowStyle Hidden
-
-# Avvia Nginx
-Start-Process "C:\nginx\nginx.exe" -WindowStyle Hidden
-"@ | Out-File -FilePath "C:\risto\start-all.ps1" -Encoding UTF8
-
-# Aggiungi a startup
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Risto.lnk")
-$Shortcut.TargetPath = "powershell.exe"
-$Shortcut.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File C:\risto\start-all.ps1"
-$Shortcut.Save()
-```
-
-> **Importante:** Docker Desktop su Windows deve essere configurato per
-> avviarsi automaticamente all'accesso (Settings → General → Start
-> Docker Desktop when you log in).
 
 ---
 
 ## 8. Dump & Ripristino DB
 
-### 8.1 — Eseguire dump del database Supabase locale
+### 8.1 — Eseguire dump (Windows)
 
-```bash
-# Il database Supabase è accessibile via psql sulla porta 5432
-pg_dump -h localhost -U supabase_user -d postgres \
-  --schema=public \
-  --no-owner \
-  --no-acl \
-  --format=custom \
-  --file=risto_backup.dump
+```powershell
+# Usa Docker per eseguire pg_dump (senza installare PostgreSQL client)
+docker run --rm -v C:\backups\risto:/backup postgres:16 pg_dump `
+  -h host.docker.internal -U supabase_user -d postgres `
+  --schema=public --no-owner --no-acl --format=custom `
+  --file=/backup/risto_$(Get-Date -Format yyyyMMdd_HHmm).dump
 ```
 
-Per un dump SQL puro (leggibile):
+`host.docker.internal` è l'IP del PC Windows visto dal container Docker.
 
-```bash
-pg_dump -h localhost -U supabase_user -d postgres \
-  --schema=public \
-  --no-owner \
-  --no-acl \
-  --file=risto_backup.sql
-```
+(Linux: `pg_dump -h localhost -U supabase_user -d postgres --schema=public --no-owner --no-acl --format=custom --file=/backups/risto_$(date +%Y%m%d_%H%M).dump`)
 
 ### 8.2 — Eseguire dump da Supabase cloud (migrazione)
 
@@ -634,63 +602,38 @@ Se hai un Supabase cloud e vuoi spostare tutto in locale:
 ```bash
 # Ottieni i parametri di connessione da:
 # Supabase Dashboard → Project Settings → Database → Connection string
-pg_dump --host=db.xxxxxx.supabase.co \
-        --port=5432 \
-        --username=postgres \
-        --dbname=postgres \
-        --schema=public \
-        --no-owner \
-        --no-acl \
-        --format=custom \
-        --file=risto_cloud.dump
+pg_dump --host=db.xxxxxx.supabase.co --port=5432 --username=postgres \
+  --dbname=postgres --schema=public --no-owner --no-acl \
+  --format=custom --file=risto_cloud.dump
 ```
 
-### 8.3 — Ripristino dump su Supabase locale
-
-```bash
-# Da formato custom
-pg_restore -h localhost -U supabase_user -d postgres \
-  --no-owner --no-acl \
-  --clean \
-  risto_backup.dump
-
-# Da formato SQL
-psql -h localhost -U supabase_user -d postgres < risto_backup.sql
-```
-
-> **Nota:** `--clean` droppa e ricrea le tabelle. Se vuoi solo caricare
-> dati senza toccare la struttura, usa `--data-only`.
-
-### 8.4 — Backup automatico (Linux cron)
-
-```bash
-sudo tee /etc/cron.daily/risto-backup << 'EOF'
-#!/bin/bash
-BACKUP_DIR="/var/backups/risto"
-mkdir -p "$BACKUP_DIR"
-DATE=$(date +%Y%m%d_%H%M)
-PGPASSWORD="supabase_pass" pg_dump -h localhost -U supabase_user -d postgres \
-  --format=custom \
-  --file="$BACKUP_DIR/risto_$DATE.dump"
-# Cancella backup più vecchi di 30 giorni
-find "$BACKUP_DIR" -name "*.dump" -mtime +30 -delete
-EOF
-
-sudo chmod +x /etc/cron.daily/risto-backup
-```
-
-### 8.5 — Backup automatico (Windows Task Scheduler)
+### 8.3 — Ripristino dump
 
 ```powershell
-# C:\risto\backup.ps1
+# Windows (via Docker)
+docker run --rm -i -v C:\backups\risto:/backup postgres:16 pg_restore `
+  -h host.docker.internal -U supabase_user -d postgres `
+  --no-owner --no-acl --clean --file=/backup/risto_backup.dump
+
+# Linux
+# pg_restore -h localhost -U supabase_user -d postgres --no-owner --no-acl --clean risto_backup.dump
+```
+
+### 8.4 — Backup automatico Windows (Task Scheduler)
+
+Crea `C:\risto\backup.ps1`:
+
+```powershell
 $backupDir = "C:\backups\risto"
 if (!(Test-Path $backupDir)) { New-Item -ItemType Directory -Path $backupDir -Force }
 $date = Get-Date -Format "yyyyMMdd_HHmm"
-$env:PGPASSWORD = "supabase_pass"
-& "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe" -h localhost -U supabase_user -d postgres `
-  --format=custom --file="$backupDir\risto_$date.dump"
 
-# Mantieni solo 30 giorni
+docker run --rm -v ${backupDir}:/backup postgres:16 pg_dump `
+  -h host.docker.internal -U supabase_user -d postgres `
+  --schema=public --no-owner --no-acl --format=custom `
+  --file=/backup/risto_$date.dump
+
+# Cancella backup più vecchi di 30 giorni
 Get-ChildItem $backupDir -Filter *.dump | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } | Remove-Item
 ```
 
@@ -703,23 +646,229 @@ $trigger = New-ScheduledTaskTrigger -Daily -At 04:00
 Register-ScheduledTask -TaskName "Risto Backup DB" -Action $action -Trigger $trigger
 ```
 
-> **Nota:** I comandi `pg_dump` e `psql` su Windows richiedono
-> PostgreSQL client installato o l'estrazione da
-> `C:\Program Files\PostgreSQL\16\bin\`. Se non hai PostgreSQL
-> installato in Windows (è dentro Docker), puoi usare Docker per
-> eseguire pg_dump:
->
-> ```powershell
-> docker run --rm -v C:\backups\risto:/backup postgres:16 `
->   pg_dump -h host.docker.internal -U supabase_user -d postgres `
->   --file=/backup/risto_$date.dump
-> ```
->
-> `host.docker.internal` è l'IP del tuo PC Windows visto da un container.
+(Linux: copia lo script in `/etc/cron.daily/risto-backup`)
 
 ---
 
-## 9. Checklist finale
+## 9. Auto-update da Git
+
+Dopo aver fatto `git push` dal PC di sviluppo, il server non sa che ci sono
+nuovi file. Puoi automatizzare il pull + rebuild + reload in due modi.
+
+### 9.1 — Script manuale (PowerShell)
+
+Crea `C:\risto\update.ps1` che puoi lanciare a mano quando vuoi aggiornare:
+
+```powershell
+param($Silent = $false)
+
+$repo = "C:\risto"
+$dist = "C:\nginx\html\risto"
+
+cd $repo
+
+Write-Host "=== Pull da Git ==="
+git pull origin main 2>&1 | Out-Null
+
+Write-Host "=== Install dipendenze ==="
+cd "$repo\asporto-app"
+npm ci
+
+Write-Host "=== Build frontend ==="
+npm run build
+
+Write-Host "=== Deploy su Nginx ==="
+# Crea la cartella se non esiste
+if (!(Test-Path $dist)) { New-Item -ItemType Directory -Path $dist -Force }
+Copy-Item -Path "$repo\asporto-app\dist\*" -Destination $dist -Recurse -Force
+
+Write-Host "=== Ricarica Nginx ==="
+& "C:\nginx\nginx.exe" -s reload 2>$null
+
+Write-Host "=== Fatto! ==="
+```
+
+Poi basta lanciare:
+
+```powershell
+powershell -File C:\risto\update.ps1
+```
+
+### 9.2 — Task Scheduler (auto-pull ogni 10 minuti)
+
+Crea `C:\risto\auto-update.ps1` (versione silenziosa che ricostruisce solo
+se ci sono nuovi commit):
+
+```powershell
+param($Silent = $true)
+
+$repo = "C:\risto"
+$dist = "C:\nginx\html\risto"
+
+cd $repo
+
+# Salva HEAD prima del pull
+$before = Get-Content "$repo\.git\refs\heads\main" 2>$null
+
+# Pull
+git pull origin main 2>&1 | Out-Null
+
+# Salva HEAD dopo il pull
+$after = Get-Content "$repo\.git\refs\heads\main" 2>$null
+
+# Se non ci sono cambiamenti, esci
+if ($before -eq $after) {
+    if (-not $Silent) { Write-Host "Nessun aggiornamento" }
+    exit 0
+}
+
+# Rebuild
+cd "$repo\asporto-app"
+npm ci
+npm run build
+
+# Deploy
+if (!(Test-Path $dist)) { New-Item -ItemType Directory -Path $dist -Force }
+Copy-Item -Path "$repo\asporto-app\dist\*" -Destination $dist -Recurse -Force
+
+# Ricarica Nginx
+& "C:\nginx\nginx.exe" -s reload 2>$null
+
+if (-not $Silent) { Write-Host "Aggiornato a $(git log -1 --format='%h %s')" }
+```
+
+Programma con **Utilità di pianificazione** (Task Scheduler):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+  -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File C:\risto\auto-update.ps1"
+$trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 10) `
+  -At (Get-Date "00:00") -RepetitionDuration (New-TimeSpan -Days 365)
+Register-ScheduledTask -TaskName "Risto Auto Update" -Action $action -Trigger $trigger `
+  -RunLevel Highest
+```
+
+Ogni 10 minuti il task controlla se ci sono nuovi commit su `origin/main`.
+Se non ci sono, lo script finisce in ~2 secondi. Se ci sono, esegue rebuild
+e ricarica Nginx.
+
+### 9.3 — Linux (alternative)
+
+```bash
+sudo tee /usr/local/bin/risto-update << 'SCRIPT'
+#!/bin/bash
+cd /opt/risto
+
+echo "=== Pull da Git ==="
+git pull origin main
+
+echo "=== Install dipendenze ==="
+cd /opt/risto/asporto-app
+npm ci
+
+echo "=== Build frontend ==="
+npm run build
+
+echo "=== Deploy su Nginx ==="
+sudo cp -r dist/* /var/www/risto/
+
+echo "=== Ricarica Nginx ==="
+sudo nginx -t && sudo systemctl reload nginx
+
+echo "=== Fatto! ==="
+SCRIPT
+
+sudo chmod +x /usr/local/bin/risto-update
+```
+
+Per eseguirlo a mano: `sudo risto-update`
+
+Per auto-pull ogni 5 min con systemd:
+
+```bash
+# Servizio
+sudo tee /etc/systemd/system/risto-auto-update.service << 'EOF'
+[Unit]
+Description=Check risto git updates and rebuild
+After=network.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/risto-update
+User=root
+EOF
+
+# Timer
+sudo tee /etc/systemd/system/risto-auto-update.timer << 'EOF'
+[Unit]
+Description=Check risto updates every 5 minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now risto-auto-update.timer
+```
+
+```powershell
+param($Silent = $false)
+
+$repo = "C:\risto"
+$dist = "C:\nginx\html\risto"
+
+cd $repo
+
+# Pull
+git pull origin main 2>&1 | Out-Null
+$pullResult = git log -1 --format="%H"
+
+# Se non ci sono cambiamenti, esci
+$lastCommit = Get-Content "$repo\.git\HEAD" 2>$null
+$lastDeploy = Get-Content "$repo\.last-deploy" 2>$null
+if ($lastCommit -eq $lastDeploy) {
+    if (-not $Silent) { Write-Host "Nessun aggiornamento" }
+    exit 0
+}
+
+# Rebuild
+cd "$repo\asporto-app"
+npm ci
+npm run build
+
+# Deploy
+Copy-Item -Path "$repo\asporto-app\dist\*" -Destination $dist -Recurse -Force
+
+# Salva commit deployato
+$lastCommit | Set-Content "$repo\.last-deploy"
+
+# Ricarica Nginx
+& "C:\nginx\nginx.exe" -s reload 2>$null
+
+if (-not $Silent) { Write-Host "Aggiornato a $lastCommit" }
+```
+
+Programma con Task Scheduler (esegue ogni 10 minuti):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+  -Argument "-WindowStyle Hidden -File C:\risto\update.ps1 -Silent `$true"
+$trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 10) `
+  -At (Get-Date "00:00") -RepetitionDuration (New-TimeSpan -Days 365)
+Register-ScheduledTask -TaskName "Risto Auto Update" -Action $action -Trigger $trigger
+```
+
+### 9.4 — Webhook (opzione avanzata)
+
+Se il server è raggiungibile da GitHub (serve IP pubblico o tunnel), puoi
+configurare un webhook in GitHub che chiama `C:\risto\update.ps1` a ogni
+push. Ma per un server LAN il **Task Scheduler** di Windows (sezione 9.2)
+è la soluzione più semplice e robusta.
+
+---
+
+## 10. Checklist finale
 
 Prima di andare live:
 
@@ -734,20 +883,21 @@ Prima di andare live:
 - [ ] `.env.production` ha gli IP corretti (server, stampante)
 - [ ] Frontend buildato: `npm run build` in `asporto-app/`
 - [ ] Frontend servito da Nginx o direttamente
-- [ ] Nginx test passato: `nginx -t`
+- [ ] Nginx test passato: `nginx -t` o `C:\nginx\nginx.exe -t`
 - [ ] Tablet può raggiungere il server: `ping 192.168.1.50`
 - [ ] Backup automatico configurato (cron / Task Scheduler)
 - [ ] Firewall: porta 80/443 aperta solo sulla LAN
 
 ### Test finale dal tablet
 
-```bash
-# Apri browser sul tablet → http://192.168.1.50
-# 1. Verifica che la dashboard carichi
-# 2. Apri un tavolo in POS
-# 3. Aggiungi un prodotto al carrello
-# 4. Premi "STAMPA COMANDA" — deve stampare sulla termica
-# 5. Verifica che il salvataggio su database funzioni
+```
+Apri browser sul tablet → http://192.168.1.50
+
+1. Verifica che la dashboard carichi
+2. Apri un tavolo in POS
+3. Aggiungi un prodotto al carrello
+4. Premi "STAMPA COMANDA" — deve stampare sulla termica
+5. Verifica che il salvataggio su database funzioni
 ```
 
 ---
@@ -756,7 +906,7 @@ Prima di andare live:
 
 ### Container Supabase non partono
 
-```bash
+```powershell
 docker compose logs
 # Controlla errori di porta già in uso (8000, 5432, 8083)
 # Cambia porta in docker-compose.yml se necessario
@@ -764,7 +914,7 @@ docker compose logs
 
 ### Kong restituisce 404
 
-```bash
+```powershell
 # Verifica che Kong sia configurato correttamente
 curl -v http://localhost:8000/rest/v1/
 # Dovrebbe rispondere con JSON (anche se errore di autenticazione)
@@ -773,27 +923,23 @@ curl -v http://localhost:8000/rest/v1/
 
 ### Stampante non stampa
 
-```bash
+```powershell
 # Test diretto TCP (sostituisci con IP della stampante)
-echo -e "Test di stampa\n\n\n" | nc -w 3 192.168.1.100 9100
-
-# Se nc non funziona (Windows):
-# Usa PowerShell: 
-#   $tcp = New-Object System.Net.Sockets.TcpClient('192.168.1.100', 9100)
-#   $stream = $tcp.GetStream()
-#   $data = [Text.Encoding]::ASCII.GetBytes("Test`n`n`n")
-#   $stream.Write($data, 0, $data.Length)
-#   $stream.Close()
+$tcp = New-Object System.Net.Sockets.TcpClient('192.168.1.100', 9100)
+$stream = $tcp.GetStream()
+$data = [Text.Encoding]::ASCII.GetBytes("Test`n`n`n")
+$stream.Write($data, 0, $data.Length)
+$stream.Close()
 
 # Test via Print Agent:
-curl -X POST http://localhost:8787/print \
-  -H "Content-Type: application/json" \
+curl -X POST http://localhost:8787/print `
+  -H "Content-Type: application/json" `
   -d '{"tableName":"TEST","printerIp":"192.168.1.100","items":[{"nome":"Prova","quantity":1}]}'
 ```
 
 ### Frontend non carica (pagina bianca)
 
-```bash
+```powershell
 # Apri console del browser (F12)
 # Controlla che le chiamate a /rest/v1/ e /print-agent/ arrivino al server
 # Verifica che i proxy Nginx siano configurati
@@ -802,12 +948,13 @@ curl -X POST http://localhost:8787/print \
 
 ### Come trovare l'anon key di Supabase locale
 
-```bash
+```powershell
 # Opzione 1 — dalla console di Supabase Studio
 # Vai a http://localhost:8083 → Settings → API → Project API key → anon public
 
 # Opzione 2 — dal container Kong
-docker exec supabase-kong-1 cat /etc/kong/kong.yml | grep -A5 anon
+docker exec supabase-kong-1 cat /etc/kong/kong.yml
+# Cerca la riga "key" sotto "anonymous_users"
 
 # Opzione 3 — quella di default per sviluppo locale
 # eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
