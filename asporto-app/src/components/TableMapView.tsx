@@ -4,10 +4,14 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Tavolo, Reservation } from '../types/entities';
 import { MOCK_TABLES } from '../lib/MockData';
 import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2 } from 'lucide-react';
+import { useConfirm } from './ConfirmModal';
+import { useToast } from './Toast';
 
 const SALE = ['Principale', 'Verde', 'Rotonda', 'Terrazza'];
 
 export default function TableMapView({ onSelectTable, freedTableIds, onNavigateHome }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string>; onNavigateHome?: () => void }) {
+  const { confirm } = useConfirm();
+  const { addToast } = useToast();
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
   const [activeSala, setActiveSala] = useState(SALE[0]);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
@@ -92,7 +96,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   async function handleTransfer(from: Tavolo, to: Tavolo) {
      if (to.status !== 'LIBERO') {
-       alert('Il tavolo di destinazione deve essere libero');
+       addToast({ type: 'warning', title: 'Trasferimento', message: 'Il tavolo di destinazione deve essere libero' });
        return;
      }
      if (!supabase) return;
@@ -110,12 +114,13 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
        await updateTable(from.id, { status: 'LIBERO', clienti: 0 });
        await updateTable(to.id, { status: 'OCCUPATO', clienti: from.clienti });
        setTransferTable(null);
-       alert(`Ordine spostato da ${from.nome} a ${to.nome}`);
+       addToast({ type: 'success', title: 'Trasferito', message: `Ordine spostato da ${from.nome} a ${to.nome}` });
      }
    }
 
   const deleteTable = async (id: string) => {
-    if (!confirm('Sei sicuro di voler eliminare questo tavolo?')) return;
+    const ok = await confirm({ title: 'Elimina tavolo', message: 'Sei sicuro di voler eliminare questo tavolo?', destructive: true });
+    if (!ok) return;
     if (!IS_DEMO_MODE && supabase) {
       await supabase.from('tavoli').delete().eq('id', id);
     }
@@ -203,7 +208,8 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   async function handleDeleteReservation() {
     if (!supabase || !reservationModal.reservation) return;
-    if (!confirm(`Eliminare la prenotazione per ${reservationModal.reservation.nome}?`)) return;
+    const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${reservationModal.reservation.nome}?`, destructive: true });
+    if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', reservationModal.reservation.id);
     if (reservationModal.reservation.tavolo_id) {
       await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.reservation.tavolo_id);
@@ -215,7 +221,8 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   async function handleDeleteReservationById(res: Reservation) {
     if (!supabase) return;
-    if (!confirm(`Eliminare la prenotazione per ${res.nome}?`)) return;
+    const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${res.nome}?`, destructive: true });
+    if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', res.id);
     if (res.tavolo_id) {
       await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', res.tavolo_id);
@@ -433,7 +440,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                       ${tavolo.shape === 'RECTANGLE' ? 'w-48 h-24' : 'w-24 h-24'}
                       flex flex-col items-center justify-center p-2 shadow-2xl border-2 transition-all
                       ${tavolo.status === 'LIBERO' ? 'bg-charcoal border-gray-700 text-gray-400 hover:border-gray-500' : ''}
-                      ${tavolo.status === 'OCCUPATO' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : ''}
+                      ${tavolo.status === 'OCCUPATO' ? 'bg-red-500/20 border-red-500 text-red-400' : ''}
                       ${tavolo.status === 'PRENOTATO' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : ''}
                       ${transferTable?.id === tavolo.id ? 'ring-4 ring-blue-500 animate-pulse' : ''}
                       hover:scale-105 active:scale-95
@@ -446,6 +453,11 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                         {tavolo.status === 'OCCUPATO' && (
                           <div className="flex items-center justify-center gap-1 text-[8px] font-black opacity-60">
                             <Users size={8} /> {tavolo.clienti}
+                          </div>
+                        )}
+                        {tavolo.status === 'PRENOTATO' && tableReservation(tavolo.id) && (
+                          <div className="text-[8px] font-black text-amber-300 truncate max-w-full px-1">
+                            {tableReservation(tavolo.id)!.nome}
                           </div>
                         )}
                       </div>
@@ -680,11 +692,11 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
       {/* Reservation Create/Edit Modal */}
       {reservationModal.open && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden">
-            <div className="p-8">
-              <div className="flex justify-between items-center mb-8">
+          <div className="bg-surface border border-surface-light w-full max-w-3xl rounded-[40px] shadow-2xl overflow-hidden">
+            <div className="p-6 md:p-8">
+              <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">{reservationModal.reservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
+                  <h2 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter text-white">{reservationModal.reservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">
                     {reservationModal.table ? `Tavolo: ${reservationModal.table.nome}` : 'Nessun tavolo assegnato'}
                   </p>
@@ -694,29 +706,27 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                 </button>
               </div>
 
-              <div className="space-y-5">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Cliente</label>
-                  <input type="text" placeholder="es. Mario Rossi" value={resForm.nome} onChange={e => setResForm({...resForm, nome: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all" />
+                  <input type="text" placeholder="es. Mario Rossi" value={resForm.nome} onChange={e => setResForm({...resForm, nome: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-white font-bold outline-none focus:border-gold transition-all" />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Data</label>
-                    <input type="date" value={resForm.data} onChange={e => setResForm({...resForm, data: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Ora</label>
-                    <input type="time" value={resForm.ora} onChange={e => setResForm({...resForm, ora: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all" />
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Data</label>
+                  <input type="date" value={resForm.data} onChange={e => setResForm({...resForm, data: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-white font-bold outline-none focus:border-gold transition-all" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Ora</label>
+                  <input type="time" value={resForm.ora} onChange={e => setResForm({...resForm, ora: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-white font-bold outline-none focus:border-gold transition-all" />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
-                  <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-2xl p-2 px-4">
-                    <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-10 h-10 bg-surface rounded-xl text-gold active:scale-90">-</button>
-                    <span className="text-2xl font-black text-white">{resForm.persone}</span>
-                    <button onClick={() => setResForm({...resForm, persone: (resForm.persone || 2) + 1})} className="w-10 h-10 bg-surface rounded-xl text-gold active:scale-90">+</button>
+                  <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-xl p-1.5 px-3">
+                    <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-9 h-9 bg-surface rounded-xl text-gold active:scale-90">-</button>
+                    <span className="text-xl font-black text-white">{resForm.persone}</span>
+                    <button onClick={() => setResForm({...resForm, persone: (resForm.persone || 2) + 1})} className="w-9 h-9 bg-surface rounded-xl text-gold active:scale-90">+</button>
                   </div>
                 </div>
 
@@ -725,7 +735,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                   <select
                     value={resForm.tavolo_id || ''}
                     onChange={e => setResForm({...resForm, tavolo_id: e.target.value || undefined})}
-                    className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all appearance-none"
+                    className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-white font-bold outline-none focus:border-gold transition-all appearance-none"
                   >
                     <option value="">Nessun tavolo</option>
                     {tavoli.map(t => (
@@ -734,21 +744,21 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Note</label>
-                  <textarea placeholder="Opzionale..." value={resForm.note || ''} onChange={e => setResForm({...resForm, note: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all h-20" />
+                  <textarea placeholder="Opzionale..." value={resForm.note || ''} onChange={e => setResForm({...resForm, note: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-white font-bold outline-none focus:border-gold transition-all h-16" />
                 </div>
+              </div>
 
-                <div className="grid gap-3 mt-6">
-                  <button onClick={handleSaveReservation} className="w-full bg-gold text-black font-black py-5 rounded-2xl text-lg shadow-xl active:scale-95 transition-all">
-                    {reservationModal.reservation ? 'SALVA MODIFICHE' : 'CONFERMA PRENOTAZIONE'}
+              <div className="flex items-center gap-3 mt-6">
+                <button onClick={handleSaveReservation} className="flex-1 bg-gold text-black font-black py-4 rounded-2xl text-base shadow-xl active:scale-95 transition-all">
+                  {reservationModal.reservation ? 'SALVA MODIFICHE' : 'CONFERMA PRENOTAZIONE'}
+                </button>
+                {reservationModal.reservation && (
+                  <button onClick={handleDeleteReservation} className="bg-red-500/10 text-red-500 font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-widest">
+                    ELIMINA
                   </button>
-                  {reservationModal.reservation && (
-                    <button onClick={handleDeleteReservation} className="w-full bg-red-500/10 text-red-500 font-black py-3 rounded-2xl text-xs uppercase tracking-widest">
-                      ELIMINA PRENOTAZIONE
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           </div>

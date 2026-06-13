@@ -6,16 +6,22 @@ import { MOCK_INGREDIENTS } from '../lib/MockData';
 export function useIngredients() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchIngredients() {
+    setError(null);
     if (IS_DEMO_MODE) {
       setIngredients(MOCK_INGREDIENTS);
       setLoading(false);
       return;
     }
     if (!supabase) { setLoading(false); return; }
-    const { data } = await supabase.from('ingredienti').select('*').order('nome', { ascending: true });
-    if (data) setIngredients(data);
+    const { data, error: err } = await supabase.from('ingredienti').select('*').order('nome', { ascending: true });
+    if (err) {
+      setError(err.message);
+    } else if (data) {
+      setIngredients(data);
+    }
     setLoading(false);
   }
 
@@ -29,5 +35,5 @@ export function useIngredients() {
     return () => { sb.removeChannel(channel); };
   }, []);
 
-  return { ingredients, loading, refetch: fetchIngredients };
+  return { ingredients, loading, error, refetch: fetchIngredients };
 }

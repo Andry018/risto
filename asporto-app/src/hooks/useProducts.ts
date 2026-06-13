@@ -6,16 +6,22 @@ import { MOCK_PRODUCTS } from '../lib/MockData';
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchProducts() {
+    setError(null);
     if (IS_DEMO_MODE) {
       setProducts(MOCK_PRODUCTS);
       setLoading(false);
       return;
     }
     if (!supabase) { setLoading(false); return; }
-    const { data } = await supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true });
-    if (data) setProducts(data);
+    const { data, error: err } = await supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true });
+    if (err) {
+      setError(err.message);
+    } else if (data) {
+      setProducts(data);
+    }
     setLoading(false);
   }
 
@@ -29,5 +35,5 @@ export function useProducts() {
     return () => { sb.removeChannel(channel); };
   }, []);
 
-  return { products, loading, refetch: fetchProducts };
+  return { products, loading, error, refetch: fetchProducts };
 }

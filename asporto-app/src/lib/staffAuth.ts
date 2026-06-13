@@ -1,6 +1,4 @@
-const SESSION_KEY = 'risto_staff_session_ok';
-const USER_KEY = 'risto_current_user';
-const USERS_STORAGE_KEY = 'risto_staff_users';
+export const MANAGER_PIN = '2580';
 
 export type StaffRole = 'admin' | 'waiter' | 'kitchen';
 
@@ -11,128 +9,77 @@ export interface StaffUser {
   role: StaffRole;
 }
 
-function generateId(): string {
-  return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11);
-}
+const LOCAL_OPERATOR: StaffUser = {
+  id: 'local-operator',
+  name: 'Locale',
+  pin: MANAGER_PIN,
+  role: 'admin',
+};
 
-export function getDefaultStaffPin(): string | null {
-  const raw = import.meta.env.VITE_STAFF_PIN;
-  if (typeof raw === 'string' && raw.trim() !== '') return raw.trim();
-  if (import.meta.env.DEV) return '1234';
-  return null;
+export function getDefaultStaffPin(): string {
+  return MANAGER_PIN;
 }
 
 export function getStaffUsers(): StaffUser[] {
-  try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (raw) {
-      const users = JSON.parse(raw) as StaffUser[];
-      // Migrate cashier → admin
-      let migrated = false;
-      const migratedUsers = users.map(u => {
-        if (u.role === ('cashier' as StaffRole)) {
-          migrated = true;
-          return { ...u, role: 'admin' as const };
-        }
-        return u;
-      });
-      if (migrated) {
-        saveStaffUsers(migratedUsers);
-      }
-      return migratedUsers;
-    }
-  } catch { /* ignore */ }
-  return [];
+  return [LOCAL_OPERATOR];
 }
 
-export function saveStaffUsers(users: StaffUser[]): void {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+export function saveStaffUsers(_users: StaffUser[]): void {
+  // Installazione locale/kiosk: gli operatori non vengono piu salvati nel browser.
 }
 
-export function addStaffUser(name: string, pin: string, role: StaffRole): StaffUser {
-  const users = getStaffUsers();
-  const user: StaffUser = { id: generateId(), name, pin, role };
-  users.push(user);
-  saveStaffUsers(users);
-  return user;
+export function addStaffUser(_name: string, _pin: string, _role: StaffRole): StaffUser {
+  return LOCAL_OPERATOR;
 }
 
-export function removeStaffUser(id: string): void {
-  saveStaffUsers(getStaffUsers().filter(u => u.id !== id));
+export function removeStaffUser(_id: string): void {
+  // No-op in modalita locale.
 }
 
-export function updateStaffUser(id: string, updates: Partial<StaffUser>): void {
-  saveStaffUsers(getStaffUsers().map(u => u.id === id ? { ...u, ...updates } : u));
+export function updateStaffUser(_id: string, _updates: Partial<StaffUser>): void {
+  // No-op in modalita locale.
 }
 
-export function verifyStaffPin(userId: string, pin: string): boolean {
-  const users = getStaffUsers();
-  const user = users.find(u => u.id === userId);
-  if (user) return user.pin === pin.trim();
-  // Fallback to env PIN
-  const expected = getDefaultStaffPin();
-  return expected ? pin.trim() === expected : false;
+export function verifyStaffPin(_userId: string, pin: string): boolean {
+  return pin.trim() === MANAGER_PIN;
 }
 
-export function getCurrentUser(): StaffUser | null {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    if (raw) return JSON.parse(raw) as StaffUser;
-  } catch { /* ignore */ }
-  return null;
+export function getCurrentUser(): StaffUser {
+  return LOCAL_OPERATOR;
 }
 
 export function isStaffSessionValid(): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  return localStorage.getItem(SESSION_KEY) === '1';
+  return true;
 }
 
-export function setStaffSessionValid(user: StaffUser): void {
-  localStorage.setItem(SESSION_KEY, '1');
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+export function setStaffSessionValid(_user: StaffUser): void {
+  // Accesso sempre valido sulla rete locale del ristorante.
 }
 
 export function clearStaffSession(): void {
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(USER_KEY);
+  // No-op in modalita locale.
 }
 
 export function staffLogout(): void {
-  clearStaffSession();
   window.location.href = '/';
 }
 
-export function hasPermission(requiredRole: StaffRole): boolean {
-  const user = getCurrentUser();
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-  return user.role === requiredRole;
+export function hasPermission(_requiredRole: StaffRole): boolean {
+  return true;
 }
 
-const roleRoutes: Record<StaffRole, string> = {
-  waiter: '/waiter',
-  kitchen: '/kitchen',
-  admin: '/',
-};
-
-export function getDefaultRouteForRole(role: StaffRole): string {
-  return roleRoutes[role] || '/';
+export function getDefaultRouteForRole(_role: StaffRole): string {
+  return '/';
 }
 
-const rolePermissions: Record<string, StaffRole[]> = {
-  '/waiter': ['waiter', 'admin'],
-  '/kitchen': ['kitchen', 'admin'],
-  '/pos': ['admin'],
-  '/reports': ['admin'],
-  '/takeaway': ['admin'],
-  '/map': ['waiter', 'admin'],
-};
+export function canAccessRoute(_path: string): boolean {
+  return true;
+}
 
-export function canAccessRoute(path: string): boolean {
-  const user = getCurrentUser();
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-  const allowed = rolePermissions[path];
-  if (!allowed) return false;
-  return allowed.includes(user.role);
+export function requireManagerPin(actionLabel = 'questa azione'): boolean {
+  const pin = window.prompt(`PIN responsabile richiesto per ${actionLabel}`);
+  if (pin === null) return false;
+  if (pin.trim() === MANAGER_PIN) return true;
+  window.alert('PIN non valido');
+  return false;
 }

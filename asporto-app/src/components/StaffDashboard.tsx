@@ -3,43 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Tavolo, Reservation } from '../types/entities';
 import { 
-  Sun, Menu, Map as MapIcon, ChefHat, Calculator, CalendarDays,
+  Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   BellRing, Utensils, Tags, FilePlus, Zap, History, PauseCircle,
-  Settings, ChevronRight, ArrowRight
+  Settings, ChevronRight, ArrowRight, UserPlus, Table2, X
 } from 'lucide-react';
-import { staffLogout } from '../lib/staffAuth';
+import { requireManagerPin } from '../lib/staffAuth';
 import { dbUtils } from '../lib/DatabaseUtils';
+import { useConfirm } from '../components/ConfirmModal';
+import { useToast } from '../components/Toast';
+import PrinterStatusBadge from '../components/PrinterStatusBadge';
+import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
+  const { confirm } = useConfirm();
+  const { addToast } = useToast();
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+  const [newOrderName, setNewOrderName] = useState('');
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [printAgentUrl, setPrintAgentUrl] = useState(() => localStorage.getItem('waiter_print_agent_url') || 'http://127.0.0.1:8787');
-  const [printerIp, setPrinterIp] = useState(() => localStorage.getItem('waiter_printer_ip') || '');
-  const [printerPort, setPrinterPort] = useState(() => Number(localStorage.getItem('waiter_printer_port') || '9100'));
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    localStorage.setItem('waiter_print_agent_url', printAgentUrl);
-  }, [printAgentUrl]);
-  useEffect(() => {
-    localStorage.setItem('waiter_printer_ip', printerIp);
-  }, [printerIp]);
-  useEffect(() => {
-    localStorage.setItem('waiter_printer_port', String(printerPort || 9100));
-  }, [printerPort]);
+  const [printDeltaQty, setPrintDeltaQty] = useState(() => localStorage.getItem('risto_print_delta_qty') === 'true');
 
   const handleTestConnection = async () => {
     setIsTestingConnection(true);
     setConnectionTestMessage(null);
     try {
-      const normalizedAgentUrl = printAgentUrl.trim().replace(/\/+$/, '');
+      const normalizedAgentUrl = PRINT_AGENT_URL.trim().replace(/\/+$/, '');
       if (!normalizedAgentUrl) throw new Error('Print Agent URL mancante');
 
       const healthResponse = await fetch(`${normalizedAgentUrl}/health`, { method: 'GET' });
@@ -51,8 +47,8 @@ export default function StaffDashboard() {
         kind: 'kitchen',
         tableName: 'TEST STAMPA',
         orderTime: new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        printerIp: printerIp.trim(),
-        printerPort: printerPort || 9100,
+        printerIp: PRINTER_IP,
+        printerPort: PRINTER_PORT,
         items: [
           {
             nome: 'TEST STAMPA',
@@ -90,16 +86,19 @@ export default function StaffDashboard() {
     }
   };
   const handleCleanup = async () => {
-    if (!confirm('Sei sicuro? Questo eliminerà TUTTI gli ordini e resetterà i tavoli.')) return;
+    if (!requireManagerPin('svuotare il database')) return;
+    const ok = await confirm({ title: 'Pulisci database', message: 'Eliminare TUTTI gli ordini e resettare i tavoli?', destructive: true });
+    if (!ok) return;
     setLoadingAction('cleanup');
-    try { await dbUtils.cleanupDatabase(); alert('Database pulito!'); } catch { alert('Errore pulizia'); }
+    try { await dbUtils.cleanupDatabase(); addToast({ type: 'success', title: 'Database pulito!' }); } catch { addToast({ type: 'error', title: 'Errore pulizia' }); }
     finally { setLoadingAction(null); }
   };
 
   const handlePopulate = async () => {
+    if (!requireManagerPin('ripristinare i dati demo')) return;
     setLoadingAction('populate');
-    try { await dbUtils.populateDemoData(); alert('Dati demo ripristinati!'); }
-    catch { alert('Errore salvataggio'); }
+    try { await dbUtils.populateDemoData(); addToast({ type: 'success', title: 'Dati demo ripristinati!' }); }
+    catch { addToast({ type: 'error', title: 'Errore salvataggio' }); }
     finally { setLoadingAction(null); }
   };
 
@@ -153,16 +152,14 @@ export default function StaffDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-5">
-          <button 
+           <PrinterStatusBadge />
+           <button 
              onClick={() => setIsSettingsOpen(true)}
              className="text-white hover:text-gold transition-colors cursor-pointer"
              title="Impostazioni"
-          >
+           >
              <Settings size={28} strokeWidth={1.5} />
-          </button>
-          <button className="text-white hover:text-gold transition-colors cursor-pointer">
-             <Menu size={32} strokeWidth={1.5} />
-          </button>
+           </button>
         </div>
       </div>
 
@@ -233,13 +230,13 @@ export default function StaffDashboard() {
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-             <KitchenItem icon={<BellRing size={20} />} title="Disponibilità Menu" desc="Attiva/disattiva piatti" onClick={() => navigate('/kitchen')} />
-             <KitchenItem icon={<Utensils size={20} />} title="Gestisci Piatti" desc="Aggiungi, modifica o rimuovi piatti" onClick={() => navigate('/kitchen')} />
-             <KitchenItem icon={<Tags size={20} />} title="Modificatori" desc="Gestisci modifiche e opzioni" onClick={() => navigate('/kitchen')} />
+             <KitchenItem icon={<BellRing size={20} />} title="Disponibilità Menu" desc="Attiva/disattiva piatti" onClick={() => navigate('/kitchen?tab=menu')} />
+             <KitchenItem icon={<Utensils size={20} />} title="Gestisci Piatti" desc="Aggiungi, modifica o rimuovi piatti" onClick={() => navigate('/kitchen?tab=menu')} />
+             <KitchenItem icon={<Tags size={20} />} title="Modificatori" desc="Gestisci modifiche e opzioni" onClick={() => navigate('/kitchen?tab=variants')} />
           </div>
 
           <div className="pt-6 shrink-0">
-             <button onClick={() => navigate('/kitchen')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+             <button onClick={() => navigate('/kitchen?tab=menu')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
                 Apri Cucina <ArrowRight size={18} />
              </button>
           </div>
@@ -258,7 +255,7 @@ export default function StaffDashboard() {
           </div>
           
           <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
-             <PosBox icon={<FilePlus size={24} />} title="Nuovo Conto" desc="Apri un nuovo conto" onClick={() => navigate('/pos')} />
+              <PosBox icon={<FilePlus size={24} />} title="Nuovo Conto" desc="Apri un nuovo conto" onClick={() => { setShowNewOrderModal(true); setNewOrderName(''); }} />
              <PosBox icon={<Zap size={24} />} title="Vendita Rapida" desc="Piatti veloci, asporto" onClick={() => navigate('/pos')} />
              <PosBox icon={<History size={24} />} title="Conti Recenti" desc="Visualizza transazioni" onClick={() => navigate('/pos')} />
              <PosBox icon={<PauseCircle size={24} />} title="Conti in Sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
@@ -292,7 +289,7 @@ export default function StaffDashboard() {
               {reservations.map(r => (
                 <div key={r.id} className="flex justify-between items-center border-b border-surface-light pb-4 last:border-0 last:pb-0">
                   <div>
-                    <h4 className="text-[13px] font-bold text-white mb-1">{r.ora}</h4>
+                    <h4 className="text-[13px] font-bold text-white mb-1">{r.ora?.split(':').slice(0, 2).join(':')}</h4>
                     <p className="text-[11px] text-[#888]">{r.persone} Persone</p>
                     <p className="text-[11px] text-[#888]">{r.nome}</p>
                   </div>
@@ -311,113 +308,147 @@ export default function StaffDashboard() {
           </div>
 
           <div className="pt-6 shrink-0">
-             <button onClick={() => navigate('/admin')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
-                Apri Prenotazioni <ArrowRight size={18} />
-             </button>
+              <button onClick={() => navigate('/reservations')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+                 Apri Prenotazioni <ArrowRight size={18} />
+              </button>
           </div>
         </div>
 
       </div>
 
+      {/* New Order Modal */}
+      {showNewOrderModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-surface border border-surface-light w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden p-8 relative animate-in zoom-in-95 duration-200">
+            <button onClick={() => setShowNewOrderModal(false)} className="absolute top-6 right-6 text-gray-500 hover:text-white transition cursor-pointer">
+              <X size={20} />
+            </button>
+            <h2 className="text-2xl font-black text-white mb-6">Nuovo Conto</h2>
+            <div className="space-y-3">
+              <button
+                onClick={() => { setShowNewOrderModal(false); navigate('/map'); }}
+                className="w-full flex items-center gap-4 p-5 bg-charcoal border border-surface-light rounded-2xl hover:border-gold/40 transition-all group text-left"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center shrink-0 group-hover:bg-gold/20 transition-all">
+                  <Table2 size={24} className="text-gold" />
+                </div>
+                <div>
+                  <p className="font-bold text-white group-hover:text-gold transition-colors">Apri su Tavolo</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Seleziona un tavolo dalla mappa</p>
+                </div>
+              </button>
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-surface-light" />
+                <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">oppure</span>
+                <div className="flex-1 h-px bg-surface-light" />
+              </div>
+              <div>
+                <button
+                  onClick={() => { if (newOrderName.trim()) { setShowNewOrderModal(false); navigate(`/pos?tableName=${encodeURIComponent(newOrderName.trim())}`); } }}
+                  className="w-full flex items-center gap-4 p-5 bg-charcoal border border-surface-light rounded-2xl hover:border-gold/40 transition-all group text-left mb-3"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-all">
+                    <UserPlus size={24} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">Apri con Nome</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Per eventi, feste o conti sospesi</p>
+                  </div>
+                </button>
+                <input
+                  type="text"
+                  value={newOrderName}
+                  onChange={e => setNewOrderName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && newOrderName.trim()) { setShowNewOrderModal(false); navigate(`/pos?tableName=${encodeURIComponent(newOrderName.trim())}`); } }}
+                  placeholder="Inserisci nome cliente o evento..."
+                  className="w-full bg-charcoal border border-surface-light rounded-xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-gold transition-all placeholder:text-gray-600"
+                  autoFocus
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-surface border border-surface-light w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden p-10 relative animate-in zoom-in-95 duration-200">
-             <button onClick={() => setIsSettingsOpen(false)} className="absolute top-8 right-8 text-[#888] hover:text-white transition cursor-pointer text-xl font-bold">X</button>
-             <h2 className="text-2xl font-bold text-white mb-6">Impostazioni & Azioni</h2>
-             
-             <div className="space-y-4">
-                <div className="border border-surface-light rounded-2xl p-4 bg-charcoal/40 space-y-3">
-                  <div>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Stampa LAN</p>
-                    <h3 className="text-lg font-black text-white mt-1">Configura stampante</h3>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] ml-1">Print Agent URL</label>
-                    <input
-                      type="text"
-                      value={printAgentUrl}
-                      onChange={e => setPrintAgentUrl(e.target.value)}
-                      className="w-full bg-surface-light/20 border border-surface-light rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-gold transition-all"
-                      placeholder="http://192.168.1.50:8787"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] ml-1">IP stampante</label>
-                      <input
-                        type="text"
-                        value={printerIp}
-                        onChange={e => setPrinterIp(e.target.value)}
-                        className="w-full bg-surface-light/20 border border-surface-light rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-gold transition-all"
-                        placeholder="192.168.1.100"
-                      />
+          <div className="bg-surface border border-surface-light w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
+             <button onClick={() => setIsSettingsOpen(false)} className="absolute top-6 right-6 z-10 w-10 h-10 flex items-center justify-center bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light transition cursor-pointer">
+               <X size={20} />
+             </button>
+             <div className="p-6 md:p-8">
+               <h2 className="text-2xl font-bold text-white mb-6">Impostazioni & Azioni</h2>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="space-y-4">
+                    <div className="border border-surface-light rounded-2xl p-4 bg-charcoal/40 space-y-3">
+                      <div>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Stampa LAN</p>
+                        <h3 className="text-lg font-black text-white mt-1">Test connessione</h3>
+                      </div>
+                      <p className="text-xs text-gray-300 leading-relaxed">
+                        Configura Print Agent nel file <strong className="text-white">.env</strong> (<strong className="text-white">VITE_PRINT_AGENT_URL</strong>, <strong className="text-white">VITE_PRINTER_IP</strong>, <strong className="text-white">VITE_PRINTER_PORT</strong>).
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={handleTestConnection}
+                          disabled={isTestingConnection}
+                          className="flex-1 bg-gold hover:bg-gold-hover text-black p-3 rounded-xl font-bold text-xs transition cursor-pointer disabled:opacity-60"
+                        >
+                          {isTestingConnection ? 'Test in corso...' : 'Test connessione'}
+                        </button>
+                        <div className="flex-1 min-h-[48px] rounded-xl border border-surface-light px-3 py-2 text-xs font-bold flex items-center text-white">
+                          {connectionTestMessage || 'Stato stampante'}
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] ml-1">Porta</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={65535}
-                        value={printerPort}
-                        onChange={e => setPrinterPort(Number(e.target.value || 9100))}
-                        className="w-full bg-surface-light/20 border border-surface-light rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-gold transition-all"
-                        placeholder="9100"
-                      />
+
+                    <div className="border border-surface-light rounded-2xl p-4 bg-charcoal/40 space-y-3">
+                      <div>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Aggiornamento comande</p>
+                        <h3 className="text-lg font-black text-white mt-1">Ristampa quantità</h3>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-300 leading-relaxed">
+                          Quando si cambia la quantità di un piatto già in comanda, stampa l'aggiunta in cucina
+                        </p>
+                        <button
+                          onClick={() => {
+                            const next = !printDeltaQty;
+                            setPrintDeltaQty(next);
+                            localStorage.setItem('risto_print_delta_qty', String(next));
+                          }}
+                          className={`relative w-14 h-8 rounded-full transition-all shrink-0 ml-4 ${printDeltaQty ? 'bg-gold' : 'bg-surface-light/40'}`}
+                        >
+                          <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${printDeltaQty ? 'left-7' : 'left-1'}`} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                 </div>
 
-                  <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-3">
-                    <div className="text-amber-400 text-xs font-black uppercase tracking-[0.2em] shrink-0 pt-0.5">Nota</div>
-                    <p className="text-xs text-gray-300 leading-relaxed">
-                      Se puoi, assegna alla stampante un IP statico nel router. Così non cambia e non devi aggiornare le impostazioni ogni volta.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleTestConnection}
-                      disabled={isTestingConnection}
-                      className="flex-1 bg-gold hover:bg-gold-hover text-black p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition cursor-pointer disabled:opacity-60"
-                    >
-                      {isTestingConnection ? 'Test in corso...' : 'Test connessione'}
-                    </button>
-                    <div className="flex-1 min-h-[56px] rounded-xl border border-surface-light px-4 py-3 text-xs font-bold flex items-center text-white">
-                      {connectionTestMessage || 'Verifica Print Agent e stampante LAN'}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => { setIsSettingsOpen(false); navigate('/reports'); }}
-                  className="w-full bg-surface-light/40 border border-gold/30 text-gold p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gold/10 transition cursor-pointer"
-                >
-                  Report e Statistiche
-                </button>
-
-                <button
-                  onClick={handleCleanup}
-                  disabled={loadingAction === 'cleanup'}
-                  className="w-full bg-surface-light/40 border border-red-500/30 text-red-400 p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-red-500/10 transition cursor-pointer"
-                >
-                  {loadingAction === 'cleanup' ? 'Pulizia...' : 'Svuota Database'}
-                </button>
-
-                <button
-                  onClick={handlePopulate}
-                  disabled={loadingAction === 'populate'}
-                  className="w-full bg-surface-light/40 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-emerald-500/10 transition cursor-pointer"
-                >
-                  {loadingAction === 'populate' ? 'Ripristino...' : 'Ripristina Dati Demo'}
-                </button>
-
-                <button
-                  onClick={() => { if (confirm('Vuoi effettuare il log out?')) staffLogout(); }}
-                  className="w-full bg-surface-light/40 border border-surface-light text-[#888] p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-white/5 transition cursor-pointer"
-                >
-                  Esci
-                </button>
+                 <div className="space-y-4">
+                   <button
+                     onClick={() => { setIsSettingsOpen(false); navigate('/reports'); }}
+                     className="w-full bg-surface-light/40 border border-gold/30 text-gold p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gold/10 transition cursor-pointer"
+                   >
+                     Report e Statistiche
+                   </button>
+                   <button
+                     onClick={handleCleanup}
+                     disabled={loadingAction === 'cleanup'}
+                     className="w-full bg-surface-light/40 border border-red-500/30 text-red-400 p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-red-500/10 transition cursor-pointer"
+                   >
+                     {loadingAction === 'cleanup' ? 'Pulizia...' : 'Svuota Database'}
+                   </button>
+                   <button
+                     onClick={handlePopulate}
+                     disabled={loadingAction === 'populate'}
+                     className="w-full bg-surface-light/40 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-emerald-500/10 transition cursor-pointer"
+                   >
+                     {loadingAction === 'populate' ? 'Ripristino...' : 'Ripristina Dati Demo'}
+                   </button>
+                 </div>
+               </div>
              </div>
           </div>
         </div>

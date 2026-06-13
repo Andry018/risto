@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Reservation, Tavolo } from '../types/entities';
-import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, LayoutDashboard } from 'lucide-react';
+import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, LayoutDashboard, ArrowLeft } from 'lucide-react';
+import { useConfirm } from './ConfirmModal';
+import { useToast } from './Toast';
 
-export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void } = {}) {
+export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void }) {
+  const navigate = useNavigate();
+  const { confirm } = useConfirm();
+  const { addToast } = useToast();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -20,6 +26,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     status: 'CONFERMATA',
     note: ''
   });
+
+  const setOra = (val: string) => setNewRes(prev => ({ ...prev, ora: val.split(':').slice(0, 2).join(':') }));
 
   async function fetchReservations() {
     if (IS_DEMO_MODE) {
@@ -89,7 +97,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
       closeModal();
       fetchReservations();
     } catch {
-      alert('Errore salvataggio prenotazione');
+      addToast({ type: 'error', title: 'Errore', message: 'Salvataggio prenotazione fallito' });
     } finally {
       setLoading(false);
     }
@@ -110,7 +118,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
 
   function openEditModal(res: Reservation) {
     setEditingReservation(res);
-    setNewRes({ ...res });
+    setNewRes({ ...res, ora: res.ora?.split(':').slice(0, 2).join(':') ?? res.ora });
     setIsModalOpen(true);
   }
 
@@ -129,7 +137,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   }
 
   async function handleCancel(res: Reservation) {
-    if (!confirm(`Annullare la prenotazione di ${res.nome}?`)) return;
+    const ok = await confirm({ title: 'Annulla prenotazione', message: `Annullare la prenotazione di ${res.nome}?` });
+    if (!ok) return;
     if (!supabase) return;
     await supabase.from('prenotazioni').update({ status: 'ANNULLATA' }).eq('id', res.id);
     if (res.tavolo_id) {
@@ -139,7 +148,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   }
 
   async function handleDelete(res: Reservation) {
-    if (!confirm(`Eliminare la prenotazione di ${res.nome}?`)) return;
+    const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione di ${res.nome}?`, destructive: true });
+    if (!ok) return;
     if (!supabase) return;
     if (res.tavolo_id) {
       await setTableStatus(res.tavolo_id, 'LIBERO');
@@ -158,11 +168,9 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     <div className="flex-1 flex flex-col bg-charcoal text-white h-full overflow-hidden p-8">
       <header className="flex justify-between items-center mb-10">
         <div className="flex items-center gap-6">
-          {onNavigateHome && (
-            <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
-              <LayoutDashboard size={24} />
-            </button>
-          )}
+          <button onClick={() => onNavigateHome ? onNavigateHome() : navigate('/')} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl" title="Torna indietro">
+            <ArrowLeft size={24} />
+          </button>
           <div>
             <h2 className="text-sm text-gold font-black tracking-widest uppercase italic">Gestione Clienti</h2>
             <h1 className="text-4xl font-black text-white uppercase italic">Libro Prenotazioni</h1>
@@ -204,7 +212,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                        <Clock size={14} />
                        <span className="text-[10px] font-black uppercase tracking-widest">Orario</span>
                     </div>
-                    <p className="text-4xl font-black text-white italic">{res.ora}</p>
+                    <p className="text-4xl font-black text-white italic">{res.ora?.split(':').slice(0, 2).join(':')}</p>
                   </div>
                   
                   <div className="w-px h-16 bg-surface-light" />
@@ -317,7 +325,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                     <input 
                       type="time" 
                       value={newRes.ora}
-                      onChange={e => setNewRes({...newRes, ora: e.target.value})}
+                      onChange={e => setOra(e.target.value)}
                       className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all"
                     />
                   </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
+import { Link, useSearchParams } from 'react-router-dom';
+import { requireManagerPin } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
 import { newUniqueId } from '../lib/id';
@@ -12,7 +12,9 @@ import PaninoBuilderModal from './PaninoBuilderModal';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { useToast } from './Toast';
-import { printKitchen, printFullReceipt } from '../lib/printUtils';
+import { useConfirm } from './ConfirmModal';
+import { printKitchenViaAgent, printReceiptViaAgent } from '../lib/lanPrint';
+import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
 import {
   addedIngredientsFromStoredOrderLine,
   calculateRemovalsPrice,
@@ -28,13 +30,6 @@ const PORTATA_OPTIONS = [
 ] as const;
 
 export default function POSView({ tableId: propTableId, tableName: propTableName, onOrderFinished, onNavigateHome }: { tableId?: string, tableName?: string, onOrderFinished?: () => void, onNavigateHome?: () => void }) {
-  const navigate = useNavigate();
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (user && user.role !== 'admin') {
-      navigate(getDefaultRouteForRole(user.role), { replace: true });
-    }
-  }, []);
   const [searchParams] = useSearchParams();
   const tableId = propTableId || searchParams.get('tableId');
   const tableName = propTableName || searchParams.get('tableName');
@@ -68,6 +63,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
 
   const toast = useToast();
+  const { confirm } = useConfirm();
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
   const localUpdateRef = useRef(false);
@@ -387,7 +383,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     ? Math.max(0, total - scontoValore)
     : total;
 
-  const currentPortataMeta = PORTATA_OPTIONS.find(p => p.value === currentPortata) ?? PORTATA_OPTIONS[0];
   const advancePortata = () => {
     const currentIndex = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
     const nextIndex = Math.min(currentIndex + 1, PORTATA_OPTIONS.length - 1);
@@ -445,7 +440,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       }, 2000);
     } catch (error) {
       console.error('Error submitting POS order:', error);
-      alert('Errore durante la chiusura dell\'ordine.');
+      toast.addToast({ type: 'error', title: 'Errore', message: 'Errore durante la chiusura dell\'ordine.' });
     } finally {
       setFinishingOrder(false);
     }
@@ -492,14 +487,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       setTimeout(() => setOrderSuccess(false), 2000);
     } catch (error) {
       console.error('Error updating bill:', error);
-      alert('Errore durante l\'aggiornamento del conto.');
+      toast.addToast({ type: 'error', title: 'Errore', message: 'Errore durante l\'aggiornamento del conto.' });
     }
   };
 
   const handleFreeTable = async () => {
     if (!tableId) return;
-    const confirmFree = confirm('Liberare il tavolo elimina la comanda corrente senza registrare una vendita. Continuare?');
-    if (!confirmFree) return;
+    if (!requireManagerPin('liberare il tavolo senza vendita')) return;
+    const ok = await confirm({ title: 'Libera tavolo', message: 'Liberare il tavolo elimina la comanda corrente senza registrare una vendita. Continuare?', destructive: true });
+    if (!ok) return;
 
     localUpdateRef.current = true;
     try {
@@ -515,7 +511,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       setTimeout(() => setOrderSuccess(false), 1500);
     } catch (error) {
       console.error('Error freeing table:', error);
-      alert('Errore durante la liberazione del tavolo.');
+      toast.addToast({ type: 'error', title: 'Errore', message: 'Errore durante la liberazione del tavolo.' });
     }
   };
 
@@ -611,7 +607,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       if (onOrderFinished) onOrderFinished();
     } catch (error) {
       console.error('Error suspending bill:', error);
-      alert('Errore durante il salvataggio in sospeso.');
+      toast.addToast({ type: 'error', title: 'Errore', message: 'Errore durante il salvataggio in sospeso.' });
     } finally {
       setFinishingOrder(false);
     }
@@ -748,14 +744,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
                 <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto custom-scrollbar">
                   <button
-                    onClick={() => printKitchen(cart, tableName || 'Tavolo')}
+                    onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
                     <Printer size={14} /> STAMPA COMANDA
                   </button>
                   <button
-                    onClick={() => printFullReceipt(cart, tableName || 'POS', discountedTotal)}
+                    onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
@@ -903,20 +899,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                       >
                         Avanza
                       </button>
+                      <button
+                        onClick={() => setPaninoModalOpen(true)}
+                        className="min-w-[92px] px-3 py-2.5 rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap hover:bg-gold/20 flex items-center justify-center gap-1.5"
+                      >
+                        <Sandwich size={14} /> Panino
+                      </button>
                     </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-2xl border ${currentPortataMeta.color}`}>
-                      <span className="w-2.5 h-2.5 rounded-full bg-current" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.25em]">{currentPortataMeta.label}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentPortata('1')}
-                      className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 hover:text-white transition-colors"
-                    >
-                      Reset 1ª
-                    </button>
                   </div>
                 </div>
               </div>
@@ -968,13 +957,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             ))}
           </div>
 
-          {/* Panino Builder Button */}
-          <button
-            onClick={() => setPaninoModalOpen(true)}
-            className="self-start inline-flex w-auto max-w-full bg-gold/10 border border-gold/30 text-gold font-black py-2 px-4 rounded-xl text-[10px] uppercase tracking-[0.22em] flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-gold/20"
-          >
-            <Sandwich size={14} /> PANINO
-          </button>
         </header>
 
         {/* Product Grid */}
@@ -1138,7 +1120,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               <div className="flex flex-col gap-2">
                 <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() => printKitchen(cart, tableName || 'Tavolo')}
+                    onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
@@ -1183,7 +1165,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               ) : (
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => printKitchen(cart, tableName || 'Tavolo')}
+                    onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >

@@ -6,16 +6,22 @@ import { MOCK_TABLES } from '../lib/MockData';
 export function useTables() {
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchTables() {
+    setError(null);
     if (IS_DEMO_MODE) {
       setTables(MOCK_TABLES);
       setLoading(false);
       return;
     }
     if (!supabase) { setLoading(false); return; }
-    const { data } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
-    if (data) setTables(data);
+    const { data, error: err } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
+    if (err) {
+      setError(err.message);
+    } else if (data) {
+      setTables(data);
+    }
     setLoading(false);
   }
 
@@ -29,5 +35,5 @@ export function useTables() {
     return () => { sb.removeChannel(channel); };
   }, []);
 
-  return { tables, loading, refetch: fetchTables };
+  return { tables, loading, error, refetch: fetchTables };
 }

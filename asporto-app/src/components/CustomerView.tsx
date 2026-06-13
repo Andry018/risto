@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../types/entities';
 import { ShoppingCart, Plus, Minus, Clock, User, CheckCircle, ChevronRight, X, Utensils } from 'lucide-react';
+import { useToast } from './Toast';
 
 type CartItem = Product & { quantity: number };
 
 export default function CustomerView() {
+  const { addToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,7 +115,7 @@ export default function CustomerView() {
       setTimeout(() => setOrderSuccess(false), 5000);
     } catch (error) {
       console.error('Error submitting order:', error);
-      alert("Errore durante l'invio dell'ordine. Riprova.");
+      addToast({ type: 'error', title: 'Errore', message: "Errore durante l'invio dell'ordine. Riprova." });
     }
   };
 

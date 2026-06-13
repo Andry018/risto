@@ -9,10 +9,12 @@ import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut,
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent } from '../lib/lanPrint';
+import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import { useToast } from './Toast';
+import { useConfirm } from './ConfirmModal';
 import ReceiptPreview from './ReceiptPreview';
 import {
   addedIngredientsFromStoredOrderLine,
@@ -20,6 +22,7 @@ import {
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
 import SyncStatusIndicator from './SyncStatusIndicator';
+import PrinterStatusBadge from './PrinterStatusBadge';
 import OrderHistoryModal from './OrderHistoryModal';
 import { parseAperturaFromNote, setAperturaInNote } from '../lib/tableUtils';
 import TableGrid from './TableGrid';
@@ -84,11 +87,8 @@ export default function WaiterMobileView() {
   const handlePrint = async () => {
     if (cart.length === 0) return;
     try {
-      const printAgentUrl = localStorage.getItem('waiter_print_agent_url') || 'http://127.0.0.1:8787';
-      const printerIp = localStorage.getItem('waiter_printer_ip') || '';
-      const printerPort = Number(localStorage.getItem('waiter_printer_port') || '9100');
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      await printKitchenViaAgent(cart, selectedTable?.nome || 'Tavolo', printAgentUrl, printerIp, printerPort, orderTime);
+      await printKitchenViaAgent(cart, selectedTable?.nome || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime);
       toast.addToast({
         type: 'success',
         title: 'Comanda stampata',
@@ -107,10 +107,18 @@ export default function WaiterMobileView() {
   };
 
   const toast = useToast();
+  const { confirm } = useConfirm();
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
   const selectedTableRef = useRef(selectedTable);
   const localUpdateRef = useRef(false);
+  const savedItemQtysRef = useRef<Map<string, number>>(new Map());
+
+  const getItemKey = (item: CustomizedItem): string => {
+    const adds = [...item.addedIngredients].map(a => a.nome).sort().join(',');
+    const rems = [...item.removedIngredients].sort().join(',');
+    return `${item.nome}|${item.portata || ''}|${adds}|${rems}|${item.notes}`;
+  };
   productsRef.current = products;
   ingredientsRef.current = ingredients;
   selectedTableRef.current = selectedTable;
@@ -148,6 +156,12 @@ export default function WaiterMobileView() {
         };
       });
       setCart(mappedCart);
+      const qtyMap = new Map<string, number>();
+      for (const i of mappedCart) {
+        const k = getItemKey(i);
+        qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
+      }
+      savedItemQtysRef.current = qtyMap;
       setActiveTab('RIEPILOGO');
       return true;
     } else {
@@ -420,12 +434,10 @@ export default function WaiterMobileView() {
     })();
   };
 
-  const loadLastOrder = async () => {
-    if (!selectedTable || !lastOrderForTable || IS_DEMO_MODE || !supabase) return;
+  const mapOrderToCart = (order: Order): CustomizedItem[] => {
     const prods = productsRef.current;
     const ings = ingredientsRef.current;
-    const data = lastOrderForTable;
-    const mappedCart = (data.carrello || []).map((item: OrderCarrelloItem) => {
+    return (order.carrello || []).map((item: OrderCarrelloItem) => {
       const product = findProductForOrderLine(prods, item.nome);
       const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
       const rimozioni = item.modifiche?.rimozioni || [];
@@ -440,7 +452,27 @@ export default function WaiterMobileView() {
         uniqueId: newUniqueId()
       };
     });
-    const copertoProd = prods.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
+  };
+
+  const handleReprintLast = async () => {
+    if (!lastOrderForTable || !selectedTable) return;
+    try {
+      const items = mapOrderToCart(lastOrderForTable);
+      const orderTime = new Date(lastOrderForTable.created_at).toLocaleString('it-IT', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+      await printKitchenViaAgent(items, selectedTable.nome, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime);
+      toast.addToast({ type: 'success', title: 'Comanda ristampata', message: `Stampata con ora originale ${orderTime}`, duration: 2500 });
+    } catch {
+      toast.addToast({ type: 'error', title: 'Ristampa fallita', message: 'Controlla stampante e rete LAN.', duration: 4500 });
+    }
+  };
+
+  const loadLastOrder = async () => {
+    if (!selectedTable || !lastOrderForTable || IS_DEMO_MODE || !supabase) return;
+    const data = lastOrderForTable;
+    const mappedCart = mapOrderToCart(data);
+    const copertoProd = productsRef.current.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
     const hasCoperto = mappedCart.some(i => i.id === copertoProd?.id || i.nome === 'COPERTO');
     const finalCart = [...mappedCart];
     if (!hasCoperto && copertoProd) {
@@ -455,6 +487,12 @@ export default function WaiterMobileView() {
       });
     }
     setCart(finalCart);
+    const loadQtyMap = new Map<string, number>();
+    for (const i of finalCart) {
+      const k = getItemKey(i);
+      loadQtyMap.set(k, (loadQtyMap.get(k) || 0) + i.quantity);
+    }
+    savedItemQtysRef.current = loadQtyMap;
     setActiveOrderId(null);
     setActiveTab('RIEPILOGO');
     setIsCoversModalOpen(false);
@@ -568,7 +606,7 @@ export default function WaiterMobileView() {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
     if (IS_DEMO_MODE) {
-      alert('SIMULAZIONE: Comanda inviata al sistema (Modalità Demo)');
+      toast.addToast({ type: 'info', title: 'Demo', message: 'Comanda simulata (Modalità Demo)' });
       if (selectedTable) clearDraft(selectedTable.id);
       setCart([]);
       setSelectedTable(null);
@@ -577,6 +615,28 @@ export default function WaiterMobileView() {
 
     localUpdateRef.current = true;
     setOrderActionBusy(true);
+
+    const isUpdate = !!activeOrderId;
+    const printDeltaQty = localStorage.getItem('risto_print_delta_qty') === 'true';
+
+    let printItems: CustomizedItem[] = [];
+    if (isUpdate) {
+      const seen = new Map<string, number>();
+      for (const item of cart) {
+        const key = getItemKey(item);
+        const oldQty = savedItemQtysRef.current.get(key) || 0;
+        seen.set(key, (seen.get(key) || 0) + item.quantity);
+        if (item.quantity > oldQty) {
+          const deltaQty = item.quantity - oldQty;
+          if (printDeltaQty && oldQty > 0) {
+            printItems.push({ ...item, quantity: deltaQty });
+          } else if (oldQty === 0) {
+            printItems.push(item);
+          }
+        }
+      }
+    }
+
     try {
       const orderData = {
         nome_cliente: selectedTable.nome,
@@ -603,7 +663,7 @@ export default function WaiterMobileView() {
         }),
       };
 
-      if (activeOrderId) {
+      if (isUpdate) {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
         const nowISO = new Date().toISOString();
@@ -611,16 +671,27 @@ export default function WaiterMobileView() {
         const newNote = setAperturaInNote(selectedTable.note, nowISO);
         await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', note: newNote });
         setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
-        // Update local table state with new note
         setTables(prev => prev.map(t => t.id === selectedTable.id ? { ...t, note: newNote } : t));
         setSelectedTable(prev => prev ? { ...prev, note: newNote } : prev);
+      }
+
+      const newMap = new Map<string, number>();
+      for (const item of cart) {
+        const key = getItemKey(item);
+        newMap.set(key, (newMap.get(key) || 0) + item.quantity);
+      }
+      savedItemQtysRef.current = newMap;
+
+      if (printItems.length > 0) {
+        const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        await printKitchenViaAgent(printItems, `${selectedTable.nome} (AGGIUNTA)`, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime).catch(() => {});
       }
 
       clearDraft(selectedTable.id);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
     } catch {
-      alert('Errore nel salvataggio');
+      toast.addToast({ type: 'error', title: 'Errore', message: 'Salvataggio comanda fallito' });
     } finally {
       setOrderActionBusy(false);
     }
@@ -681,7 +752,8 @@ export default function WaiterMobileView() {
 
   async function handleDeleteReservation() {
     if (!supabase || !reservationModal.reservation) return;
-    if (!confirm(`Eliminare la prenotazione per ${reservationModal.reservation.nome}?`)) return;
+    const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${reservationModal.reservation.nome}?`, destructive: true });
+    if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', reservationModal.reservation.id);
     if (reservationModal.reservation.tavolo_id) {
       await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.reservation.tavolo_id);
@@ -693,7 +765,8 @@ export default function WaiterMobileView() {
 
   async function handleDeleteReservationById(res: Reservation) {
     if (!supabase) return;
-    if (!confirm(`Eliminare la prenotazione per ${res.nome}?`)) return;
+    const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${res.nome}?`, destructive: true });
+    if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', res.id);
     if (res.tavolo_id) {
       await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', res.tavolo_id);
@@ -755,33 +828,35 @@ export default function WaiterMobileView() {
                     <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.name} • {currentUser.role}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsReservationsOpen(true)}
-                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-amber-400 transition-colors"
-                    title="Prenotazioni"
-                  >
-                    <BookOpen size={20} />
-                  </button>
-                  {pendingSyncCount > 0 && (
-                    <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
-                      <WifiOff size={10} /> {pendingSyncCount}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm('Uscire? Dovrai reinserire il PIN.')) staffLogout();
-                    }}
-                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
-                    title="Esci staff"
-                  >
-                    <LogOut size={20} />
-                  </button>
-                  <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
-                    <LayoutDashboard size={20} />
-                  </Link>
-                </div>
+                 <div className="flex items-center gap-2">
+                   <PrinterStatusBadge />
+                   <button
+                     onClick={() => setIsReservationsOpen(true)}
+                     className="p-2 bg-surface rounded-xl text-gray-500 hover:text-amber-400 transition-colors"
+                     title="Prenotazioni"
+                   >
+                     <BookOpen size={20} />
+                   </button>
+                   {pendingSyncCount > 0 && (
+                     <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
+                       <WifiOff size={10} /> {pendingSyncCount}
+                     </div>
+                   )}
+                   <button
+                     type="button"
+                     onClick={async () => {
+                       const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
+                       if (ok) staffLogout();
+                     }}
+                     className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
+                     title="Esci staff"
+                   >
+                     <LogOut size={20} />
+                   </button>
+                   <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
+                     <LayoutDashboard size={20} />
+                   </Link>
+                 </div>
               </div>
             
             {/* Room Slider */}
@@ -932,39 +1007,37 @@ export default function WaiterMobileView() {
           )}
 
           {/* Sticky Footer Action Bar */}
-          <div className="absolute bottom-0 left-0 right-0 p-6 bg-surface/90 backdrop-blur-xl border-t border-white/5 rounded-t-[40px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] z-40">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 bg-surface/90 backdrop-blur-xl border-t border-white/5 z-40">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => setKitchenPreviewOpen(true)}
                 disabled={cart.length === 0}
-                className="py-5 rounded-2xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.25em] flex items-center justify-center gap-2 transition-all active:scale-95 text-white hover:bg-surface-light disabled:opacity-30"
+                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-white hover:bg-surface-light disabled:opacity-30"
               >
-                <BookOpen size={18} /> ANTEPRIMA
+                <BookOpen size={14} /> ANTEPRIMA
               </button>
               <button
                 onClick={handlePrint}
                 disabled={cart.length === 0}
-                className="py-5 rounded-2xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.25em] flex items-center justify-center gap-2 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
+                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
               >
-                <Printer size={18} /> STAMPA
+                <Printer size={14} /> STAMPA
               </button>
-            </div>
-            <div className="mt-3">
               <button
                 onClick={() => saveOrder()}
                 disabled={cart.length === 0 || orderActionBusy}
-                className={`py-5 rounded-2xl border font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                className={`py-3 rounded-xl border font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
                   success
                     ? 'bg-emerald-500 border-emerald-500 text-black'
                     : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
                 } disabled:opacity-30`}
               >
-                {orderActionBusy ? '…' : success ? 'INVIATO!' : <><Save size={22} /> AGGIORNA COMANDA</>}
+                {orderActionBusy ? '…' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
               </button>
             </div>
             {IS_DEMO_MODE && (
-               <div className="mt-3 text-center">
-                 <span className="text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">DEMO MODE</span>
+               <div className="mt-2 text-center">
+                 <span className="text-[9px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">DEMO MODE</span>
                </div>
             )}
           </div>
@@ -1011,12 +1084,20 @@ export default function WaiterMobileView() {
               INIZIA ORDINE
             </button>
             {lastOrderForTable && (
+              <>
               <button 
                 onClick={loadLastOrder}
                 className="w-full mt-3 bg-charcoal border border-gold/40 text-gold font-bold py-4 rounded-2xl text-sm uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
               >
                 <RotateCcw size={14} className="inline mr-2" />PRENDI ULTIMA COMANDA
               </button>
+              <button
+                onClick={handleReprintLast}
+                className="w-full mt-2 bg-charcoal border border-amber-500/40 text-amber-400 font-bold py-3 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
+              >
+                <Printer size={12} className="inline mr-2" />RISTAMPA ULTIMA COMANDA
+              </button>
+              </>
             )}
             <button 
               onClick={() => { setOrderHistoryOpen(true); }}

@@ -6,6 +6,8 @@ import type { Order, OrderCarrelloItem, DocumentoEmesso } from '../types/entitie
 import { MOCK_ORDERS } from '../lib/MockData';
 import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2, LogOut, AlertTriangle } from 'lucide-react';
 import BillingModal from './BillingModal';
+import { useConfirm } from './ConfirmModal';
+import { useToast } from './Toast';
 import { deleteDocument } from '../lib/billingUtils';
 
 type Period = 'today' | 'week' | 'month';
@@ -24,6 +26,8 @@ interface CategoryStat {
 
 export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () => void } = {}) {
   const navigate = useNavigate();
+  const { confirm } = useConfirm();
+  const { addToast } = useToast();
   useEffect(() => {
     const user = getCurrentUser();
     if (user && user.role !== 'admin') {
@@ -198,11 +202,12 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
               </div>
               <button
                 onClick={async () => {
-                  if (!confirm(`Chiudere la giornata?\n\nOrdini completati: ${stats.totalOrders}\nIncasso totale: €${stats.totalRevenue.toFixed(2)}\nIn attesa: ${stats.pendingCount}\n\nTutti i tavoli OCCUPATO verranno liberati.`)) return;
-                  if (!supabase) { alert('Modalità demo — nessuna azione eseguita'); return; }
+                  const ok = await confirm({ title: 'Chiusura giornaliera', message: `Ordini completati: ${stats.totalOrders}\nIncasso totale: €${stats.totalRevenue.toFixed(2)}\nIn attesa: ${stats.pendingCount}\n\nTutti i tavoli OCCUPATO verranno liberati.`, destructive: true });
+                  if (!ok) return;
+                  if (!supabase) { addToast({ type: 'warning', title: 'Modalità demo', message: 'Nessuna azione eseguita' }); return; }
                   const { error } = await supabase.from('tavoli').update({ status: 'LIBERO' }).eq('status', 'OCCUPATO');
-                  if (error) { alert('Errore: ' + error.message); return; }
-                  alert(`Giornata chiusa!\n\n€{stats.totalRevenue.toFixed(2)} incasso totale\n${stats.totalOrders} ordini\n\nTavoli liberati.`);
+                  if (error) { addToast({ type: 'error', title: 'Errore', message: error.message }); return; }
+                  addToast({ type: 'success', title: 'Giornata chiusa!', message: `€${stats.totalRevenue.toFixed(2)} incasso · ${stats.totalOrders} ordini · Tavoli liberati.` });
                   void fetchOrders();
                 }}
                 className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-black text-xs px-6 py-3 rounded-2xl transition-all active:scale-95 flex items-center gap-2 shrink-0"
@@ -376,7 +381,8 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
                           </button>
                           <button
                             onClick={async () => {
-                              if (!window.confirm(`Eliminare la fattura ${doc.doc_number}?`)) return;
+                              const ok = await confirm({ title: 'Elimina fattura', message: `Eliminare la fattura ${doc.doc_number}?`, destructive: true });
+                              if (!ok) return;
                               await deleteDocument(doc.id);
                               fetchDocuments();
                             }}

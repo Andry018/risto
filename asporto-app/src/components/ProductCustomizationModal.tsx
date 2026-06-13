@@ -266,16 +266,6 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
           </div>
         </section>
       )}
-      {isAntipasto && (
-        <section>
-          <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
-            <p className="text-[9px] font-black text-emerald-400 tracking-widest uppercase mb-2">AGGIUNTE CONSIGLIATE</p>
-            <p className="text-[10px] text-gray-400">
-              Usa la sezione <strong className="text-white">AGGIUNTE</strong> qui sotto per aggiungere <strong className="text-emerald-400">Bocconcino</strong> (€1.50 cad., aggiungibile più volte) o altri ingredienti extra.
-            </p>
-          </div>
-        </section>
-      )}
     </>
   );
 
@@ -416,7 +406,7 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
                 <button onClick={() => setLocalItem({ ...localItem, quantity: localItem.quantity + 1 })} className="p-1.5 bg-charcoal rounded-lg text-gold border border-surface-light"><Plus size={14} /></button>
               </div>
             </div>
-            <button onClick={() => { onSave(localItem); setLocalItem(null); setIngSearch(''); }} className="w-full bg-emerald-500 text-black py-3.5 rounded-2xl font-black uppercase text-sm">
+            <button onClick={handleSave} className="w-full bg-emerald-500 text-black py-3.5 rounded-2xl font-black uppercase text-sm">
               AGGIUNGI ALL'ORDINE
             </button>
           </div>

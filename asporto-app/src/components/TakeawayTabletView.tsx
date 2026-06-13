@@ -6,6 +6,7 @@ import type { Product, Ingredient, Order, CustomizedItem } from '../types/entiti
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
 import { capacityUtils, CAPACITY_CONFIG } from '../lib/CapacityUtils';
 import { calculateItemPrice } from '../lib/priceUtils';
+import { useToast } from './Toast';
 import { newUniqueId } from '../lib/id';
 import { 
   Plus, 
@@ -26,6 +27,7 @@ import ProductCustomizationModal from './ProductCustomizationModal';
 
 export default function TakeawayTabletView() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   useEffect(() => {
     const user = getCurrentUser();
     if (user && user.role !== 'admin') {
@@ -175,12 +177,12 @@ export default function TakeawayTabletView() {
 
   const submitOrder = async () => {
     if (!customerName || cart.length === 0 || !pickupTime) {
-      alert('Inserisci Nome, Orario e almeno un prodotto');
+      addToast({ type: 'warning', title: 'Dati mancanti', message: 'Inserisci Nome, Orario e almeno un prodotto' });
       return;
     }
 
     if (IS_DEMO_MODE) {
-      alert('ORDINE SIMULATO (Modalità Demo): L\'ordine apparirebbe ora nel database reale.');
+      addToast({ type: 'info', title: 'Demo', message: 'ORDINE SIMULATO: L\'ordine apparirebbe ora nel database reale.' });
       setCart([]);
       setCustomerName('');
       setPickupTime('');
@@ -213,7 +215,7 @@ export default function TakeawayTabletView() {
     }]);
 
     if (!error) {
-      alert('Ordine Salvato con successo!');
+      addToast({ type: 'success', title: 'Ordine salvato!' });
       setCart([]);
       setCustomerName('');
       setPickupTime('');

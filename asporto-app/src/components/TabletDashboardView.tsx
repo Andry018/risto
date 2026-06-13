@@ -8,8 +8,12 @@ import ReportsView from './ReportsView';
 import ReservationsView from './ReservationsView';
 import { staffLogout, getCurrentUser, getStaffUsers, removeStaffUser, updateStaffUser, type StaffUser, type StaffRole } from '../lib/staffAuth';
 import { dbUtils } from '../lib/DatabaseUtils';
+import { useConfirm } from '../components/ConfirmModal';
+import { useToast } from '../components/Toast';
 
 export default function TabletDashboardView() {
+  const { confirm } = useConfirm();
+  const { addToast } = useToast();
   const [activeView, setActiveView] = useState<'DASHBOARD' | 'POS' | 'MAPPA' | 'MENU' | 'PRENOTAZIONI' | 'REPORTS'>('DASHBOARD');
   const [selectedTable, setSelectedTable] = useState<{ id: string, nome: string } | null>(null);
   const [freedTableIds, setFreedTableIds] = useState<Set<string>>(new Set());
@@ -52,16 +56,17 @@ export default function TabletDashboardView() {
   }, []);
 
   const handleCleanup = async () => {
-    if (!confirm('Sei sicuro? Questo eliminerà TUTTI gli ordini e resetterà i tavoli.')) return;
+    const ok = await confirm({ title: 'Pulisci database', message: 'Eliminare TUTTI gli ordini e resettare i tavoli?', destructive: true });
+    if (!ok) return;
     setLoading('cleanup');
-    try { await dbUtils.cleanupDatabase(); void fetchStats(); alert('Database pulito!'); } catch { alert('Errore pulizia'); }
+    try { await dbUtils.cleanupDatabase(); void fetchStats(); addToast({ type: 'success', title: 'Database pulito!' }); } catch { addToast({ type: 'error', title: 'Errore pulizia' }); }
     finally { setLoading(null); }
   };
 
   const handlePopulate = async () => {
     setLoading('populate');
-    try { await dbUtils.populateDemoData(); void fetchStats(); alert('Dati demo ripristinati!'); }
-    catch { alert('Errore salvataggio'); }
+    try { await dbUtils.populateDemoData(); void fetchStats(); addToast({ type: 'success', title: 'Dati demo ripristinati!' }); }
+    catch { addToast({ type: 'error', title: 'Errore salvataggio' }); }
     finally { setLoading(null); }
   };
 
@@ -305,7 +310,7 @@ export default function TabletDashboardView() {
                                   setEditUserRole(user.role);
                                 }} className="text-[10px] font-black text-gray-500 hover:text-gold uppercase">Modifica</button>
                                 {currentUser?.role === 'admin' && user.id !== currentUser.id && (
-                                  <button onClick={() => { if (confirm(`Eliminare ${user.name}?`)) { removeStaffUser(user.id); setStaffUsers(getStaffUsers()); } }}
+                                  <button onClick={async () => { const ok = await confirm({ title: 'Elimina', message: `Eliminare ${user.name}?`, destructive: true }); if (ok) { removeStaffUser(user.id); setStaffUsers(getStaffUsers()); } }}
                                     className="text-[10px] font-black text-red-500/50 hover:text-red-500 uppercase">Elimina</button>
                                 )}
                               </div>
@@ -322,7 +327,7 @@ export default function TabletDashboardView() {
                     </h3>
                     <div className="space-y-4">
                       <button
-                        onClick={() => { if (confirm('Uscire dall\'area staff? Dovrai reinserire il PIN.')) staffLogout(); }}
+                        onClick={async () => { const ok = await confirm({ title: 'Uscita', message: 'Uscire dall\'area staff? Dovrai reinserire il PIN.' }); if (ok) staffLogout(); }}
                         className="w-full bg-charcoal border border-red-500/30 hover:border-red-500/50 p-5 rounded-3xl flex items-center justify-center gap-3 text-red-400 font-black text-xs uppercase tracking-widest transition-colors"
                       >
                         <LogOut size={18} /> Esci dall&apos;area staff
