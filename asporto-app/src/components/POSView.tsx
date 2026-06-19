@@ -493,12 +493,17 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const handleFreeTable = async () => {
     if (!tableId) return;
-    if (!requireManagerPin('liberare il tavolo senza vendita')) return;
+    if (!(await requireManagerPin('liberare il tavolo senza vendita'))) return;
     const ok = await confirm({ title: 'Libera tavolo', message: 'Liberare il tavolo elimina la comanda corrente senza registrare una vendita. Continuare?', destructive: true });
     if (!ok) return;
 
     localUpdateRef.current = true;
     try {
+      if (activeOrderId) {
+        await syncManager.pushOrder({ id: activeOrderId, status: 'COMPLETATO' as const });
+      } else if (tableName) {
+        await syncManager.pushOrder({ nome_cliente: tableName, status: 'COMPLETATO' as const, totale: 0, carrello: [], orario_ritiro: '' });
+      }
       await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
       setActiveOrderId(null);
       setCart([]);

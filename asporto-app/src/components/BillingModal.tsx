@@ -50,7 +50,7 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
     setCustomerAddress('');
     setCompanyName('');
     setPaymentMethod('contanti');
-    setDocNumber(generateDocNumber());
+    generateDocNumber().then(setDocNumber);
     setDocDate(new Date().toISOString().split('T')[0]);
 
     if (!IS_DEMO_MODE) {

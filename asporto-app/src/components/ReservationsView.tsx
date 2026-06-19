@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Reservation, Tavolo } from '../types/entities';
-import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, LayoutDashboard, ArrowLeft } from 'lucide-react';
+import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, ArrowLeft } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 

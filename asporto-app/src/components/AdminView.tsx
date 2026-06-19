@@ -8,7 +8,6 @@ import { getProductVariants, saveProductVariants, type ProductVariant } from '..
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
 import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
-import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
 import CategoryFilterBar from './CategoryFilterBar';
 
@@ -18,7 +17,6 @@ interface AdminViewProps {
 
 export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const { confirm } = useConfirm();
-  const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -218,7 +216,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
   const deleteIngredient = async (id: string) => {
     if (!supabase) return;
-    if (!requireManagerPin('eliminare una aggiunta')) return;
+    if (!(await requireManagerPin('eliminare una aggiunta'))) return;
     const ok = await confirm({ title: 'Elimina aggiunta', message: 'Sei sicuro di voler eliminare questa aggiunta?', destructive: true });
     if (ok) {
         await supabase.from('ingredienti').delete().eq('id', id);
@@ -228,7 +226,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
   const deleteProduct = async (id: string) => {
     if (!supabase) return;
-    if (!requireManagerPin('eliminare un prodotto')) return;
+    if (!(await requireManagerPin('eliminare un prodotto'))) return;
     const ok = await confirm({ title: 'Elimina prodotto', message: 'Sei sicuro di voler eliminare questo prodotto?', destructive: true });
     if (ok) {
         await supabase.from('prodotti').delete().eq('id', id);
@@ -665,11 +663,9 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                     className={`${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-xl py-2.5 px-4 text-white font-bold text-sm outline-none transition-all`}
                   >
                     <option value="">Tutte le categorie</option>
-                    <option value="Pizze">Pizze</option>
-                    <option value="Antipasti">Antipasti</option>
-                    <option value="Primi">Primi</option>
-                    <option value="Secondi">Secondi</option>
-                    <option value="Contorni">Contorni</option>
+                    {allCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
                   </select>
                   <button
                     onClick={() => {

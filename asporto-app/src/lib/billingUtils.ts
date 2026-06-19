@@ -250,9 +250,24 @@ export async function fetchCompletedOrders(): Promise<{ id: string; nome_cliente
   return data;
 }
 
-export function generateDocNumber(): string {
+export async function generateDocNumber(): Promise<string> {
   const now = new Date();
   const year = now.getFullYear();
+
+  if (supabase) {
+    const { data } = await supabase
+      .from('documenti_emessi')
+      .select('doc_number')
+      .like('doc_number', `Doc-${year}-%`)
+      .order('doc_number', { ascending: false })
+      .limit(1);
+    const lastNum = data && data.length > 0
+      ? parseInt((data[0] as { doc_number: string }).doc_number.split('-').pop() || '0', 10)
+      : 0;
+    const next = lastNum + 1;
+    return `Doc-${year}-${String(next).padStart(3, '0')}`;
+  }
+
   const seq = localStorage.getItem('doc_number_seq') || '0';
   const next = parseInt(seq, 10) + 1;
   localStorage.setItem('doc_number_seq', String(next));

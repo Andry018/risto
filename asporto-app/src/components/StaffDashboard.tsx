@@ -7,7 +7,7 @@ import {
   BellRing, Utensils, Tags, FilePlus, Zap, History, PauseCircle,
   Settings, ChevronRight, ArrowRight, UserPlus, Table2, X
 } from 'lucide-react';
-import { requireManagerPin } from '../lib/staffAuth';
+import { requireManagerPin, getManagerPin, setManagerPin } from '../lib/staffAuth';
 import { dbUtils } from '../lib/DatabaseUtils';
 import { useConfirm } from '../components/ConfirmModal';
 import { useToast } from '../components/Toast';
@@ -30,6 +30,8 @@ export default function StaffDashboard() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
   const [printDeltaQty, setPrintDeltaQty] = useState(() => localStorage.getItem('risto_print_delta_qty') === 'true');
+  const [newPin, setNewPin] = useState('');
+  const [confirmNewPin, setConfirmNewPin] = useState('');
 
   const handleTestConnection = async () => {
     setIsTestingConnection(true);
@@ -86,7 +88,7 @@ export default function StaffDashboard() {
     }
   };
   const handleCleanup = async () => {
-    if (!requireManagerPin('svuotare il database')) return;
+    if (!(await requireManagerPin('svuotare il database'))) return;
     const ok = await confirm({ title: 'Pulisci database', message: 'Eliminare TUTTI gli ordini e resettare i tavoli?', destructive: true });
     if (!ok) return;
     setLoadingAction('cleanup');
@@ -95,7 +97,7 @@ export default function StaffDashboard() {
   };
 
   const handlePopulate = async () => {
-    if (!requireManagerPin('ripristinare i dati demo')) return;
+    if (!(await requireManagerPin('ripristinare i dati demo'))) return;
     setLoadingAction('populate');
     try { await dbUtils.populateDemoData(); addToast({ type: 'success', title: 'Dati demo ripristinati!' }); }
     catch { addToast({ type: 'error', title: 'Errore salvataggio' }); }
@@ -372,82 +374,117 @@ export default function StaffDashboard() {
 
       {/* Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-surface border border-surface-light w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
-             <button onClick={() => setIsSettingsOpen(false)} className="absolute top-6 right-6 z-10 w-10 h-10 flex items-center justify-center bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light transition cursor-pointer">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[32px] shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+             <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light transition cursor-pointer">
                <X size={20} />
              </button>
-             <div className="p-6 md:p-8">
-               <h2 className="text-2xl font-bold text-white mb-6">Impostazioni & Azioni</h2>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="space-y-4">
-                    <div className="border border-surface-light rounded-2xl p-4 bg-charcoal/40 space-y-3">
-                      <div>
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Stampa LAN</p>
-                        <h3 className="text-lg font-black text-white mt-1">Test connessione</h3>
-                      </div>
-                      <p className="text-xs text-gray-300 leading-relaxed">
-                        Configura Print Agent nel file <strong className="text-white">.env</strong> (<strong className="text-white">VITE_PRINT_AGENT_URL</strong>, <strong className="text-white">VITE_PRINTER_IP</strong>, <strong className="text-white">VITE_PRINTER_PORT</strong>).
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={handleTestConnection}
-                          disabled={isTestingConnection}
-                          className="flex-1 bg-gold hover:bg-gold-hover text-black p-3 rounded-xl font-bold text-xs transition cursor-pointer disabled:opacity-60"
-                        >
-                          {isTestingConnection ? 'Test in corso...' : 'Test connessione'}
-                        </button>
-                        <div className="flex-1 min-h-[48px] rounded-xl border border-surface-light px-3 py-2 text-xs font-bold flex items-center text-white">
-                          {connectionTestMessage || 'Stato stampante'}
-                        </div>
-                      </div>
-                    </div>
+             <div className="p-6">
+               <h2 className="text-xl font-black text-white mb-6">Impostazioni</h2>
+               <div className="space-y-4">
 
-                    <div className="border border-surface-light rounded-2xl p-4 bg-charcoal/40 space-y-3">
-                      <div>
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Aggiornamento comande</p>
-                        <h3 className="text-lg font-black text-white mt-1">Ristampa quantità</h3>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-300 leading-relaxed">
-                          Quando si cambia la quantità di un piatto già in comanda, stampa l'aggiunta in cucina
-                        </p>
-                        <button
-                          onClick={() => {
-                            const next = !printDeltaQty;
-                            setPrintDeltaQty(next);
-                            localStorage.setItem('risto_print_delta_qty', String(next));
-                          }}
-                          className={`relative w-14 h-8 rounded-full transition-all shrink-0 ml-4 ${printDeltaQty ? 'bg-gold' : 'bg-surface-light/40'}`}
-                        >
-                          <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${printDeltaQty ? 'left-7' : 'left-1'}`} />
-                        </button>
-                      </div>
-                    </div>
+                 <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Stampa LAN</p>
+                   <h3 className="text-base font-black text-white mb-3">Test connessione</h3>
+                   <p className="text-xs text-gray-400 mb-3">
+                     Configura nel file <strong className="text-white">.env</strong>: <strong className="text-white">VITE_PRINT_AGENT_URL</strong>, <strong className="text-white">VITE_PRINTER_IP</strong>, <strong className="text-white">VITE_PRINTER_PORT</strong>
+                   </p>
+                   <div className="flex items-center gap-2">
+                     <button
+                       onClick={handleTestConnection}
+                       disabled={isTestingConnection}
+                       className="bg-gold hover:bg-gold-hover text-black px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer disabled:opacity-60"
+                     >
+                       {isTestingConnection ? 'Test in corso...' : 'Test connessione'}
+                     </button>
+                     <div className="flex-1 min-h-[42px] rounded-xl border border-surface-light px-3 py-2 text-xs font-bold flex items-center text-white">
+                       {connectionTestMessage || 'Stato stampante'}
+                     </div>
+                   </div>
                  </div>
 
-                 <div className="space-y-4">
+                 <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Comande</p>
+                   <h3 className="text-base font-black text-white mb-3">Ristampa quantità</h3>
+                   <div className="flex items-center justify-between">
+                     <p className="text-sm text-gray-300">
+                       Quando si cambia la quantità di un piatto già in comanda, stampa l'aggiunta in cucina
+                     </p>
+                     <button
+                       onClick={() => {
+                         const next = !printDeltaQty;
+                         setPrintDeltaQty(next);
+                         localStorage.setItem('risto_print_delta_qty', String(next));
+                       }}
+                       className={`relative w-14 h-8 rounded-full transition-all shrink-0 ml-4 ${printDeltaQty ? 'bg-gold' : 'bg-surface-light/40'}`}
+                     >
+                       <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${printDeltaQty ? 'left-7' : 'left-1'}`} />
+                     </button>
+                   </div>
+                 </div>
+
+                 <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
+                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Sicurezza</p>
+                   <h3 className="text-base font-black text-white mb-3">Cambia PIN</h3>
+                   <div className="space-y-2">
+                     <div className="flex items-center gap-2">
+                       <input
+                         type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                         placeholder="Nuovo PIN (4-6 cifre)"
+                         value={newPin}
+                         onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                         className="w-full bg-charcoal border border-surface-light rounded-xl px-3 py-2.5 text-sm text-white font-bold text-center placeholder:text-gray-600 focus:outline-none focus:border-gold/50"
+                       />
+                       <input
+                         type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                         placeholder="Conferma PIN"
+                         value={confirmNewPin}
+                         onChange={e => setConfirmNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                         className="w-full bg-charcoal border border-surface-light rounded-xl px-3 py-2.5 text-sm text-white font-bold text-center placeholder:text-gray-600 focus:outline-none focus:border-gold/50"
+                       />
+                        <button
+                          onClick={async () => {
+                            if (newPin.length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
+                            if (newPin !== confirmNewPin) { addToast({ type: 'error', title: 'PIN non corrispondono', message: 'I due PIN non coincidono' }); return; }
+                            if (await requireManagerPin('cambiare il PIN')) {
+                              setManagerPin(newPin);
+                              setNewPin('');
+                              setConfirmNewPin('');
+                              addToast({ type: 'success', title: 'PIN cambiato', message: `Nuovo PIN: ${newPin}` });
+                            }
+                          }}
+                          className="bg-gold hover:bg-gold-hover text-black shrink-0 px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
+                        >
+                          Salva
+                        </button>
+                     </div>
+                     <p className="text-[10px] text-gray-500 font-bold">Il PIN attuale è richiesto per azioni sensibili (svuota DB, cambio PIN)</p>
+                   </div>
+                 </div>
+
+                 <div className="flex flex-col sm:flex-row gap-2">
                    <button
                      onClick={() => { setIsSettingsOpen(false); navigate('/reports'); }}
-                     className="w-full bg-surface-light/40 border border-gold/30 text-gold p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gold/10 transition cursor-pointer"
+                     className="flex-1 bg-surface-light/40 border border-gold/30 text-gold py-3 rounded-xl font-bold text-xs text-center hover:bg-gold/10 transition cursor-pointer"
                    >
                      Report e Statistiche
                    </button>
                    <button
                      onClick={handleCleanup}
                      disabled={loadingAction === 'cleanup'}
-                     className="w-full bg-surface-light/40 border border-red-500/30 text-red-400 p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-red-500/10 transition cursor-pointer"
+                     className="flex-1 bg-surface-light/40 border border-red-500/30 text-red-400 py-3 rounded-xl font-bold text-xs text-center hover:bg-red-500/10 transition cursor-pointer disabled:opacity-60"
                    >
                      {loadingAction === 'cleanup' ? 'Pulizia...' : 'Svuota Database'}
                    </button>
                    <button
                      onClick={handlePopulate}
                      disabled={loadingAction === 'populate'}
-                     className="w-full bg-surface-light/40 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-emerald-500/10 transition cursor-pointer"
+                     className="flex-1 bg-surface-light/40 border border-emerald-500/30 text-emerald-400 py-3 rounded-xl font-bold text-xs text-center hover:bg-emerald-500/10 transition cursor-pointer disabled:opacity-60"
                    >
                      {loadingAction === 'populate' ? 'Ripristino...' : 'Ripristina Dati Demo'}
                    </button>
                  </div>
+
                </div>
              </div>
           </div>

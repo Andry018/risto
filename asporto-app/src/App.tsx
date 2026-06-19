@@ -17,6 +17,8 @@ import DatabaseStatusGuard from './components/DatabaseStatusGuard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { ConfirmProvider } from './components/ConfirmModal';
+import { PinProvider } from './components/PinModal';
+import { PromptProvider } from './components/PromptModal';
 
 function RootRoute() {
   return isTablet() ? <StaffDashboard /> : <WaiterMobileView />;
@@ -29,6 +31,8 @@ export default function App() {
       <DatabaseStatusGuard>
         <ToastProvider>
         <ConfirmProvider>
+        <PinProvider>
+        <PromptProvider>
         <ExitGuard>
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
@@ -45,6 +49,8 @@ export default function App() {
           <Route path="/reservations" element={<ReservationsView />} />
         </Routes>
         </ExitGuard>
+        </PromptProvider>
+        </PinProvider>
         </ConfirmProvider>
         </ToastProvider>
       </DatabaseStatusGuard>

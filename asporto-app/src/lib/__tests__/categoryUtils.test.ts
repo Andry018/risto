@@ -1,16 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { getCategoryOrder, saveCategoryOrder, resetCategoryOrder, sortCategories } from '../categoryUtils';
 
-const STORAGE_KEY = 'risto_category_order';
-
 describe('categoryUtils', () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
   describe('getCategoryOrder / saveCategoryOrder', () => {
-    it('ritorna ordine vuoto di default', () => {
-      expect(getCategoryOrder()).toEqual([]);
+    it('ritorna default vuoto se localStorage vuoto', () => {
+      const order = getCategoryOrder();
+      expect(order.length).toBeGreaterThan(0);
     });
 
     it('salva e recupera ordine', () => {
@@ -20,22 +19,24 @@ describe('categoryUtils', () => {
   });
 
   describe('resetCategoryOrder', () => {
-    it('resetta a array vuoto', () => {
+    it('resetta a default', () => {
       saveCategoryOrder(['A', 'B']);
       resetCategoryOrder();
-      expect(getCategoryOrder()).toEqual([]);
+      expect(getCategoryOrder().length).toBeGreaterThan(0);
     });
   });
 
   describe('sortCategories', () => {
-    it('mantiene ordine se tutte presenti nella reference', () => {
-      const result = sortCategories(['C', 'A', 'B'], ['A', 'B', 'C']);
-      expect(result).toEqual(['A', 'B', 'C']);
+    it('ordina secondo l ordine salvato', () => {
+      saveCategoryOrder(['Antipasti', 'Primi', 'Secondi']);
+      const result = sortCategories(['Secondi', 'Antipasti', 'Primi']);
+      expect(result).toEqual(['Antipasti', 'Primi', 'Secondi']);
     });
 
-    it('mette alla fine categorie non in reference', () => {
-      const result = sortCategories(['Z', 'A', 'X'], ['A']);
-      expect(result[0]).toBe('A');
+    it('mette alla fine categorie non in ordine', () => {
+      saveCategoryOrder(['Antipasti']);
+      const result = sortCategories(['Z', 'Antipasti', 'X']);
+      expect(result[0]).toBe('Antipasti');
       expect(result).toContain('Z');
       expect(result).toContain('X');
     });

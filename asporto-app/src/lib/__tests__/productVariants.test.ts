@@ -35,7 +35,7 @@ describe('productVariants', () => {
     });
 
     it('salva e recupera varianti personalizzate', () => {
-      const custom = [{ id: 'v1', label: 'Test', price: 1, categories: 'Pizze', section: 'EXTRA', style: 'gold', stackable: false, order: 1 }];
+      const custom = [{ id: 'v1', label: 'Test', price: 1, categories: 'Pizze', section: 'EXTRA', style: 'gold' as const, stackable: false, order: 1 }];
       saveProductVariants(custom);
       expect(getProductVariants()).toEqual(custom);
     });

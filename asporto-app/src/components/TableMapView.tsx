@@ -3,21 +3,23 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Tavolo, Reservation } from '../types/entities';
 import { MOCK_TABLES } from '../lib/MockData';
-import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2 } from 'lucide-react';
+import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart, LayoutDashboard, BookOpen, Minus, MapPin, CheckCircle2, Clock, Lock, Unlock } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
+import { usePrompt } from './PromptModal';
 import { useToast } from './Toast';
 
 const SALE = ['Principale', 'Verde', 'Rotonda', 'Terrazza'];
 
 export default function TableMapView({ onSelectTable, freedTableIds, onNavigateHome }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string>; onNavigateHome?: () => void }) {
   const { confirm } = useConfirm();
+  const { prompt } = usePrompt();
   const { addToast } = useToast();
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
   const [activeSala, setActiveSala] = useState(SALE[0]);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
   const [editingTable, setEditingTable] = useState<Tavolo | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [isEditLayoutMode, setIsEditLayoutMode] = useState(false);
+  const [dragLocked, setDragLocked] = useState(true);
   const [quickCoversModal, setQuickCoversModal] = useState<Tavolo | null>(null);
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
   const [transferTable, setTransferTable] = useState<Tavolo | null>(null);
@@ -40,15 +42,12 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   async function fetchTavoli() {
     if (IS_DEMO_MODE) {
-      console.log('[TableMapView] Loading tables in DEMO mode');
       setTavoli(MOCK_TABLES);
       return;
     }
     if (!supabase) {
-      console.error('[TableMapView] Supabase client is null!');
       return;
     }
-    console.log('[TableMapView] Fetching tables from Supabase...');
     try {
       const { data, error } = await supabase.from('tavoli').select('*').order('nome', { ascending: true });
       if (error) {
@@ -56,7 +55,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
         return;
       }
       if (data) {
-        console.log(`[TableMapView] Successfully loaded ${data.length} tables from DB`);
         setTavoli(data);
         const aperturaMap: Record<string, string> = {};
         await Promise.all(data.map(async (t) => {
@@ -70,19 +68,13 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                 .order('created_at', { ascending: true })
                 .limit(1)
                 .maybeSingle();
-              if (ordErr) {
-                console.warn(`[TableMapView] Error fetching open order for ${t.nome}:`, ordErr.message);
-              } else if (ord?.created_at) {
+              if (!ordErr && ord?.created_at) {
                 aperturaMap[t.id] = ord.created_at;
               }
-            } catch (err: any) {
-              console.warn(`[TableMapView] Exception fetching open order for ${t.nome}:`, err.message || err);
-            }
+            } catch { /* skip */ }
           }
         }));
         setTableApertura(prev => ({ ...prev, ...aperturaMap }));
-      } else {
-        console.warn('[TableMapView] No table data returned from database');
       }
     } catch (err: any) {
       console.error('[TableMapView] Exception during fetchTavoli:', err.message || err);
@@ -127,10 +119,18 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
   };
 
   const addTable = async () => {
-    const newName = `Tavolo ${tavoli.length + 1}`;
     if (!supabase) return;
+    const existingNames = tavoli.map(t => t.nome);
+    let suggest = 1;
+    while (existingNames.includes(`Tavolo ${suggest}`)) suggest++;
+    const name = await prompt({ title: 'Nuovo tavolo', message: 'Inserisci il nome del tavolo:', defaultValue: `Tavolo ${suggest}` });
+    if (!name) return;
+    if (existingNames.includes(name)) {
+      addToast({ type: 'error', title: 'Nome già esistente', message: `Esiste già un tavolo chiamato "${name}"` });
+      return;
+    }
     await supabase.from('tavoli').insert([{
-      nome: newName,
+      nome: name,
       x: 10,
       y: 10,
       clienti: 0,
@@ -251,9 +251,9 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   const handlePointerDown = (id: string, e: React.PointerEvent) => {
     if (viewMode === 'LIST') return;
+    if (dragLocked) return;
     pointerDownPos.current = { x: e.clientX, y: e.clientY };
     pointerDownTime.current = e.timeStamp;
-    if (!isEditLayoutMode) return;
     setDraggingId(id);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
@@ -345,13 +345,6 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
           </button>
           <div className="hidden sm:block w-px h-8 bg-surface-light mx-1" />
           <button
-            onClick={() => setIsEditLayoutMode(!isEditLayoutMode)}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-sm transition-all border ${isEditLayoutMode ? 'bg-gold text-black border-gold shadow-lg shadow-gold/20' : 'bg-charcoal text-gray-500 border-surface-light'}`}
-          >
-            {isEditLayoutMode ? <Save size={16} /> : <Edit2 size={16} />} 
-            <span className="hidden sm:inline">{isEditLayoutMode ? 'SALVA' : 'LAYOUT'}</span>
-          </button>
-          <button
             onClick={() => setIsReservationsOpen(true)}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-surface border border-surface-light text-gold rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95"
           >
@@ -419,23 +412,20 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                       );
                       const duration = e.timeStamp - pointerDownTime.current;
                       if (dist < 10 && duration < 500) {
-                        if (isEditLayoutMode) {
-                          setEditingTable(tavolo);
-                        } else {
-                           if (transferTable) {
-                             handleTransfer(transferTable, tavolo);
-                             return;
-                           }
-                           if (tavolo.status === 'OCCUPATO') {
-                            if (onSelectTable) onSelectTable(tavolo.id, tavolo.nome, tavolo.status);
-                            else navigate(`/pos?tableId=${tavolo.id}&tableName=${encodeURIComponent(tavolo.nome)}`);
-                          } else {
-                            setQuickCoversModal(tavolo);
+                          if (transferTable) {
+                            handleTransfer(transferTable, tavolo);
+                            return;
                           }
-                        }
+                          if (tavolo.status === 'OCCUPATO') {
+                           if (onSelectTable) onSelectTable(tavolo.id, tavolo.nome, tavolo.status);
+                           else navigate(`/pos?tableId=${tavolo.id}&tableName=${encodeURIComponent(tavolo.nome)}`);
+                         } else {
+                           setQuickCoversModal(tavolo);
+                         }
                       }
                     }}
                     className={`
+                      group
                       ${tavolo.shape === 'ROUND' ? 'rounded-full' : 'rounded-2xl'}
                       ${tavolo.shape === 'RECTANGLE' ? 'w-48 h-24' : 'w-24 h-24'}
                       flex flex-col items-center justify-center p-2 shadow-2xl border-2 transition-all
@@ -467,7 +457,8 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
                       )}
                     {tavolo.status === 'OCCUPATO' && tableApertura[tavolo.id] && (
-                      <div className="mt-1 px-2 py-0.5 bg-black/40 rounded-full text-[8px] font-black text-emerald-400">
+                      <div className="flex items-center gap-1 mt-1 px-2 py-1 bg-amber-500/20 border border-amber-500/30 rounded-full text-[9px] font-black text-amber-400">
+                        <Clock size={9} />
                         {(() => {
                           const diff = now - new Date(tableApertura[tavolo.id]).getTime();
                           const mins = Math.floor(diff / 60000);
@@ -493,12 +484,14 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                         <BookOpen size={10} /> P
                       </button>
                     )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingTable(tavolo); }}
+                      className="absolute -bottom-1 -left-1 w-6 h-6 bg-surface border border-surface-light rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-400 shadow-lg transition-all active:scale-90 z-20"
+                      title="Configura tavolo"
+                    >
+                      <Edit2 size={11} />
+                    </button>
                   </div>
-                  {isEditLayoutMode && (
-                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-gold rounded-full flex items-center justify-center text-black animate-bounce shadow-lg">
-                      <Edit2 size={10} />
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -539,6 +532,14 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
             </div>
           </div>
         )}
+
+        <button
+          onClick={() => setDragLocked(!dragLocked)}
+          className={`absolute bottom-3 right-3 z-30 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90 border ${dragLocked ? 'bg-gold text-black border-gold' : 'bg-charcoal text-gray-400 border-surface-light'}`}
+          title={dragLocked ? 'Blocca posizione: attivo — Tocca per spostare i tavoli' : 'Blocca posizione: disattivo — I tavoli si spostano'}
+        >
+          {dragLocked ? <Lock size={14} /> : <Unlock size={14} />}
+        </button>
 
       </div>
 
@@ -672,11 +673,15 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                    <MapPin size={20} /> SPOSTA ORDINE / TAVOLO
                  </button>
                  <button
-                   onClick={() => { updateTable(editingTable.id, editingTable); setEditingTable(null); }}
-                   className="w-full bg-gold text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-2 shadow-xl"
-                 >
-                   <Save size={20} /> SALVA CONFIGURAZIONE
-                 </button>
+                    onClick={() => {
+                      const dup = tavoli.find(t => t.id !== editingTable.id && t.nome === editingTable.nome);
+                      if (dup) { addToast({ type: 'error', title: 'Nome già esistente', message: `Esiste già un tavolo chiamato "${editingTable.nome}"` }); return; }
+                      updateTable(editingTable.id, editingTable); setEditingTable(null);
+                    }}
+                    className="w-full bg-gold text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-2 shadow-xl"
+                  >
+                    <Save size={20} /> SALVA CONFIGURAZIONE
+                  </button>
                 <button
                   onClick={() => { deleteTable(editingTable.id); setEditingTable(null); }}
                   className="w-full bg-red-500/10 text-red-500 font-black py-3 rounded-2xl text-xs uppercase tracking-widest mt-2"

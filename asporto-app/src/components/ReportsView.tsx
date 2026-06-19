@@ -9,6 +9,7 @@ import BillingModal from './BillingModal';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { deleteDocument } from '../lib/billingUtils';
+import { freeTableById } from '../lib/tableOrderUtils';
 
 type Period = 'today' | 'week' | 'month';
 
@@ -202,9 +203,12 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
               </div>
               <button
                 onClick={async () => {
-                  const ok = await confirm({ title: 'Chiusura giornaliera', message: `Ordini completati: ${stats.totalOrders}\nIncasso totale: €${stats.totalRevenue.toFixed(2)}\nIn attesa: ${stats.pendingCount}\n\nTutti i tavoli OCCUPATO verranno liberati.`, destructive: true });
+                  const doBackup = await confirm({ title: 'Backup consigliato', message: 'Prima di chiudere la giornata, esegui un backup del database.\n\nAndare su Impostazioni → Backup ora?\n\nOppure procedere con la chiusura?', confirmLabel: 'Chiudi GIORNATA', cancelLabel: 'Annulla', destructive: true });
+                  if (!doBackup) return;
+                  const ok = await confirm({ title: 'Conferma chiusura', message: `Chiudere la giornata?\n\nOrdini completati: ${stats.totalOrders}\nIncasso totale: €${stats.totalRevenue.toFixed(2)}\n\nTutti i tavoli OCCUPATO verranno liberati.`, destructive: true });
                   if (!ok) return;
                   if (!supabase) { addToast({ type: 'warning', title: 'Modalità demo', message: 'Nessuna azione eseguita' }); return; }
+                  await supabase.from('ordini').update({ status: 'COMPLETATO' }).eq('status', 'IN_ATTESA');
                   const { error } = await supabase.from('tavoli').update({ status: 'LIBERO' }).eq('status', 'OCCUPATO');
                   if (error) { addToast({ type: 'error', title: 'Errore', message: error.message }); return; }
                   addToast({ type: 'success', title: 'Giornata chiusa!', message: `€${stats.totalRevenue.toFixed(2)} incasso · ${stats.totalOrders} ordini · Tavoli liberati.` });

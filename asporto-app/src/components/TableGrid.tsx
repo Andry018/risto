@@ -1,5 +1,5 @@
 import type { Tavolo } from '../types/entities';
-import { Users } from 'lucide-react';
+import { Users, Clock } from 'lucide-react';
 
 interface Props {
   tables: Tavolo[];
@@ -46,7 +46,9 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, onSe
               <div className="text-[10px] uppercase font-black tracking-widest opacity-60">{table.status}</div>
               <div className="flex items-center gap-1 text-xs"><Users size={10} /> {table.clienti}</div>
               {table.status === 'OCCUPATO' && elapsedStr(table, tableApertura, now) && (
-                <div className="text-[8px] font-black text-gold/70 uppercase tracking-widest mt-1">{elapsedStr(table, tableApertura, now)}</div>
+                <div className="flex items-center gap-1 text-[10px] font-black text-amber-400 mt-1">
+                  <Clock size={10} /> {elapsedStr(table, tableApertura, now)}
+                </div>
               )}
             </button>
           ))}

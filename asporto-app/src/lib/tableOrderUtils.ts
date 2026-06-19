@@ -1,8 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
+ * Completa tutti gli ordini IN_ATTESA per un dato nome cliente/tavolo.
+ */
+async function completeOrdersForTableName(
+  client: SupabaseClient,
+  nomeCliente: string
+): Promise<void> {
+  await client
+    .from('ordini')
+    .update({ status: 'COMPLETATO' })
+    .eq('nome_cliente', nomeCliente)
+    .eq('status', 'IN_ATTESA');
+}
+
+/**
+ * Libera il tavolo e completa tutti gli ordini IN_ATTESA associati.
  * I conti al tavolo usano `ordini.nome_cliente === tavoli.nome`.
- * Quando un ordine passa a COMPLETATO, se esiste un tavolo con quel nome lo liberiamo.
  */
 export async function releaseTableIfMatchesOrderName(
   client: SupabaseClient,
@@ -19,13 +33,13 @@ export async function releaseTableIfMatchesOrderName(
 
   if (!tavolo) return;
 
-  await client
-    .from('tavoli')
-    .update({ status: 'LIBERO', clienti: 0 })
-    .eq('id', tavolo.id);
+  await Promise.all([
+    client.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', tavolo.id),
+    completeOrdersForTableName(client, trimmed),
+  ]);
 }
 
-/** Completa l'ordine e, se era legato a un tavolo in sala, libera il tavolo. */
+/** Completa l'ordine e, se era legato a un tavolo in sala, libera il tavolo e completa gli altri ordini per quel tavolo. */
 export async function completeKitchenOrder(
   client: SupabaseClient,
   orderId: string
@@ -40,4 +54,26 @@ export async function completeKitchenOrder(
 
   await client.from('ordini').update({ status: 'COMPLETATO' }).eq('id', orderId);
   await releaseTableIfMatchesOrderName(client, order.nome_cliente);
+}
+
+/**
+ * Helper per liberare un tavolo via ID — completa anche tutti gli ordini IN_ATTESA.
+ * Versione per chiamate dirette (non OfflineSync) come TableMapView, ReportsView.
+ */
+export async function freeTableById(
+  client: SupabaseClient,
+  tableId: string
+): Promise<{ nome: string } | null> {
+  const { data: tavolo } = await client
+    .from('tavoli')
+    .select('nome')
+    .eq('id', tableId)
+    .maybeSingle();
+  if (!tavolo) return null;
+
+  await Promise.all([
+    client.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', tableId),
+    completeOrdersForTableName(client, tavolo.nome),
+  ]);
+  return tavolo;
 }

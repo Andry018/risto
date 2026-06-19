@@ -25,6 +25,7 @@ import SyncStatusIndicator from './SyncStatusIndicator';
 import PrinterStatusBadge from './PrinterStatusBadge';
 import OrderHistoryModal from './OrderHistoryModal';
 import { parseAperturaFromNote, setAperturaInNote } from '../lib/tableUtils';
+import { notifyNewOrder } from '../lib/notify';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
 import PaninoBuilderModal from './PaninoBuilderModal';
@@ -267,11 +268,13 @@ export default function WaiterMobileView() {
     const productsChannel = sb.channel('public:prodotti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts()).subscribe();
     const ingredientsChannel = sb.channel('public:ingredienti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients()).subscribe();
     const prenotazioniChannel = sb.channel('public:prenotazioni-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prenotazioni' }, () => void fetchReservationsForDate()).subscribe();
+    const ordiniNotifyChannel = sb.channel('public:ordini-notify-waiter').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, () => { notifyNewOrder(); void fetchTables(); }).subscribe();
     return () => {
       sb.removeChannel(tablesChannel);
       sb.removeChannel(productsChannel);
       sb.removeChannel(ingredientsChannel);
       sb.removeChannel(prenotazioniChannel);
+      sb.removeChannel(ordiniNotifyChannel);
     };
   }, []);
 
@@ -891,8 +894,19 @@ export default function WaiterMobileView() {
             <button onClick={() => { if (selectedTable && cart.length > 0) saveDraft(selectedTable.id, cart, selectedTable.clienti || 2); setSelectedTable(null); }} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
             <div className="flex flex-col items-center">
               <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-3 mt-1">
                 <span className="text-[8px] font-black text-gold uppercase tracking-[0.2em]">Coperti: {selectedTable.clienti}</span>
+                {selectedTable.status === 'OCCUPATO' && tableApertura[selectedTable.id] && (
+                  <span className="flex items-center gap-1 text-[8px] font-black text-amber-400 uppercase tracking-[0.2em]">
+                    <Clock size={10} /> {(() => {
+                      const diff = now - new Date(tableApertura[selectedTable.id]).getTime();
+                      const mins = Math.floor(diff / 60000);
+                      if (mins < 1) return 'Ora';
+                      if (mins < 60) return `${mins}min`;
+                      return `${Math.floor(mins / 60)}h ${mins % 60}min`;
+                    })()}
+                  </span>
+                )}
                 <SyncStatusIndicator />
               </div>
             </div>
