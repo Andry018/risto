@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { ProductVariant } from '../productVariants';
 import {
   getDefaultVariants,
   getProductVariants,
@@ -35,7 +36,7 @@ describe('productVariants', () => {
     });
 
     it('salva e recupera varianti personalizzate', () => {
-      const custom = [{ id: 'v1', label: 'Test', price: 1, categories: 'Pizze', section: 'EXTRA', style: 'gold' as const, stackable: false, order: 1 }];
+      const custom: ProductVariant[] = [{ id: 'v1', label: 'Test', price: 1, categories: 'Pizze', section: 'EXTRA', style: 'gold', stackable: false, order: 1 }];
       saveProductVariants(custom);
       expect(getProductVariants()).toEqual(custom);
     });
@@ -51,15 +52,18 @@ describe('productVariants', () => {
 
   describe('variantMatchesCategoria', () => {
     it('matcha categoria singola', () => {
-      expect(variantMatchesCategoria('Pizze', 'Pizze')).toBe(true);
+      const variant: ProductVariant = { id: 'v1', label: 'Test', price: 0, categories: 'Pizze', section: 'EXTRA', style: 'gold', stackable: false, order: 0 };
+      expect(variantMatchesCategoria('Pizze', variant)).toBe(true);
     });
 
     it('matcha lista separata da virgola', () => {
-      expect(variantMatchesCategoria('Pizze', 'Antipasti,Pizze,Primi')).toBe(true);
+      const variant: ProductVariant = { id: 'v1', label: 'Test', price: 0, categories: 'Antipasti,Pizze,Primi', section: 'EXTRA', style: 'gold', stackable: false, order: 0 };
+      expect(variantMatchesCategoria('Pizze', variant)).toBe(true);
     });
 
     it('non matcha categoria diversa', () => {
-      expect(variantMatchesCategoria('Bevande', 'Pizze,Antipasti')).toBe(false);
+      const variant: ProductVariant = { id: 'v1', label: 'Test', price: 0, categories: 'Pizze,Antipasti', section: 'EXTRA', style: 'gold', stackable: false, order: 0 };
+      expect(variantMatchesCategoria('Bevande', variant)).toBe(false);
     });
   });
 });

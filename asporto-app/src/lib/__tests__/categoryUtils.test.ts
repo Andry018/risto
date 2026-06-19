@@ -40,5 +40,14 @@ describe('categoryUtils', () => {
       expect(result).toContain('Z');
       expect(result).toContain('X');
     });
+
+    it('funziona con array vuoto', () => {
+      expect(sortCategories([])).toEqual([]);
+    });
+
+    it('ritorna le categorie ordinate secondo salvataggio', () => {
+      saveCategoryOrder(['A', 'B', 'C']);
+      expect(sortCategories(['C', 'A', 'B'])).toEqual(['A', 'B', 'C']);
+    });
   });
 });
