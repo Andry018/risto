@@ -7,7 +7,7 @@ import {
   BellRing, Utensils, Tags, FilePlus, Zap, History, PauseCircle,
   Settings, ChevronRight, ArrowRight, UserPlus, Table2, X
 } from 'lucide-react';
-import { requireManagerPin, getManagerPin, setManagerPin } from '../lib/staffAuth';
+import { requireManagerPin, setManagerPin } from '../lib/staffAuth';
 import { dbUtils } from '../lib/DatabaseUtils';
 import { useConfirm } from '../components/ConfirmModal';
 import { useToast } from '../components/Toast';

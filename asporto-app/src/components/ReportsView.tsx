@@ -9,7 +9,6 @@ import BillingModal from './BillingModal';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { deleteDocument } from '../lib/billingUtils';
-import { freeTableById } from '../lib/tableOrderUtils';
 
 type Period = 'today' | 'week' | 'month';
 
