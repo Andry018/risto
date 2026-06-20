@@ -11,6 +11,7 @@ import MenuQRView from './components/MenuQRView';
 import MenuQRPrint from './components/MenuQRPrint';
 import ReportsView from './components/ReportsView';
 import ReservationsView from './components/ReservationsView';
+import EtichettaPage from './components/EtichettaPage';
 import ExitGuard from './components/ExitGuard';
 import { isTablet } from './lib/DeviceUtils';
 import DatabaseStatusGuard from './components/DatabaseStatusGuard';
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/pos" element={<POSView />} />
           <Route path="/reports" element={<ReportsView />} />
           <Route path="/reservations" element={<ReservationsView />} />
+          <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
         </Routes>
         </ExitGuard>
         </PromptProvider>

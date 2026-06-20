@@ -216,6 +216,83 @@ function normalizeDbOrderItems(order) {
   }));
 }
 
+async function stampaEtichettaHaccp(dati) {
+  const printer = createPrinter(resolvePrinterInterface(dati));
+
+  try {
+    printer.println('');
+    printer.println('');
+
+    // Titolo — nome prodotto in grassetto, carattere grande
+    printer.bold(true);
+    printer.setTextDoubleWidth();
+    printer.println((dati.nome_prodotto || '').toUpperCase());
+    printer.setTextNormal();
+    printer.bold(false);
+
+    printer.println('');
+
+    // Allergeni
+    if (dati.allergeni) {
+      printer.bold(true);
+      printer.println('Allergeni Presenti');
+      printer.bold(false);
+      printer.println(dati.allergeni);
+      printer.println('');
+    }
+
+    // Ingredienti
+    if (dati.ingredienti) {
+      printer.bold(true);
+      printer.print('INGREDIENTI: ');
+      printer.bold(false);
+      printer.println(dati.ingredienti);
+      printer.println('');
+    }
+
+    // Conservazione
+    if (dati.conservazione) {
+      printer.bold(true);
+      printer.println('Conservazione');
+      printer.bold(false);
+      printer.println(dati.conservazione);
+      printer.println('');
+    }
+
+    // Riga divisoria leggera
+    printer.drawLine();
+    printer.println('');
+
+    // Piè di pagina — due colonne con date e lotto
+    if (dati.data_preparazione) {
+      printer.leftRight('Preparato il', dati.lotto ? `Lotto: ${dati.lotto}` : '');
+      printer.leftRight(dati.data_preparazione, '');
+    } else if (dati.lotto) {
+      printer.leftRight('', `Lotto: ${dati.lotto}`);
+    }
+    printer.leftRight('Scadenza', '');
+    printer.bold(true);
+    printer.leftRight(dati.data_scadenza || '', '');
+    printer.bold(false);
+    printer.println('');
+
+    // Barcode dal lotto (centrato)
+    if (dati.lotto) {
+      printer.alignCenter();
+      printer.qrcode(dati.lotto);
+      printer.alignLeft();
+      printer.println('');
+    }
+
+    printer.println('');
+    printer.cut();
+    await executePrinter(printer, `Etichetta HACCP ${dati.nome_prodotto}`);
+  } catch (error) {
+    console.error(`[HACCP LABEL ERROR] ${dati.nome_prodotto}`, error);
+    throw error;
+  }
+}
+
 async function printDbOrder(order) {
   const printer = createPrinter(resolvePrinterInterface(order));
   const items = normalizeDbOrderItems(order);
@@ -294,6 +371,8 @@ const server = http.createServer(async (req, res) => {
           await printKitchenJob(job);
         } else if (job.kind === 'receipt') {
           await printReceiptJob(job);
+        } else if (job.kind === 'haccp_label') {
+          await stampaEtichettaHaccp(job);
         } else {
           throw new Error('Unknown print job');
         }

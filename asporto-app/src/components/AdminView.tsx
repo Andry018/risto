@@ -6,10 +6,11 @@ import type { Product, Ingredient } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { getProductVariants, saveProductVariants, type ProductVariant } from '../lib/productVariants';
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
-import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal } from 'lucide-react';
+import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal, ShieldCheck } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import ProductFormModal from './ProductFormModal';
 import CategoryFilterBar from './CategoryFilterBar';
+import HaccpView from './HaccpView';
 
 interface AdminViewProps {
   onNavigateHome?: () => void;
@@ -21,9 +22,9 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
-  const tabFromUrl = searchParams.get('tab') as 'menu' | 'ingredients' | 'removals' | 'variants' | null;
-  const validTabs = ['menu', 'ingredients', 'removals', 'variants'] as const;
-  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals' | 'variants'>(
+  const tabFromUrl = searchParams.get('tab') as 'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp' | null;
+  const validTabs = ['menu', 'ingredients', 'removals', 'variants', 'haccp'] as const;
+  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp'>(
     tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'menu'
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -336,6 +337,24 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               <div className="flex items-center gap-3 font-medium">
                 <SlidersHorizontal size={20} className={activeTab === 'variants' ? (isEmbedded ? 'text-gold' : 'text-sky-400') : ''} />
                 Gestione Varianti
+              </div>
+            </button>
+            <div className={`h-px ${isEmbedded ? 'bg-surface-light/50' : 'bg-slate-800/50'} my-2`} />
+            <button
+              onClick={() => setActiveTab('haccp')}
+              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+                activeTab === 'haccp'
+                  ? isEmbedded
+                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
+                  : isEmbedded
+                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3 font-medium">
+                <ShieldCheck size={20} className={activeTab === 'haccp' ? (isEmbedded ? 'text-gold' : 'text-amber-400') : ''} />
+                HACCP Etichette
               </div>
             </button>
           </nav>
@@ -886,6 +905,12 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   Ripristina varianti predefinite
                 </button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'haccp' && (
+            <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <HaccpView isEmbedded={isEmbedded} />
             </div>
           )}
 

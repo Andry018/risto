@@ -18,7 +18,20 @@ type ReceiptPrintJob = {
   printerPort?: number;
 };
 
-type PrintJob = KitchenPrintJob | ReceiptPrintJob;
+export type HaccpLabelData = {
+  kind: 'haccp_label';
+  nome_prodotto: string;
+  ingredienti: string;
+  allergeni: string;
+  data_scadenza: string;
+  data_preparazione?: string;
+  lotto?: string;
+  conservazione?: string;
+  printerIp?: string;
+  printerPort?: number;
+};
+
+type PrintJob = KitchenPrintJob | ReceiptPrintJob | HaccpLabelData;
 
 function normalizeAgentUrl(agentUrl: string): string {
   const trimmed = agentUrl.trim();
@@ -46,6 +59,10 @@ export async function printReceiptViaAgent(items: CustomizedItem[], tableName: s
     printerIp,
     printerPort,
   }, agentUrl);
+}
+
+export async function printLabelViaAgent(data: HaccpLabelData, agentUrl: string): Promise<void> {
+  await sendPrintJob(data, agentUrl);
 }
 
 async function sendPrintJob(job: PrintJob, agentUrl: string): Promise<void> {
