@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ShieldCheck, Package, Truck, Calendar, Barcode } from 'lucide-react';
+import { ShieldCheck, Truck, Calendar, Barcode } from 'lucide-react';
 
 interface Etichetta {
   id: string;
@@ -37,10 +37,12 @@ export default function EtichettaPage() {
 
   useEffect(() => {
     if (!lotto) { setError('Nessun lotto specificato'); setLoading(false); return; }
+    if (!supabase) { setError('Database non configurato'); setLoading(false); return; }
+    const db = supabase;
 
     (async () => {
       try {
-        const { data: et, error: e1 } = await supabase
+        const { data: et, error: e1 } = await db
           .from('haccp_etichette')
           .select('*')
           .eq('lotto', lotto)
@@ -48,20 +50,20 @@ export default function EtichettaPage() {
         if (e1 || !et) { setError('Etichetta non trovata per questo lotto'); setLoading(false); return; }
         setEtichetta(et);
 
-        const { data: prod } = await supabase
+        const { data: prod } = await db
           .from('haccp_prodotti')
           .select('*')
           .eq('id', et.prodotto_id)
           .single();
         if (prod) setProdotto(prod);
 
-        const { data: links } = await supabase
+        const { data: links } = await db
           .from('haccp_prodotti_fornitori')
           .select('fornitore_id')
           .eq('prodotto_id', et.prodotto_id);
         if (links && links.length > 0) {
           const ids = links.map(l => l.fornitore_id);
-          const { data: forn } = await supabase
+          const { data: forn } = await db
             .from('haccp_fornitori')
             .select('*')
             .in('id', ids);
