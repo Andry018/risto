@@ -55,9 +55,27 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
         return;
       }
       if (data) {
-        setTavoli(data);
-        const aperturaMap: Record<string, string> = {};
+        const today = new Date().toISOString().split('T')[0];
+        const toFree: string[] = [];
         await Promise.all(data.map(async (t) => {
+          if (t.status === 'PRENOTATO') {
+            const { data: prenotazioni } = await supabase!
+              .from('prenotazioni')
+              .select('id')
+              .eq('tavolo_id', t.id)
+              .eq('data', today)
+              .in('status', ['CONFERMATA', 'ARRIVATA'])
+              .maybeSingle();
+            if (!prenotazioni) toFree.push(t.id);
+          }
+        }));
+        for (const id of toFree) {
+          await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', id);
+        }
+        const cleaned = data.map(t => toFree.includes(t.id) ? { ...t, status: 'LIBERO' as Tavolo['status'], clienti: 0 } : t);
+        setTavoli(cleaned);
+        const aperturaMap: Record<string, string> = {};
+        await Promise.all(cleaned.map(async (t) => {
           if (t.status === 'OCCUPATO') {
             try {
               const { data: ord, error: ordErr } = await supabase!
@@ -183,21 +201,20 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
   async function handleSaveReservation() {
     if (!supabase || !resForm.nome || !resForm.data || !resForm.ora) return;
     const payload = { ...resForm };
-    // If tavolo_id is the empty string from the default select option, treat as unassigned
     if (!payload.tavolo_id) delete payload.tavolo_id;
+    const isToday = payload.data === new Date().toISOString().split('T')[0];
     if (reservationModal.reservation) {
       const oldRes = reservationModal.reservation;
       await supabase.from('prenotazioni').update(payload).eq('id', oldRes.id);
-      // If table changed, free old table and prenotate new one
       if (oldRes.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
         await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', oldRes.tavolo_id);
       }
-      if (payload.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
+      if (payload.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id && isToday) {
         await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
       }
     } else {
       await supabase.from('prenotazioni').insert([payload]);
-      if (payload.tavolo_id) {
+      if (payload.tavolo_id && isToday) {
         await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
       }
     }
@@ -251,9 +268,9 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   const handlePointerDown = (id: string, e: React.PointerEvent) => {
     if (viewMode === 'LIST') return;
-    if (dragLocked) return;
     pointerDownPos.current = { x: e.clientX, y: e.clientY };
     pointerDownTime.current = e.timeStamp;
+    if (dragLocked) return;
     setDraggingId(id);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
@@ -281,6 +298,15 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     }
     setDraggingId(null);
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
+  const salaColor = (sala: string) => {
+    switch (sala.toUpperCase()) {
+      case 'VERDE': return 'bg-emerald-600';
+      case 'ROTONDA': return 'bg-amber-700';
+      case 'TERRAZZA': return 'bg-gray-950';
+      default: return 'bg-gray-500';
+    }
   };
 
   const filteredTavoli = tavoli.filter(t => {
@@ -491,6 +517,8 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                     >
                       <Edit2 size={11} />
                     </button>
+                    {/* Sala indicator bar */}
+                    <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-1 rounded-full mb-1 ${salaColor(tavolo.sala || 'Principale')}`} />
                   </div>
                 </div>
               ))}

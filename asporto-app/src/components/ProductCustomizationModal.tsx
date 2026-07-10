@@ -111,12 +111,14 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
     const isPizzaVariant = ['Bianca', 'Rossa', 'Rosè', 'Rose'].includes(variant);
     let newNotes = localItem.notes;
     let newAdded = [...localItem.addedIngredients];
-    const isActive = isPizzaVariant
+    const isActive = isPizzaVariant || price
       ? newAdded.some(a => a.nome === variant)
       : newNotes.includes(variant);
 
     if (isActive) {
       if (isPizzaVariant) {
+        newAdded = newAdded.filter(a => a.nome !== variant);
+      } else if (price) {
         newAdded = newAdded.filter(a => a.nome !== variant);
       } else {
         newNotes = newNotes
@@ -125,16 +127,16 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
           .replace(/^,\s*/, '')
           .replace(/,\s*$/, '')
           .trim();
-        if (price) newAdded = newAdded.filter(a => a.nome !== variant);
       }
     } else {
       if (isPizzaVariant) {
         if (!newAdded.some(a => a.nome === variant)) {
           newAdded.push({ nome: variant, prezzo: price ?? 0 });
         }
+      } else if (price) {
+        newAdded.push({ nome: variant, prezzo: price });
       } else {
         newNotes = newNotes ? `${newNotes}, ${variant}` : variant;
-        if (price) newAdded.push({ nome: variant, prezzo: price });
       }
     }
     setLocalItem({ ...localItem, notes: newNotes, addedIngredients: newAdded });
@@ -182,7 +184,7 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
       <div className="flex flex-wrap gap-2">
         {variants.map(v => {
           const isPizzaVariant = ['Bianca', 'Rossa', 'Rosè', 'Rose'].includes(v.label);
-          const isActive = isPizzaVariant
+          const isActive = isPizzaVariant || v.price
             ? localItem.addedIngredients.some(a => a.nome === v.label)
             : localItem.notes.includes(v.label);
           const activeStyle = styleMap[v.style] || styleMap.gold;

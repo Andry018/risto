@@ -55,9 +55,14 @@ function cleanText(text) {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
-function normalizeVariantNotes(text) {
-  return cleanText(text)
-    .replace(/\b(Bianca|Rossa|Ros[eè])\b/gi, '')
+function normalizeVariantNotes(text, extraFilters = []) {
+  let result = cleanText(text);
+  const allFilters = [...extraFilters, 'Bianca', 'Rossa', 'Rosè', 'Rose'];
+  for (const f of allFilters) {
+    const regex = new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(regex, '');
+  }
+  return result
     .replace(/,\s*,/g, ',')
     .replace(/^,\s*/, '')
     .replace(/,\s*$/, '')
@@ -113,7 +118,8 @@ function setReadableText(printer) {
 function printModLines(printer, item, maxNote = 44) {
   const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !PIZZA_VARIANTS.has(a.nome));
   const removed = item.removedIngredients || [];
-  const note = normalizeVariantNotes(item.notes);
+  const filterNames = (item.addedIngredients || []).map(a => a.nome);
+  const note = normalizeVariantNotes(item.notes, filterNames);
 
   if (extras.length > 0) {
     printer.setTextDoubleWidth();

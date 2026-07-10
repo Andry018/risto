@@ -1,24 +1,25 @@
+import { useEffect, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
+import { supabase } from '../lib/supabase';
+import { Printer } from 'lucide-react';
 
-const MENU_URL = 'https://risto-taupe.vercel.app/menu';
-
-function QRSlot() {
-  return (
-    <div className="flex flex-col items-center justify-center p-2" style={{ width: '25%', height: '20%', boxSizing: 'border-box' }}>
-      <div className="flex flex-col items-center">
-        <QRCodeCanvas value={MENU_URL} size={80} bgColor="#ffffff" fgColor="#000000" level="M" />
-        <p className="text-[5px] font-mono text-gray-600 mt-1 leading-tight text-center break-all max-w-[80px]">
-          risto-taupe.vercel.app/menu
-        </p>
-      </div>
-    </div>
-  );
-}
+const BASE_URL = window.location.origin;
 
 export default function MenuQRPrint() {
+  const [tables, setTables] = useState<string[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      if (!supabase) return;
+      const { data } = await supabase.from('tavoli').select('nome').order('nome');
+      if (data) setTables(data.map(t => t.nome));
+    })();
+  }, []);
+
+  const gridSize = tables.length || 4;
+
   return (
     <div className="bg-white min-h-screen">
-      {/* Print-only styles */}
       <style>{`
         @media print {
           @page { margin: 0; size: A4; }
@@ -27,24 +28,41 @@ export default function MenuQRPrint() {
         }
       `}</style>
 
-      {/* Print button */}
-      <div className="no-print fixed top-4 right-4 z-50">
+      <div className="no-print fixed top-4 right-4 z-50 flex gap-3">
         <button
           onClick={() => window.print()}
-          className="bg-gold text-black font-black px-6 py-3 rounded-2xl shadow-xl hover:brightness-110 transition-all"
+          className="bg-gold text-black font-black px-6 py-3 rounded-2xl shadow-xl hover:brightness-110 transition-all flex items-center gap-2"
         >
-          STAMPA
+          <Printer size={18} /> STAMPA
         </button>
       </div>
 
-      {/* A4 Sheet — 4 cols × 5 rows = 20 QR codes */}
       <div
         className="flex flex-wrap mx-auto"
         style={{ width: '210mm', minHeight: '297mm', padding: '5mm 3mm' }}
       >
-        {Array.from({ length: 20 }).map((_, i) => (
-          <QRSlot key={i} />
-        ))}
+        {tables.length === 0
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex flex-col items-center justify-center p-2" style={{ width: '25%', height: '20%', boxSizing: 'border-box' }}>
+                <div className="flex flex-col items-center">
+                  <div className="w-[80px] h-[80px] bg-gray-100 rounded animate-pulse" />
+                </div>
+              </div>
+            ))
+          : tables.map(table => {
+              const url = `${BASE_URL}/menu?tavolo=${encodeURIComponent(table)}`;
+              return (
+                <div key={table} className="flex flex-col items-center justify-center p-2" style={{ width: '25%', height: '20%', boxSizing: 'border-box' }}>
+                  <div className="flex flex-col items-center">
+                    <p className="text-[8px] font-black text-gray-700 uppercase tracking-wider mb-1">{table}</p>
+                    <QRCodeCanvas value={url} size={80} bgColor="#ffffff" fgColor="#000000" level="M" />
+                    <p className="text-[5px] font-mono text-gray-400 mt-1 leading-tight text-center break-all max-w-[80px]">
+                      {url}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
       </div>
     </div>
   );
