@@ -1,7 +1,18 @@
 [
   {
-    "id": "aggiorna-app",
-    "execute-command": "C:\\risto\\auto_pull.bat",
-    "command-working-directory": "C:\\risto"
+    "id": "aggiorna-ristorante",
+    "execute-command": "C:/risto/autopull.bat",
+    "command-working-directory": "C:/risto",
+    "response-message": "Ricevuto! Aggiornamento in corso...",
+    "trigger-rule": {
+      "match": {
+        "type": "payload-hash-sha1",
+        "secret": "pallavolo123",
+        "parameter": {
+          "source": "header",
+          "name": "X-Hub-Signature"
+        }
+      }
+    }
   }
 ]
