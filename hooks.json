@@ -1,0 +1,7 @@
+[
+  {
+    "id": "aggiorna-app",
+    "execute-command": "C:\\risto\\auto_pull.bat",
+    "command-working-directory": "C:\\risto"
+  }
+]

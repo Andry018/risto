@@ -1,0 +1,19 @@
+@echo off
+title Stampa Prezzo Rapido
+color 0B
+echo ====================================
+echo      STAMPA PREZZO AL VOLO
+echo ====================================
+echo.
+
+:INIZIO
+set /p PREZZO="Scrivi il prezzo (es. 15.50) e premi INVIO: "
+
+:: Chiama il nostro script di prima passando il prezzo
+node stampa_prezzo.js %PREZZO%
+
+echo.
+echo ====================================
+echo Premi un tasto per stampare un altro prezzo, oppure chiudi la finestra.
+pause >nul
+goto INIZIO

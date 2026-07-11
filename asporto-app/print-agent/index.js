@@ -1,9 +1,20 @@
+// Pezza di emergenza per definire la funzione mancante globalmente
+global.getDisplayName = function(item) {
+    if (!item) return "Articolo";
+    return item.nome || item.name || item.title || item.display_name || "Articolo";
+};
+
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const ThermalPrinter = require('node-thermal-printer').printer;
 const PrinterTypes = require('node-thermal-printer').types;
 const http = require('node:http');
 const { URL } = require('node:url');
+
+function getDisplayName(item) {
+    if (!item) return "Articolo";
+    return item.nome || item.name || item.title || item.display_name || "Articolo";
+}
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
@@ -55,14 +66,9 @@ function cleanText(text) {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
-function normalizeVariantNotes(text, extraFilters = []) {
-  let result = cleanText(text);
-  const allFilters = [...extraFilters, 'Bianca', 'Rossa', 'Rosè', 'Rose'];
-  for (const f of allFilters) {
-    const regex = new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(regex, '');
-  }
-  return result
+function normalizeVariantNotes(text) {
+  return cleanText(text)
+    .replace(/\b(Bianca|Rossa|Ros[eè])\b/gi, '')
     .replace(/,\s*,/g, ',')
     .replace(/^,\s*/, '')
     .replace(/,\s*$/, '')
@@ -118,8 +124,7 @@ function setReadableText(printer) {
 function printModLines(printer, item, maxNote = 44) {
   const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !PIZZA_VARIANTS.has(a.nome));
   const removed = item.removedIngredients || [];
-  const filterNames = (item.addedIngredients || []).map(a => a.nome);
-  const note = normalizeVariantNotes(item.notes, filterNames);
+  const note = normalizeVariantNotes(item.notes);
 
   if (extras.length > 0) {
     printer.setTextDoubleWidth();
@@ -139,7 +144,8 @@ function printModLines(printer, item, maxNote = 44) {
 }
 
 function printItemWithHeader(printer, item, maxName) {
-  printer.setTextDoubleWidth();
+  // Testo GIGANTE per i nomi dei piatti (Altezza e Larghezza doppie)
+  printer.setTextQuadArea();
   printer.println(`${item.quantity}x ${truncate(getDisplayName(item), maxName)}`);
   printer.setTextNormal();
   printModLines(printer, item);
@@ -164,7 +170,8 @@ async function printKitchenJob(job) {
   printer.alignLeft();
   for (const [portata, items] of grouped) {
     printer.bold(true);
-    printer.setTextDoubleWidth();
+    // Testo GIGANTE anche per i titoli delle portate
+    printer.setTextQuadArea();
     printer.println(`[${portataLabel(portata).toUpperCase()}]`);
     printer.setTextNormal();
     printer.bold(false);
