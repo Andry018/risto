@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pannello Amministrazione</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0f172a; }
+  .terminal { background: #0a0e1a; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+  .terminal::-webkit-scrollbar { width: 6px; }
+  .terminal::-webkit-scrollbar-track { background: #1e293b; }
+  .terminal::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  .spinner { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .pulse-dot.on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .pulse-dot.off { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .pulse-dot.loading { background: #f59e0b; }
+  .btn { transition: all 0.15s ease; user-select: none; }
+  .btn:active { transform: scale(0.97); }
+  .card { transition: border-color 0.2s ease; }
+</style>
+</head>
+<body class="text-gray-100 min-h-screen">
+
+<!-- Header -->
+<header class="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      <h1 class="text-lg font-semibold tracking-tight">Pannello Amministrazione</h1>
+    </div>
+    <div id="statusBar" class="flex items-center gap-3 text-xs text-slate-400">
+      <span id="serverTime"></span>
+      <a href="/" class="hover:text-white transition-colors underline underline-offset-2">Vai al Sito</a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- Status Cards -->
+  <section>
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Stato Servizi</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div id="card-nginx" class="card rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 flex items-center gap-3">
+        <div class="pulse-dot" id="dot-nginx"></div>
+        <div>
+          <div class="text-sm font-medium">Nginx</div>
+          <div class="text-xs text-slate-500" id="label-nginx">Verifica...</div>
+        </div>
+      </div>
+      <div id="card-print" class="card rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 flex items-center gap-3">
+        <div class="pulse-dot" id="dot-print"></div>
+        <div>
+          <div class="text-sm font-medium">Print Agent</div>
+          <div class="text-xs text-slate-500" id="label-print">Verifica...</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Action Buttons -->
+  <section>
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Azioni</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <button id="btn-nginx" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-emerald-500/40 p-4 text-left" onclick="action('restart-nginx','btn-nginx')">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span class="text-sm font-medium">Riavvia Nginx</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">taskkill + riavvio</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-emerald-500/20 transition-all pointer-events-none"></div>
+      </button>
+      <button id="btn-autopull" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-blue-500/40 p-4 text-left" onclick="action('autopull','btn-autopull')">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span class="text-sm font-medium">Aggiorna Codice</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">git pull + rebuild</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-blue-500/20 transition-all pointer-events-none"></div>
+      </button>
+      <button id="btn-print" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-amber-500/40 p-4 text-left" onclick="action('restart-print','btn-print')">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          <span class="text-sm font-medium">Riavvia Print Agent</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">kill + auto-restart</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-amber-500/20 transition-all pointer-events-none"></div>
+      </button>
+      <button class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-purple-500/40 p-4 text-left" onclick="document.getElementById('cmdInput').focus()">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span class="text-sm font-medium">Esegui Comando</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">CMD personalizzato</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-purple-500/20 transition-all pointer-events-none"></div>
+      </button>
+    </div>
+  </section>
+
+  <!-- Terminal / Log Viewer -->
+  <section>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Terminale — log_git.txt</h2>
+      <div class="flex items-center gap-2">
+        <span id="logCount" class="text-xs text-slate-600">0 righe</span>
+        <button onclick="clearLog()" class="text-xs text-slate-600 hover:text-red-400 transition-colors">Pulisci</button>
+      </div>
+    </div>
+    <div id="terminal" class="terminal rounded-xl border border-slate-700/50 p-4 h-[400px] overflow-y-auto text-xs leading-relaxed">
+      <div class="text-slate-600 italic">In attesa dei log...</div>
+    </div>
+    <!-- CMD input bar -->
+    <div class="mt-2 flex gap-2">
+      <input id="cmdInput" class="flex-1 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm font-mono text-gray-200 placeholder-slate-600 outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all" placeholder="Comando CMD personalizzato (es. ipconfig)" onkeydown="if(event.key==='Enter')execCmd()" />
+      <button onclick="execCmd()" class="btn rounded-lg bg-slate-700 hover:bg-slate-600 px-4 text-sm font-medium transition-colors">Invia</button>
+    </div>
+    <div id="cmdOutput" class="mt-2 hidden"></div>
+  </section>
+
+  <!-- Footer -->
+  <div class="text-center text-xs text-slate-700 pb-4">
+    Pannello Amministrazione v1 · Server interno · Porta 4000
+  </div>
+</main>
+
+<script>
+// ── State ────────────────────────────────────────────────
+let statusInterval, logInterval;
+const TERMINAL = document.getElementById('terminal');
+const CMD_OUTPUT = document.getElementById('cmdOutput');
+
+// ── Status Polling ───────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const res = await fetch('/admin/api/status');
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    setStatus('nginx', data.nginx);
+    setStatus('print', data.printAgent);
+  } catch {
+    setStatus('nginx', null);
+    setStatus('print', null);
+  }
+}
+
+function setStatus(svc, ok) {
+  const dot = document.getElementById(`dot-${svc}`);
+  const label = document.getElementById(`label-${svc}`);
+  const card = document.getElementById(`card-${svc}`);
+  if (ok === true) {
+    dot.className = 'pulse-dot on';
+    label.textContent = 'Attivo';
+    card.className = card.className.replace(/border-\w+-\d+\/\d+/g, '') + ' border-emerald-500/20';
+  } else if (ok === false) {
+    dot.className = 'pulse-dot off';
+    label.textContent = 'Spento';
+    card.className = card.className.replace(/border-\w+-\d+\/\d+/g, '') + ' border-red-500/20';
+  } else {
+    dot.className = 'pulse-dot loading';
+    label.textContent = 'Errore connessione';
+  }
+}
+
+// ── Log Polling ──────────────────────────────────────────
+async function fetchLog() {
+  try {
+    const res = await fetch('/admin/api/log');
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    if (data.lines && data.lines.length) {
+      TERMINAL.innerHTML = data.lines.map(l => `<div class="text-slate-300">${escapeHtml(l)}</div>`).join('');
+      TERMINAL.scrollTop = TERMINAL.scrollHeight;
+      document.getElementById('logCount').textContent = `${data.total} righe`;
+    }
+  } catch {}
+}
+
+function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function clearLog() { TERMINAL.innerHTML = '<div class="text-slate-600 italic">Log pulito.</div>'; }
+
+// ── Action Buttons ───────────────────────────────────────
+async function action(type, btnId) {
+  const btn = document.getElementById(btnId);
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="flex items-center gap-2"><svg class="w-5 h-5 spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span class="text-sm font-medium">Esecuzione...</span></div>`;
+  btn.className = btn.className.replace(/hover:border-\w+-\d+\/\d+/g, '') + ' border-yellow-500/40';
+
+  try {
+    const res = await fetch(`/admin/api/${type}`, { method: 'POST' });
+    const data = await res.json();
+    appendCmdOutput(`> ${type} — ${data.ok ? 'OK' : 'ERRORE'}`, data.ok ? 'text-emerald-400' : 'text-red-400');
+    if (data.stdout) appendCmdOutput(data.stdout, 'text-slate-400');
+    if (data.stderr) appendCmdOutput(data.stderr, 'text-red-400');
+    if (data.message) appendCmdOutput(data.message, 'text-emerald-400');
+    setTimeout(fetchStatus, 1000);
+  } catch (e) {
+    appendCmdOutput(`> ${type} — ERRORE: ${e.message}`, 'text-red-400');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = orig;
+  btn.className = btn.className.replace(/border-yellow-500\/\d+/g, '');
+}
+
+// ── Exec custom command ──────────────────────────────────
+async function execCmd() {
+  const input = document.getElementById('cmdInput');
+  const cmd = input.value.trim();
+  if (!cmd) return;
+  input.value = '';
+  CMD_OUTPUT.classList.remove('hidden');
+
+  appendCmdOutput(`$ ${cmd}`, 'text-emerald-300', true);
+
+  try {
+    const res = await fetch('/admin/api/exec', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd }),
+    });
+    const data = await res.json();
+    if (data.stdout) appendCmdOutput(data.stdout, 'text-slate-300');
+    if (data.stderr) appendCmdOutput(data.stderr, 'text-red-400');
+    if (data.error) appendCmdOutput(`ERRORE: ${data.error}`, 'text-red-400');
+    appendCmdOutput(`→ exit code: ${data.code}`, 'text-slate-600');
+  } catch (e) {
+    appendCmdOutput(`ERRORE: ${e.message}`, 'text-red-400');
+  }
+}
+
+function appendCmdOutput(text, cls, divider) {
+  const div = document.createElement('div');
+  div.className = cls || 'text-slate-300';
+  div.textContent = text;
+  if (divider) div.style.marginTop = '0.5rem';
+  CMD_OUTPUT.appendChild(div);
+  CMD_OUTPUT.scrollTop = CMD_OUTPUT.scrollHeight;
+}
+
+// ── Clock ────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('serverTime').textContent = new Date().toLocaleString('it-IT');
+}
+
+// ── Init ─────────────────────────────────────────────────
+fetchStatus();
+fetchLog();
+statusInterval = setInterval(fetchStatus, 5000);
+logInterval = setInterval(fetchLog, 3000);
+updateClock();
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>
