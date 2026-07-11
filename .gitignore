@@ -1,2 +1,17 @@
-# AI context file
+# AI context file (il tuo originale)
 prompt.txt
+webhook.exe
+# --- LOG E FILE TEMPORANEI NGINX ---
+nginx/logs/
+nginx/temp/
+nginx/*.pid
+
+# --- DIPENDENZE E BUILD NODE.JS ---
+node_modules/
+asporto-app/node_modules/
+asporto-app/dist/
+print-agent/node_modules/
+
+# --- LOG LOCALI DEL SERVER ---
+log_git.txt
+log_stampante.txt
