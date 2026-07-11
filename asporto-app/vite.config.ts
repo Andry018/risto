@@ -9,13 +9,21 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.svg', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
         name: 'Il Girasole · Ristorante Pizzeria',
         short_name: 'Girasole POS',
         description: 'Restaurant Management POS & Table Service',
         theme_color: '#121212',
         background_color: '#121212',
+        display: 'standalone',
+        display_override: ['window-controls-overlay', 'standalone'],
+        start_url: '/',
+        scope: '/',
+        id: '/',
+        orientation: 'portrait-primary',
+        lang: 'it',
+        categories: ['food', 'business'],
         icons: [
           {
             src: 'pwa-192x192.png',
