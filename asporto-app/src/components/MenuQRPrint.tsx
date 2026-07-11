@@ -16,8 +16,6 @@ export default function MenuQRPrint() {
     })();
   }, []);
 
-  const gridSize = tables.length || 4;
-
   return (
     <div className="bg-white min-h-screen">
       <style>{`

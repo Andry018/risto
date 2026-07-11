@@ -282,9 +282,9 @@ export default function PublicMenuView() {
               acc[cat].push(p);
               return acc;
             }, {} as Record<string, Product[]>);
-            return renderCategories(Object.keys(filteredGrouped).sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b)), filteredGrouped, true);
+            return renderCategories(Object.keys(filteredGrouped).sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b)), filteredGrouped);
           })()}
-          {!searchQuery && renderCategories(sortedCategories, grouped, false)}
+          {!searchQuery && renderCategories(sortedCategories, grouped)}
         </div>
       </div>
 
@@ -367,7 +367,7 @@ export default function PublicMenuView() {
     </div>
   );
 
-  function renderCategories(categories: string[], catGroup: Record<string, Product[]>, isSearch: boolean) {
+  function renderCategories(categories: string[], catGroup: Record<string, Product[]>) {
     return (
       <div className="space-y-5">
         {categories.map(categoria => {
