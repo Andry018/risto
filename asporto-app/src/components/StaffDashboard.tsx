@@ -141,7 +141,7 @@ export default function StaffDashboard() {
   const currentDate = new Date().toLocaleDateString('it-IT', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
-    <div className="h-[100dvh] bg-charcoal text-white flex flex-col font-sans overflow-hidden">
+    <div className="h-dvh bg-charcoal text-white flex flex-col font-sans overflow-hidden">
       {/* Header */}
       <div className="flex justify-between items-center py-6 px-8 shrink-0">
         <div className="flex items-center gap-3">

@@ -323,7 +323,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
   );
 
   return (
-    <div className="h-[100dvh] min-h-0 flex flex-col bg-charcoal text-white overflow-hidden p-3 sm:p-5 lg:p-8">
+    <div className="h-dvh min-h-0 flex flex-col bg-charcoal text-white overflow-hidden p-3 sm:p-5 lg:p-8">
 
       {/* View Header & Toggles */}
       <header className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start shrink-0 mb-3 sm:mb-4">
@@ -409,8 +409,9 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
             <div 
               ref={mapRef}
               onPointerMove={handlePointerMove}
-              className="relative touch-none shadow-2xl rounded-[16px] sm:rounded-[20px] bg-charcoal/50 w-full max-w-[1600px] aspect-[12/7] max-h-[min(calc(100dvh-13rem),78vh)]"
+              className="relative touch-none shadow-2xl rounded-[16px] sm:rounded-[20px] bg-charcoal/50 w-full max-w-[1600px] aspect-[12/7]"
               style={{ 
+                maxHeight: 'min(calc(100dvh - 13rem), 78vh)',
                 backgroundImage: 'radial-gradient(#2A2A2A 1.5px, transparent 0)',
                 backgroundSize: '40px 40px',
                 border: '1px solid rgba(207, 160, 85, 0.1)'

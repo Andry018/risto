@@ -58,7 +58,7 @@ if exist "C:\risto\webhook.exe" (
 echo.
 
 echo ===================================================
-echo   [6/7] AVVIO MOTORE DASHBOARD DI CONTROLLO
+echo   [6/7] AVVIO PANNELLO AMMINISTRAZIONE (PORTA 4000)
 echo ===================================================
 if exist "C:\risto\avvia_pannello.bat" (
     start /min "" cmd /c "C:\risto\avvia_pannello.bat"
@@ -82,6 +82,6 @@ echo.
 echo ===================================================
 echo   SISTEMA DI PRODUZIONE AVVIATO CON SUCCESSO!
 echo   Il sito e raggiungibile su: http://192.168.1.250
-echo   Console di controllo: http://192.168.1.250/admin.html
+echo   Pannello admin: http://192.168.1.250/admin
 echo ===================================================
 pause

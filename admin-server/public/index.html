@@ -123,14 +123,15 @@
       </div>
     </div>
     <div id="terminal" class="terminal rounded-xl border border-slate-700/50 p-4 h-[400px] overflow-y-auto text-xs leading-relaxed">
-      <div class="text-slate-600 italic">In attesa dei log...</div>
+      <div id="logLines"></div>
+      <div id="cmdHistory"></div>
+      <div id="logPlaceholder" class="text-slate-600 italic">In attesa dei log...</div>
     </div>
     <!-- CMD input bar -->
     <div class="mt-2 flex gap-2">
       <input id="cmdInput" class="flex-1 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm font-mono text-gray-200 placeholder-slate-600 outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all" placeholder="Comando CMD personalizzato (es. ipconfig)" onkeydown="if(event.key==='Enter')execCmd()" />
       <button onclick="execCmd()" class="btn rounded-lg bg-slate-700 hover:bg-slate-600 px-4 text-sm font-medium transition-colors">Invia</button>
     </div>
-    <div id="cmdOutput" class="mt-2 hidden"></div>
   </section>
 
   <!-- Footer -->
@@ -143,7 +144,9 @@
 // ── State ────────────────────────────────────────────────
 let statusInterval, logInterval;
 const TERMINAL = document.getElementById('terminal');
-const CMD_OUTPUT = document.getElementById('cmdOutput');
+const LOG_LINES = document.getElementById('logLines');
+const CMD_HISTORY = document.getElementById('cmdHistory');
+const LOG_PLACEHOLDER = document.getElementById('logPlaceholder');
 
 // ── Status Polling ───────────────────────────────────────
 async function fetchStatus() {
@@ -184,16 +187,21 @@ async function fetchLog() {
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
     if (data.lines && data.lines.length) {
-      TERMINAL.innerHTML = data.lines.map(l => `<div class="text-slate-300">${escapeHtml(l)}</div>`).join('');
-      TERMINAL.scrollTop = TERMINAL.scrollHeight;
+      LOG_LINES.innerHTML = data.lines.map(l => `<div class="text-slate-400">${escapeHtml(l)}</div>`).join('');
+      LOG_PLACEHOLDER.style.display = 'none';
       document.getElementById('logCount').textContent = `${data.total} righe`;
+      TERMINAL.scrollTop = TERMINAL.scrollHeight;
     }
   } catch {}
 }
 
 function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-function clearLog() { TERMINAL.innerHTML = '<div class="text-slate-600 italic">Log pulito.</div>'; }
+function clearLog() {
+  LOG_LINES.innerHTML = '';
+  CMD_HISTORY.innerHTML = '';
+  LOG_PLACEHOLDER.style.display = 'block';
+}
 
 // ── Action Buttons ───────────────────────────────────────
 async function action(type, btnId) {
@@ -226,7 +234,6 @@ async function execCmd() {
   const cmd = input.value.trim();
   if (!cmd) return;
   input.value = '';
-  CMD_OUTPUT.classList.remove('hidden');
 
   appendCmdOutput(`$ ${cmd}`, 'text-emerald-300', true);
 
@@ -250,9 +257,9 @@ function appendCmdOutput(text, cls, divider) {
   const div = document.createElement('div');
   div.className = cls || 'text-slate-300';
   div.textContent = text;
-  if (divider) div.style.marginTop = '0.5rem';
-  CMD_OUTPUT.appendChild(div);
-  CMD_OUTPUT.scrollTop = CMD_OUTPUT.scrollHeight;
+  if (divider) div.style.marginTop = '0.75rem';
+  CMD_HISTORY.appendChild(div);
+  TERMINAL.scrollTop = TERMINAL.scrollHeight;
 }
 
 // ── Clock ────────────────────────────────────────────────

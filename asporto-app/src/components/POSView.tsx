@@ -826,7 +826,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         </div>
       )}
 
-      <div className="h-[100dvh] flex bg-charcoal text-white overflow-hidden">
+      <div className="h-dvh flex bg-charcoal text-white overflow-hidden">
 
       {/* Left Column: Menu */}
       <div className="flex-1 flex flex-col min-w-0 p-4 md:p-6 lg:p-8 min-h-0">

@@ -103,7 +103,7 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName, o
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[min(90dvh,900px)] animate-in zoom-in-95 duration-200">
+      <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200" style={{ maxHeight: 'min(90dvh, 900px)' }}>
         <div className="p-6 sm:p-8 border-b border-surface-light flex justify-between items-start gap-4 bg-surface-light/5 shrink-0">
           <div>
             <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter text-white flex items-center gap-3">
