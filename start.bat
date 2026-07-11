@@ -50,7 +50,8 @@ echo ===================================================
 cd /d C:\risto
 if exist "C:\risto\webhook.exe" (
     start /min "" "C:\risto\webhook.exe" -hooks C:\risto\hooks.json -verbose -port 9000
-    echo Webhook attivo sulla porta 9000...
+    :: Questo e' un test per il deploy automatico!
+    
 ) else (
     echo [ATTENZIONE] webhook.exe non trovato in C:\risto. Salto questo step.
 )
