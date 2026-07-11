@@ -37,6 +37,18 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          icons: ['lucide-react'],
+          pdf: ['jspdf', 'jspdf-autotable'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 500,
+  },
   test: {
     globals: true,
     environment: 'node',

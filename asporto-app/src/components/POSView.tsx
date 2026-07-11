@@ -762,6 +762,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   >
                     <Receipt size={14} /> STAMPA RICEVUTA
                   </button>
+                  <button
+                    onClick={() => setShowBillReview(false)}
+                    className="w-full bg-surface-light hover:bg-gold/20 text-white hover:text-gold font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Edit3 size={14} /> AGGIUNGI PIATTI / MODIFICA
+                  </button>
                   <div className="pt-2">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-3">Gestione conto</p>
                     <div className="space-y-2">
@@ -774,6 +780,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                             title="Salva la comanda sul tavolo senza chiudere"
                           >
                             <Save size={16} /> SALVA COMANDA
+                          </button>
+                          <button
+                            onClick={() => setIsSplitModalOpen(true)}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-surface-light hover:bg-white/10 text-gold font-black text-xs py-4 rounded-2xl border border-dashed border-gold/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            <Users size={14} /> DIVISIONE CONTO
                           </button>
                           <button
                             onClick={handleFreeTable}
@@ -1123,7 +1136,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
           ) : (
               <div className="flex flex-col gap-2">
-                <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
                     disabled={cart.length === 0}
@@ -1131,15 +1143,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   >
                     <Printer size={14} /> STAMPA COMANDA
                   </button>
-                  <button
-                    onClick={() => setIsSplitModalOpen(true)}
-                    disabled={cart.length === 0 || finishingOrder}
-                    className="w-full bg-surface hover:bg-white/5 text-gold font-black text-xs py-3 rounded-2xl border border-dashed border-gold/30 transition-all active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <Users size={14} /> DIVISIONE CONTO
-                  </button>
-                </div>
-              {tableId ? (
+                {tableId ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <button

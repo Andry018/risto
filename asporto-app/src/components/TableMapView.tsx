@@ -8,14 +8,14 @@ import { useConfirm } from './ConfirmModal';
 import { usePrompt } from './PromptModal';
 import { useToast } from './Toast';
 
-const SALE = ['Principale', 'Verde', 'Rotonda', 'Terrazza'];
+import { SALE } from '../lib/salas';
 
 export default function TableMapView({ onSelectTable, freedTableIds, onNavigateHome }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string>; onNavigateHome?: () => void }) {
   const { confirm } = useConfirm();
   const { prompt } = usePrompt();
   const { addToast } = useToast();
   const [tavoli, setTavoli] = useState<Tavolo[]>([]);
-  const [activeSala, setActiveSala] = useState(SALE[0]);
+  const [activeSala, setActiveSala] = useState<string>(SALE[0]);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
   const [editingTable, setEditingTable] = useState<Tavolo | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);

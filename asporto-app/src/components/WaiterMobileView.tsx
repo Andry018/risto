@@ -1,11 +1,11 @@
 ﻿import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
-import type { Product, Ingredient, Tavolo, OrderCarrelloItem, Order, CustomizedItem, Portata, Reservation } from '../types/entities';
+import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Portata, Reservation } from '../types/entities';
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RotateCcw, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent } from '../lib/lanPrint';
@@ -29,6 +29,7 @@ import { notifyNewOrder } from '../lib/notify';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
 import PaninoBuilderModal from './PaninoBuilderModal';
+import { SALE } from '../lib/salas';
 
 export default function WaiterMobileView() {
   const [tables, setTables] = useState<Tavolo[]>([]);
@@ -54,7 +55,6 @@ export default function WaiterMobileView() {
   const [billsDayOpen, setBillsDayOpen] = useState(false);
   const [billsTableOpen, setBillsTableOpen] = useState(false);
   const [orderActionBusy, setOrderActionBusy] = useState(false);
-  const [lastOrderForTable, setLastOrderForTable] = useState<Order | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
@@ -398,19 +398,6 @@ export default function WaiterMobileView() {
     if (table.status === 'LIBERO') {
       setSelectedTable(table);
       setTempCovers(2);
-      setLastOrderForTable(null);
-
-      if (!IS_DEMO_MODE && supabase) {
-        const { data } = await supabase
-          .from('ordini')
-          .select('*')
-          .eq('nome_cliente', table.nome)
-          .eq('status', 'COMPLETATO')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (data) setLastOrderForTable(data as Order);
-      }
       setIsCoversModalOpen(true);
       return;
     }
@@ -435,81 +422,6 @@ export default function WaiterMobileView() {
         setActiveTab('MENU');
       }
     })();
-  };
-
-  const mapOrderToCart = (order: Order): CustomizedItem[] => {
-    const prods = productsRef.current;
-    const ings = ingredientsRef.current;
-    return (order.carrello || []).map((item: OrderCarrelloItem) => {
-      const product = findProductForOrderLine(prods, item.nome);
-      const basePrezzo = product?.prezzo ?? item.prezzo_unitario ?? 0;
-      const rimozioni = item.modifiche?.rimozioni || [];
-      const removalsPrice = calculateRemovalsPrice(rimozioni, ings);
-      return {
-        ...(product || { id: newUniqueId(), nome: item.nome, prezzo: basePrezzo, categoria: 'Generale', disponibile: true, ingredienti: [] }),
-        quantity: item.quantity,
-        addedIngredients: addedIngredientsFromStoredOrderLine(item, ings, basePrezzo, removalsPrice),
-        removedIngredients: rimozioni,
-        notes: item.modifiche?.note || '',
-        portata: item.portata,
-        uniqueId: newUniqueId()
-      };
-    });
-  };
-
-  const handleReprintLast = async () => {
-    if (!lastOrderForTable || !selectedTable) return;
-    try {
-      const items = mapOrderToCart(lastOrderForTable);
-      const orderTime = new Date(lastOrderForTable.created_at).toLocaleString('it-IT', {
-        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-      });
-      await printKitchenViaAgent(items, selectedTable.nome, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime);
-      toast.addToast({ type: 'success', title: 'Comanda ristampata', message: `Stampata con ora originale ${orderTime}`, duration: 2500 });
-    } catch {
-      toast.addToast({ type: 'error', title: 'Ristampa fallita', message: 'Controlla stampante e rete LAN.', duration: 4500 });
-    }
-  };
-
-  const loadLastOrder = async () => {
-    if (!selectedTable || !lastOrderForTable || IS_DEMO_MODE || !supabase) return;
-    const data = lastOrderForTable;
-    const mappedCart = mapOrderToCart(data);
-    const copertoProd = productsRef.current.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
-    const hasCoperto = mappedCart.some(i => i.id === copertoProd?.id || i.nome === 'COPERTO');
-    const finalCart = [...mappedCart];
-    if (!hasCoperto && copertoProd) {
-      finalCart.unshift({
-        ...copertoProd,
-        quantity: selectedTable.clienti || tempCovers || 2,
-        addedIngredients: [],
-        removedIngredients: [],
-        notes: '',
-        uniqueId: 'initial-coperto',
-        portata: undefined,
-      });
-    }
-    setCart(finalCart);
-    const loadQtyMap = new Map<string, number>();
-    for (const i of finalCart) {
-      const k = getItemKey(i);
-      loadQtyMap.set(k, (loadQtyMap.get(k) || 0) + i.quantity);
-    }
-    savedItemQtysRef.current = loadQtyMap;
-    setActiveOrderId(null);
-    setActiveTab('RIEPILOGO');
-    setIsCoversModalOpen(false);
-    setLastOrderForTable(null);
-    localUpdateRef.current = true;
-    // mark table as occupied and save apertura
-    const covers = selectedTable.clienti || tempCovers;
-    const nowISO = new Date().toISOString();
-    const newNote = setAperturaInNote(selectedTable.note, nowISO);
-    const updatedTable = { ...selectedTable, status: 'OCCUPATO' as const, clienti: covers, note: newNote };
-    setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
-    setSelectedTable(updatedTable);
-    setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
-    await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', clienti: covers, note: newNote });
   };
 
   const confirmCovers = async () => {
@@ -864,7 +776,7 @@ export default function WaiterMobileView() {
             
             {/* Room Slider */}
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-              {['Principale', 'Verde', 'Rotonda', 'Terrazza'].map(room => (
+              {SALE.map(room => (
                 <button
                   key={room}
                   onClick={() => setActiveRoom(room)}
@@ -1097,22 +1009,6 @@ export default function WaiterMobileView() {
             >
               INIZIA ORDINE
             </button>
-            {lastOrderForTable && (
-              <>
-              <button 
-                onClick={loadLastOrder}
-                className="w-full mt-3 bg-charcoal border border-gold/40 text-gold font-bold py-4 rounded-2xl text-sm uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
-              >
-                <RotateCcw size={14} className="inline mr-2" />PRENDI ULTIMA COMANDA
-              </button>
-              <button
-                onClick={handleReprintLast}
-                className="w-full mt-2 bg-charcoal border border-amber-500/40 text-amber-400 font-bold py-3 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
-              >
-                <Printer size={12} className="inline mr-2" />RISTAMPA ULTIMA COMANDA
-              </button>
-              </>
-            )}
             <button 
               onClick={() => { setOrderHistoryOpen(true); }}
               className="w-full mt-3 bg-charcoal border border-white/10 text-gray-400 font-bold py-3 rounded-2xl text-xs uppercase tracking-widest hover:text-white hover:border-white/20 active:scale-95 transition-all"

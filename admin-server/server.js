@@ -126,11 +126,12 @@ async function router(req, res) {
 
   // GET /api/status
   if (method === 'GET' && pathname === '/api/status') {
-    const [nginx, printNode] = await Promise.all([
+    const [nginx, printAgent] = await Promise.all([
       isRunning('nginx.exe'),
-      isRunning('node.exe'),
+      isRunning('cmd.exe'),
     ]);
-    return json(res, 200, { nginx, printAgent: printNode });
+    const printRunning = printAgent; // window title check would need tasklist /v parsing
+    return json(res, 200, { nginx, printAgent: printRunning });
   }
 
   // GET /api/log
@@ -162,8 +163,8 @@ async function router(req, res) {
   if (method === 'POST' && pathname === '/api/restart-print') {
     // Kill the print-agent cmd window (which kills the node child)
     await runCmd('taskkill /f /fi "WINDOWTITLE eq AGENTE STAMPANTE*"');
-    // Also kill lingering node processes from print-agent
-    await runCmd(`wmic process where "name='node.exe' and commandline like '%print-agent%'" delete`);
+    // Backup: kill lingering node processes from the print-agent dir via PowerShell
+    await runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`);
     // Start fresh via the auto-restart batch
     const child = spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_BAT], {
       detached: true,
@@ -202,10 +203,23 @@ async function router(req, res) {
 // ── Server ──────────────────────────────────────────────
 const server = http.createServer(router);
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`[ADMIN] Pannello su http://127.0.0.1:${PORT}`);
-  console.log(`[ADMIN] Auth: ${ADMIN_USER} / ${ADMIN_PASS}`);
-});
+function tryListen(port) {
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`[ADMIN] Pannello su http://127.0.0.1:${port}`);
+    console.log(`[ADMIN] Auth: ${ADMIN_USER} / **** (imposta via ADMIN_PASS env)`);
+  });
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && port < PORT + 10) {
+      console.log(`[ADMIN] Porta ${port} occupata, provo ${port + 1}...`);
+      tryListen(port + 1);
+    } else {
+      console.error('[ADMIN] Errore avvio server:', err.message);
+      process.exit(1);
+    }
+  });
+}
+
+tryListen(PORT);
 
 process.on('SIGINT', () => { server.close(); process.exit(); });
 process.on('SIGTERM', () => { server.close(); process.exit(); });

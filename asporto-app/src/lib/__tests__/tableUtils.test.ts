@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseAperturaFromNote, getDisplayNote, setAperturaInNote, setNoteText } from '../tableUtils';
+import { parseAperturaFromNote, setAperturaInNote } from '../tableUtils';
 
 describe('tableUtils', () => {
   describe('parseAperturaFromNote', () => {
-    it('estrae apertura da nota formattata', () => {
-      expect(parseAperturaFromNote('[AP:12:30] Testo nota')).toBe('12:30');
+    it('estrae apertura da nota JSON', () => {
+      expect(parseAperturaFromNote('{"apertura":"2026-07-11T16:00:00.000Z","text":""}')).toBe('2026-07-11T16:00:00.000Z');
     });
 
     it('ritorna null se nessuna apertura', () => {
@@ -17,41 +17,20 @@ describe('tableUtils', () => {
     });
   });
 
-  describe('getDisplayNote', () => {
-    it('rimuove marker apertura dal display', () => {
-      expect(getDisplayNote('[AP:12:30] Testo nota')).toBe('Testo nota');
-    });
-
-    it('ritorna testo invariato se nessun marker', () => {
-      expect(getDisplayNote('Solo testo')).toBe('Solo testo');
-    });
-
-    it('ritorna stringa vuota per null', () => {
-      expect(getDisplayNote(null)).toBe('');
-    });
-  });
-
   describe('setAperturaInNote', () => {
     it('aggiunge apertura a nota vuota', () => {
-      expect(setAperturaInNote('', '20:00')).toBe('[AP:20:00]');
+      const result = setAperturaInNote('', '2026-07-11T16:00:00.000Z');
+      expect(JSON.parse(result).apertura).toBe('2026-07-11T16:00:00.000Z');
     });
 
-    it('sostituisce apertura esistente', () => {
-      expect(setAperturaInNote('[AP:12:00] Testo', '20:00')).toBe('[AP:20:00] Testo');
+    it('sostituisce apertura esistente mantenendo testo', () => {
+      const result = setAperturaInNote(JSON.stringify({ apertura: 'old', text: 'Testo' }), 'new');
+      expect(JSON.parse(result)).toEqual({ apertura: 'new', text: 'Testo' });
     });
 
     it('aggiunge apertura a nota senza marker', () => {
-      expect(setAperturaInNote('Testo', '20:00')).toBe('[AP:20:00] Testo');
-    });
-  });
-
-  describe('setNoteText', () => {
-    it('sostituisce testo mantenendo apertura', () => {
-      expect(setNoteText('[AP:12:00] Vecchio', 'Nuovo')).toBe('[AP:12:00] Nuovo');
-    });
-
-    it('sostituisce testo senza apertura', () => {
-      expect(setNoteText('Vecchio', 'Nuovo')).toBe('Nuovo');
+      const result = setAperturaInNote('Testo', '2026-07-11T16:00:00.000Z');
+      expect(JSON.parse(result).apertura).toBe('2026-07-11T16:00:00.000Z');
     });
   });
 });
