@@ -29,3 +29,6 @@
 2026/07/09 20:41:19 [error] 12384#11692: OpenEvent("Global\ngx_reload_492") failed (5: Access is denied)
 2026/07/09 20:46:44 [notice] 15844#11080: signal process started
 2026/07/09 20:46:44 [error] 15844#11080: OpenEvent("Global\ngx_reload_492") failed (5: Access is denied)
+2026/07/27 15:41:04 [notice] 1624#9780: signal process started
+2026/07/27 15:41:04 [error] 1624#9780: OpenEvent("Global\ngx_reload_5928") failed (2: The system cannot find the file specified)
+2026/07/27 15:44:06 [error] 9544#7244: *12 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.250, server: localhost, request: "GET /print-agent/health HTTP/1.1", upstream: "http://127.0.0.1:8787/health", host: "gestionale.90-minuti.it"
