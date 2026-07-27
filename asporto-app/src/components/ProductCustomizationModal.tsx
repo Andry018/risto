@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Product, Ingredient, CustomizedItem } from '../types/entities';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { getVariantsForCategory, type ProductVariant } from '../lib/productVariants';
@@ -31,6 +31,8 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
   const [duettoPairName, setDuettoPairName] = useState('');
   const [duettoSearch, setDuettoSearch] = useState('');
 
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (isOpen && editingItem) {
       setLocalItem({ ...editingItem });
@@ -49,6 +51,15 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
       setDuettoSearch('');
     }
   }, [isOpen, editingItem]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); setLocalItem(null); setIngSearch(''); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !localItem) return null;
 
@@ -383,8 +394,8 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
 
   if (variant === 'mobile') {
     return (
-      <div className="fixed inset-0 z-[100] flex items-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="bg-surface w-full max-h-[92vh] rounded-t-[32px] shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-300">
+      <div className="fixed inset-0 z-[100] flex items-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { onClose(); setLocalItem(null); setIngSearch(''); }}>
+        <div className="bg-surface w-full max-h-[92vh] rounded-t-[32px] shadow-2xl flex flex-col animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
           <div className="p-4 border-b border-surface-light flex justify-between items-center shrink-0">
             <div>
               <h2 className="text-xl font-black italic uppercase text-white leading-tight">{localItem.nome}</h2>
@@ -418,8 +429,8 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in zoom-in duration-200">
-      <div className="bg-surface border border-surface-light w-full max-w-4xl rounded-[32px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[88vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in zoom-in duration-200" onClick={() => { onClose(); setLocalItem(null); setIngSearch(''); }}>
+      <div ref={modalRef} className="bg-surface border border-surface-light w-full max-w-4xl rounded-[32px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-surface-light flex justify-between items-center bg-surface-light/5 shrink-0">
           <div>
             <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">Personalizza <span className="text-gold">{localItem.nome}</span></h2>

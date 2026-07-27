@@ -8,7 +8,7 @@ import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
 import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
-import { printKitchenViaAgent } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
 import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
@@ -87,13 +87,22 @@ export default function WaiterMobileView() {
 
   const handlePrint = async () => {
     if (cart.length === 0) return;
+    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+    const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
+    const salaItems = cart.filter(i => salaCats.includes(i.categoria));
+    const tableName = selectedTable?.nome || 'Tavolo';
     try {
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      await printKitchenViaAgent(cart, selectedTable?.nome || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime);
+      if (cucinaItems.length > 0) {
+        await printKitchenViaAgent(cucinaItems, tableName, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime);
+      }
+      if (salaItems.length > 0) {
+        await printSalaViaAgent(salaItems, tableName, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT);
+      }
       toast.addToast({
         type: 'success',
         title: 'Comanda stampata',
-        message: 'Inviata alla stampante LAN.',
+        message: 'Cucina e sala inviate alla stampante LAN.',
         duration: 2500,
       });
     } catch (error) {
@@ -797,6 +806,22 @@ export default function WaiterMobileView() {
             now={now}
             tableApertura={tableApertura}
             onSelectTable={selectTable}
+            onTransferTable={(table) => {
+              toast.addToast({
+                type: 'info',
+                title: 'Trasferimento Tavolo',
+                message: `Funzionalità in sviluppo per ${table.nome}`,
+                duration: 3000,
+              });
+            }}
+            onTransferCaptain={(table) => {
+              toast.addToast({
+                type: 'info',
+                title: 'Trasferimento Cameriere',
+                message: `Funzionalità in sviluppo per ${table.nome}`,
+                duration: 3000,
+              });
+            }}
           />
         </div>
       ) : (
@@ -1033,23 +1058,23 @@ export default function WaiterMobileView() {
         variant="mobile"
         onClose={() => setIsModalOpen(false)}
         onSave={saveCustomization}
-         onDuettoSave={(item, pairedId) => {
-          const product = products.find(p => p.id === pairedId);
-          if (product) {
-            const pairedItem: CustomizedItem = {
-              ...product,
-              quantity: 1,
-              addedIngredients: [],
-              removedIngredients: [],
-              notes: `DUETTO CON: ${item.nome}`,
-              uniqueId: newUniqueId(),
-              portata: currentPortata,
-            };
-            setCart(prev => [...prev, item, pairedItem]);
-          }
-          setIsModalOpen(false);
-          setEditingItem(null);
-        }}
+          onDuettoSave={(item, pairedId) => {
+           const product = products.find(p => p.id === pairedId);
+           if (product) {
+             const pairedItem: CustomizedItem = {
+               ...product,
+               quantity: 1,
+               addedIngredients: [],
+               removedIngredients: [],
+               notes: `DUETTO CON: ${item.nome}`,
+               uniqueId: newUniqueId(),
+               portata: item.portata ?? currentPortata,
+             };
+             setCart(prev => [...prev, item, pairedItem]);
+           }
+           setIsModalOpen(false);
+           setEditingItem(null);
+         }}
       />
 
       <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" />

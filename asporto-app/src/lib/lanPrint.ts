@@ -18,6 +18,14 @@ type ReceiptPrintJob = {
   printerPort?: number;
 };
 
+type SalaPrintJob = {
+  kind: 'sala';
+  tableName: string;
+  items: CustomizedItem[];
+  printerIp?: string;
+  printerPort?: number;
+};
+
 export type HaccpLabelData = {
   kind: 'haccp_label';
   nome_prodotto: string;
@@ -31,7 +39,7 @@ export type HaccpLabelData = {
   printerPort?: number;
 };
 
-type PrintJob = KitchenPrintJob | ReceiptPrintJob | HaccpLabelData;
+type PrintJob = KitchenPrintJob | ReceiptPrintJob | SalaPrintJob | HaccpLabelData;
 
 function normalizeAgentUrl(agentUrl: string): string {
   const trimmed = agentUrl.trim();
@@ -56,6 +64,16 @@ export async function printReceiptViaAgent(items: CustomizedItem[], tableName: s
     tableName,
     items,
     total,
+    printerIp,
+    printerPort,
+  }, agentUrl);
+}
+
+export async function printSalaViaAgent(items: CustomizedItem[], tableName: string, agentUrl: string, printerIp?: string, printerPort?: number): Promise<void> {
+  await sendPrintJob({
+    kind: 'sala',
+    tableName,
+    items,
     printerIp,
     printerPort,
   }, agentUrl);

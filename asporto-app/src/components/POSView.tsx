@@ -13,7 +13,7 @@ import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { printKitchenViaAgent, printReceiptViaAgent } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent } from '../lib/lanPrint';
 import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
 import {
   addedIngredientsFromStoredOrderLine,
@@ -61,6 +61,24 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
+
+  // URY-style single/double click
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickCountRef = useRef(0);
+
+  const handleProductClick = (product: Product) => {
+    if (!product.disponibile) return;
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = setTimeout(() => {
+      if (clickCountRef.current === 1) {
+        addToCart(product);
+      } else if (clickCountRef.current >= 2) {
+        openCustomization(product);
+      }
+      clickCountRef.current = 0;
+    }, 250);
+  };
 
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -749,13 +767,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
                 <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto custom-scrollbar">
                   <button
-                    onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
-                    disabled={cart.length === 0}
-                    className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                  >
-                    <Printer size={14} /> STAMPA COMANDA
-                  </button>
-                  <button
                     onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
@@ -841,7 +852,59 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
       <div className="h-dvh flex bg-charcoal text-white overflow-hidden">
 
-      {/* Left Column: Menu */}
+      {/* Lato sinistro: Categorie Menu (stile URY) */}
+      <aside className="w-[88px] shrink-0 bg-surface/80 border-r border-surface-light flex flex-col items-center py-4 gap-1 overflow-y-auto">
+        <div className="text-[7px] font-black uppercase tracking-[0.3em] text-gray-500 mb-1 pb-2 border-b border-surface-light w-full text-center">CATEGORIE</div>
+        <button
+          onClick={() => setActiveCategory(null)}
+          className={`w-[72px] h-[52px] rounded-2xl border flex items-center justify-center transition-all active:scale-90 text-[9px] font-black uppercase tracking-wider ${
+            activeCategory === null
+              ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20'
+              : 'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-gray-500'
+          }`}
+        >
+          Tutti
+        </button>
+        {(() => {
+          const coveredCats = new Set(categoryDefs.flatMap(d => d.match));
+          const extraCats = Array.from(new Set(products.map(p => p.categoria)))
+            .filter(c => !coveredCats.has(c) && c !== 'EXTRA')
+            .sort();
+          return [...categoryDefs, ...extraCats.map(c => ({ label: c, match: [c] }))].filter(def => def.match.some(c => products.some(p => p.categoria === c)));
+        })().map(def => {
+          const isActive = activeCategory === def.label;
+          const icons: Record<string, string> = {
+            Antipasto: '🥗', Primo: '🍝', Secondo: '🥩', Contorni: '🥦',
+            Fritti: '🍟', Pizze: '🍕', Bevande: '🥤', Dolce: '🍰',
+            'Caffè e Liquori': '☕', Servizio: '⚙️'
+          };
+          return (
+            <button
+              key={def.label}
+              type="button"
+              onClick={() => setActiveCategory(isActive ? null : def.label)}
+              className={`w-[72px] h-[52px] rounded-2xl border flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 ${
+                isActive
+                  ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20'
+                  : 'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-gray-500'
+              }`}
+            >
+              <span className="text-base leading-none">{icons[def.label] || '📋'}</span>
+              <span className="text-[6px] font-black uppercase tracking-wider leading-tight">{def.label}</span>
+            </button>
+          );
+        })}
+        <div className="mt-auto pt-2 border-t border-surface-light w-full flex flex-col items-center gap-1">
+          <button
+            onClick={() => setPaninoModalOpen(true)}
+            className="w-[72px] h-[40px] rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[9px] font-black uppercase tracking-wider transition-all hover:bg-gold/20 active:scale-90 flex items-center justify-center gap-1"
+          >
+            <Sandwich size={14} /> Panino
+          </button>
+        </div>
+      </aside>
+
+      {/* Colonna centrale: Menu Prodotti */}
       <div className="flex-1 flex flex-col min-w-0 p-4 md:p-6 lg:p-8 min-h-0">
         <header className="mb-8 flex flex-col gap-6">
           <div className="flex justify-between items-center">
@@ -890,42 +953,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     </button>
                   )}
                 </div>
-                <div className="mt-4 rounded-3xl border border-surface-light bg-surface/80 p-3 md:p-4 shadow-xl shadow-black/10 backdrop-blur-sm">
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
-                      {PORTATA_OPTIONS.map(portata => {
-                        const isActive = currentPortata === portata.value;
-                        return (
-                          <button
-                            key={portata.value}
-                            type="button"
-                            onClick={() => setCurrentPortata(portata.value)}
-                            className={`min-w-[96px] px-3 py-2.5 rounded-2xl border text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${
-                              isActive
-                                ? `${portata.color} shadow-lg shadow-black/10`
-                                : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'
-                            }`}
-                          >
-                            {portata.label}
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={advancePortata}
-                        className="min-w-[92px] px-3 py-2.5 rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap hover:bg-gold/20"
-                      >
-                        Avanza
-                      </button>
-                      <button
-                        onClick={() => setPaninoModalOpen(true)}
-                        className="min-w-[92px] px-3 py-2.5 rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap hover:bg-gold/20 flex items-center justify-center gap-1.5"
-                      >
-                        <Sandwich size={14} /> Panino
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -950,29 +977,33 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
           </div>
 
-          {/* Categories Selector */}
-          <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+          {/* Portate (uscita) selector row */}
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 mr-1">Portata</span>
+            {PORTATA_OPTIONS.map(portata => {
+              const isActive = currentPortata === portata.value;
+              return (
+                <button
+                  key={portata.value}
+                  type="button"
+                  onClick={() => setCurrentPortata(portata.value)}
+                  className={`px-3 h-8 rounded-xl border text-[10px] font-black tracking-wider transition-all active:scale-90 ${
+                    isActive
+                      ? `${portata.color} shadow-lg shadow-black/10 border-current`
+                      : 'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-gray-500'
+                  }`}
+                >
+                  {portata.value}ª {portata.label}
+                </button>
+              );
+            })}
             <button
-              onClick={() => setActiveCategory(null)}
-              className={`px-6 py-2.5 rounded-xl font-black text-xs tracking-widest transition-all border whitespace-nowrap shrink-0 ${activeCategory === null ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-surface border-surface-light text-gray-500 hover:text-white'}`}
+              type="button"
+              onClick={advancePortata}
+              className="px-3 h-8 rounded-xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black tracking-wider transition-all hover:bg-gold/20 active:scale-90"
             >
-              TUTTI
+              → Tutte
             </button>
-            {(() => {
-              const coveredCats = new Set(categoryDefs.flatMap(d => d.match));
-              const extraCats = Array.from(new Set(products.map(p => p.categoria)))
-                .filter(c => !coveredCats.has(c) && c !== 'EXTRA')
-                .sort();
-              return [...categoryDefs, ...extraCats.map(c => ({ label: c, match: [c] }))].filter(def => def.match.some(c => products.some(p => p.categoria === c)));
-            })().map(def => (
-              <button
-                key={def.label}
-                onClick={() => setActiveCategory(activeCategory === def.label ? null : def.label)}
-                className={`px-6 py-2.5 rounded-xl font-black text-xs tracking-widest transition-all border whitespace-nowrap shrink-0 ${activeCategory === def.label ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20' : 'bg-surface border-surface-light text-gray-500 hover:text-white'}`}
-              >
-                {def.label.toUpperCase()}
-              </button>
-            ))}
           </div>
 
         </header>
@@ -1020,7 +1051,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               return (
                 <div
                   key={product.id}
-                  onClick={() => isTrulyAvailable && addToCart(product)}
+                  onClick={() => isTrulyAvailable && handleProductClick(product)}
                   className={`bg-surface border p-5 rounded-[24px] flex flex-col justify-between text-left transition-all active:scale-95 group shadow-xl h-44 relative overflow-hidden cursor-pointer ${
                     !isTrulyAvailable ? 'border-red-500/20 grayscale opacity-60 cursor-not-allowed'
                     : inCart ? 'border-gold/60 ring-2 ring-gold/20'
@@ -1136,13 +1167,29 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
           ) : (
               <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
-                    disabled={cart.length === 0}
-                    className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                  >
-                    <Printer size={14} /> STAMPA COMANDA
-                  </button>
+                {(() => {
+                  const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+                  const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
+                  const salaItems = cart.filter(i => salaCats.includes(i.categoria));
+                  return (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                        disabled={cucinaItems.length === 0}
+                        className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                      >
+                        <Printer size={14} /> CUCINA
+                      </button>
+                        <button
+                          onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                          disabled={salaItems.length === 0}
+                          className="w-full bg-charcoal hover:bg-surface-light text-sky-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                        >
+                          <Printer size={14} /> SALA
+                        </button>
+                      </div>
+                    );
+                  })()}
                 {tableId ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
@@ -1173,13 +1220,29 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </>
               ) : (
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => printKitchenViaAgent(cart, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
-                    disabled={cart.length === 0}
-                    className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                  >
-                    <Printer size={14} /> STAMPA COMANDA
-                  </button>
+                  {(() => {
+                    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+                    const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
+                    const salaItems = cart.filter(i => salaCats.includes(i.categoria));
+                    return (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                          disabled={cucinaItems.length === 0}
+                          className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                        >
+                          <Printer size={14} /> CUCINA
+                        </button>
+                        <button
+                          onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                          disabled={salaItems.length === 0}
+                          className="w-full bg-charcoal hover:bg-surface-light text-sky-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                        >
+                          <Printer size={14} /> SALA
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={handleHoldBill}
