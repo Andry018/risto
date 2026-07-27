@@ -15,3 +15,11 @@ print-agent/node_modules/
 # --- LOG LOCALI DEL SERVER ---
 log_git.txt
 log_stampante.txt
+nginx/logs/error.log
+/nginx/logs
+logs/access.log
+log_admin.txt
+log_stampante.txt
+logs/error.log
+logs/nginx.pid
+nginx/logs/error.log

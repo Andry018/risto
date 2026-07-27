@@ -955,26 +955,26 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Search Bar */}
-            <div className="relative w-72">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Cerca prodotto..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none focus:border-gold transition-all"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors p-1"
-                >
-                  <X size={18} />
-                </button>
-              )}
-            </div>
+          {/* Search Bar */}
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Cerca prodotto..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none focus:border-gold transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={18} />
+              </button>
+            )}
           </div>
 
           {/* Portate (uscita) selector row */}

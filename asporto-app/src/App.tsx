@@ -20,6 +20,7 @@ import { ToastProvider } from './components/Toast';
 import { ConfirmProvider } from './components/ConfirmModal';
 import { PinProvider } from './components/PinModal';
 import { PromptProvider } from './components/PromptModal';
+import { WakeLockManager } from './components/WakeLockManager';
 
 function RootRoute() {
   return isTablet() ? <StaffDashboard /> : <WaiterMobileView />;
@@ -35,6 +36,7 @@ export default function App() {
         <PinProvider>
         <PromptProvider>
         <ExitGuard>
+        <WakeLockManager />
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
           <Route path="/menu" element={<PublicMenuView />} />

@@ -15,7 +15,6 @@ import { calculateItemPrice } from '../lib/priceUtils';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import ReceiptPreview from './ReceiptPreview';
 import {
   addedIngredientsFromStoredOrderLine,
   calculateRemovalsPrice,
@@ -62,7 +61,6 @@ export default function WaiterMobileView() {
   const [tableDrafts, setTableDrafts] = useState<Record<string, { cart: CustomizedItem[]; covers: number }>>({});
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
-  const [kitchenPreviewOpen, setKitchenPreviewOpen] = useState(false);
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
@@ -961,13 +959,6 @@ export default function WaiterMobileView() {
           <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 bg-surface/90 backdrop-blur-xl border-t border-white/5 z-40">
             <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => setKitchenPreviewOpen(true)}
-                disabled={cart.length === 0}
-                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-white hover:bg-surface-light disabled:opacity-30"
-              >
-                <BookOpen size={14} /> ANTEPRIMA
-              </button>
-              <button
                 onClick={handlePrint}
                 disabled={cart.length === 0}
                 className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
@@ -994,16 +985,6 @@ export default function WaiterMobileView() {
           </div>
         </div>
       )}
-
-      <ReceiptPreview
-        isOpen={kitchenPreviewOpen}
-        onClose={() => setKitchenPreviewOpen(false)}
-        customerName={selectedTable?.nome || 'TAVOLO'}
-        pickupTime={new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-        items={cart}
-        variant="kitchen"
-        onPrint={handlePrint}
-      />
 
       {/* Covers Modal */}
       {isCoversModalOpen && (

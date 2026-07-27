@@ -13,6 +13,7 @@ import { useConfirm } from '../components/ConfirmModal';
 import { useToast } from '../components/Toast';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
+import { getWakeLockEnabled, setWakeLockEnabled } from '../hooks/useWakeLock';
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ export default function StaffDashboard() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
   const [printDeltaQty, setPrintDeltaQty] = useState(() => localStorage.getItem('risto_print_delta_qty') === 'true');
+  const [wakeLockEnabled, setWakeLockLocal] = useState(() => getWakeLockEnabled());
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
 
@@ -423,8 +425,28 @@ export default function StaffDashboard() {
                    </div>
                  </div>
 
-                 <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Sicurezza</p>
+                  <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Schermo</p>
+                    <h3 className="text-base font-black text-white mb-3">Always On Display</h3>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-300">
+                        Impedisce al dispositivo di andare in sospensione mentre l'app è aperta
+                      </p>
+                      <button
+                        onClick={() => {
+                          const next = !wakeLockEnabled;
+                          setWakeLockLocal(next);
+                          setWakeLockEnabled(next);
+                        }}
+                        className={`relative w-14 h-8 rounded-full transition-all shrink-0 ml-4 ${wakeLockEnabled ? 'bg-gold' : 'bg-surface-light/40'}`}
+                      >
+                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${wakeLockEnabled ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Sicurezza</p>
                    <h3 className="text-base font-black text-white mb-3">Cambia PIN</h3>
                    <div className="space-y-2">
                      <div className="flex items-center gap-2">

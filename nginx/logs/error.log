@@ -29,6 +29,27 @@
 2026/07/09 20:41:19 [error] 12384#11692: OpenEvent("Global\ngx_reload_492") failed (5: Access is denied)
 2026/07/09 20:46:44 [notice] 15844#11080: signal process started
 2026/07/09 20:46:44 [error] 15844#11080: OpenEvent("Global\ngx_reload_492") failed (5: Access is denied)
+<<<<<<< Updated upstream
 2026/07/27 15:41:04 [notice] 1624#9780: signal process started
 2026/07/27 15:41:04 [error] 1624#9780: OpenEvent("Global\ngx_reload_5928") failed (2: The system cannot find the file specified)
 2026/07/27 15:44:06 [error] 9544#7244: *12 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.250, server: localhost, request: "GET /print-agent/health HTTP/1.1", upstream: "http://127.0.0.1:8787/health", host: "gestionale.90-minuti.it"
+=======
+2026/07/11 16:42:55 [notice] 6260#16524: signal process started
+2026/07/11 17:08:30 [notice] 5388#15872: signal process started
+2026/07/11 17:11:29 [error] 15372#4772: *253 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.10, server: localhost, request: "GET /admin/api/log HTTP/1.1", upstream: "http://127.0.0.1:4000/api/log", host: "192.168.1.250", referrer: "http://192.168.1.250/admin/"
+2026/07/11 17:11:29 [error] 15372#4772: *241 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.10, server: localhost, request: "GET /admin/api/status HTTP/1.1", upstream: "http://127.0.0.1:4000/api/status", host: "192.168.1.250", referrer: "http://192.168.1.250/admin/"
+2026/07/11 17:14:02 [notice] 8416#18332: signal process started
+2026/07/11 19:19:32 [error] 6752#3108: *17 CreateFile() "C:/risto/asporto-app/dist/sw.js" failed (2: The system cannot find the file specified), client: 192.168.1.250, server: localhost, request: "GET /sw.js HTTP/1.1", host: "192.168.1.250", referrer: "https://192.168.1.250/sw.js"
+2026/07/11 19:19:36 [error] 6752#3108: *100 CreateFile() "C:/risto/asporto-app/dist/sw.js" failed (2: The system cannot find the file specified), client: 192.168.1.250, server: localhost, request: "GET /sw.js HTTP/1.1", host: "192.168.1.250", referrer: "https://192.168.1.250/sw.js"
+2026/07/11 19:19:36 [error] 6752#3108: *93 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.250, server: localhost, request: "GET /print-agent/health HTTP/1.1", upstream: "http://127.0.0.1:8787/health", host: "192.168.1.250", referrer: "https://192.168.1.250/"
+2026/07/11 19:25:05 [error] 16492#17256: *3 CreateFile() "C:/risto/asporto-app/dist/mkcert-ca.pem" failed (2: The system cannot find the file specified), client: 192.168.1.250, server: localhost, request: "GET /mkcert-ca.pem HTTP/1.1", host: "192.168.1.250"
+2026/07/11 19:30:21 [error] 9656#14052: *4 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.250, server: localhost, request: "GET /print-agent/health HTTP/1.1", upstream: "http://127.0.0.1:8787/health", host: "192.168.1.250", referrer: "https://192.168.1.250/"
+2026/07/14 19:39:40 [notice] 16660#11472: signal process started
+2026/07/14 19:41:26 [notice] 12480#12680: signal process started
+2026/07/14 19:41:26 [error] 12480#12680: CreateFile() "C:\risto\nginx/logs/nginx.pid" failed (2: The system cannot find the file specified)
+2026/07/14 19:45:25 [error] 11144#5212: *3 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.250, server: localhost, request: "GET /print-agent/health HTTP/1.1", upstream: "http://127.0.0.1:8787/health", host: "192.168.1.250", referrer: "https://192.168.1.250/"
+2026/07/14 19:47:54 [notice] 12496#600: signal process started
+2026/07/14 19:57:37 [error] 11976#17316: *13 CreateFile() "C:/risto/asporto-app/dist/assets/CMqal5cQ.js" failed (2: The system cannot find the file specified), client: 192.168.1.250, server: localhost, request: "GET /assets/CMqal5cQ.js HTTP/1.1", host: "192.168.1.250"
+2026/07/22 17:05:33 [notice] 16608#10180: signal process started
+2026/07/22 17:05:33 [error] 16608#10180: OpenEvent("Global\ngx_reload_9724") failed (2: The system cannot find the file specified)
+>>>>>>> Stashed changes

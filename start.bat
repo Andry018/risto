@@ -80,7 +80,14 @@ echo.
 
 echo ===================================================
 echo   SISTEMA DI PRODUZIONE AVVIATO CON SUCCESSO!
+<<<<<<< Updated upstream
 echo   Il sito e raggiungibile su: http://gestionale.90-minuti.it
 echo   Pannello admin: http://gestionale.90-minuti.it/admin
+=======
+echo   Il gestionale e' raggiungibile su: https://gestionale.90-minuti.it
+echo   Pannello admin: https://gestionale.90-minuti.it/admin
+echo   ATTENZIONE: Non usare l'indirizzo IP. Usa solo il dominio ufficiale!
+echo   La rete Wi-Fi interna (AdGuard) gestira' il traffico in automatico.
+>>>>>>> Stashed changes
 echo ===================================================
 pause
