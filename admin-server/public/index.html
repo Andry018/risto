@@ -38,7 +38,7 @@
     </div>
     <div id="statusBar" class="flex items-center gap-3 text-xs text-slate-400">
       <span id="serverTime"></span>
-      <a href="/" class="hover:text-white transition-colors underline underline-offset-2">Vai al Sito</a>
+      <a href="http://gestionale.90-minuti.it" class="hover:text-white transition-colors underline underline-offset-2" target="_blank">Vai al Sito</a>
     </div>
   </div>
 </header>
@@ -48,12 +48,26 @@
   <!-- Status Cards -->
   <section>
     <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Stato Servizi</h2>
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <div id="card-nginx" class="card rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 flex items-center gap-3">
         <div class="pulse-dot" id="dot-nginx"></div>
         <div>
           <div class="text-sm font-medium">Nginx</div>
           <div class="text-xs text-slate-500" id="label-nginx">Verifica...</div>
+        </div>
+      </div>
+      <div id="card-webhook" class="card rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 flex items-center gap-3">
+        <div class="pulse-dot" id="dot-webhook"></div>
+        <div>
+          <div class="text-sm font-medium">Webhook</div>
+          <div class="text-xs text-slate-500" id="label-webhook">Verifica...</div>
+        </div>
+      </div>
+      <div id="card-admin" class="card rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 flex items-center gap-3">
+        <div class="pulse-dot" id="dot-admin"></div>
+        <div>
+          <div class="text-sm font-medium">Admin Server</div>
+          <div class="text-xs text-slate-500" id="label-admin">Verifica...</div>
         </div>
       </div>
       <div id="card-print" class="card rounded-xl border border-slate-700/50 bg-slate-800/50 p-4 flex items-center gap-3">
@@ -69,7 +83,7 @@
   <!-- Action Buttons -->
   <section>
     <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Azioni</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       <button id="btn-nginx" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-emerald-500/40 p-4 text-left" onclick="action('restart-nginx','btn-nginx')">
         <div class="flex items-center gap-2">
           <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,35 +94,65 @@
         <div class="mt-1 text-xs text-slate-500">taskkill + riavvio</div>
         <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-emerald-500/20 transition-all pointer-events-none"></div>
       </button>
-      <button id="btn-autopull" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-blue-500/40 p-4 text-left" onclick="action('autopull','btn-autopull')">
+      <button id="btn-webhook" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-blue-500/40 p-4 text-left" onclick="action('restart-webhook','btn-webhook')">
         <div class="flex items-center gap-2">
           <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span class="text-sm font-medium">Riavvia Webhook</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">porta 9000</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-blue-500/20 transition-all pointer-events-none"></div>
+      </button>
+      <button id="btn-admin" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-purple-500/40 p-4 text-left" onclick="action('restart-admin','btn-admin')">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span class="text-sm font-medium">Riavvia Admin</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">porta 4000 (questo pannello)</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-purple-500/20 transition-all pointer-events-none"></div>
+      </button>
+      <button id="btn-autopull" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-amber-500/40 p-4 text-left" onclick="action('autopull','btn-autopull')">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           <span class="text-sm font-medium">Aggiorna Codice</span>
         </div>
         <div class="mt-1 text-xs text-slate-500">git pull + rebuild</div>
-        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-blue-500/20 transition-all pointer-events-none"></div>
-      </button>
-      <button id="btn-print" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-amber-500/40 p-4 text-left" onclick="action('restart-print','btn-print')">
-        <div class="flex items-center gap-2">
-          <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-          </svg>
-          <span class="text-sm font-medium">Riavvia Print Agent</span>
-        </div>
-        <div class="mt-1 text-xs text-slate-500">kill + auto-restart</div>
         <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-amber-500/20 transition-all pointer-events-none"></div>
       </button>
-      <button class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-purple-500/40 p-4 text-left" onclick="document.getElementById('cmdInput').focus()">
+      <button id="btn-print" class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-rose-500/40 p-4 text-left" onclick="action('restart-print','btn-print')">
         <div class="flex items-center gap-2">
-          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          <span class="text-sm font-medium">Riavvia Print</span>
+        </div>
+        <div class="mt-1 text-xs text-slate-500">kill + auto-restart</div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-rose-500/20 transition-all pointer-events-none"></div>
+      </button>
+      <button class="btn group relative rounded-xl border border-slate-700/50 bg-slate-800/50 hover:bg-slate-700/50 hover:border-slate-500/40 p-4 text-left" onclick="document.getElementById('cmdInput').focus()">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span class="text-sm font-medium">Esegui Comando</span>
         </div>
         <div class="mt-1 text-xs text-slate-500">CMD personalizzato</div>
-        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-purple-500/20 transition-all pointer-events-none"></div>
+        <div class="absolute inset-0 rounded-xl ring-1 ring-inset ring-transparent group-hover:ring-slate-500/20 transition-all pointer-events-none"></div>
+      </button>
+    </div>
+    <div class="mt-3">
+      <button id="btn-restart-all" class="btn group relative w-full rounded-xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 hover:border-red-500/50 p-4 text-left transition-all" onclick="action('restart-all','btn-restart-all')">
+        <div class="flex items-center justify-center gap-2">
+          <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <span class="text-sm font-bold">RIAVVIA TUTTI I SERVIZI</span>
+        </div>
       </button>
     </div>
   </section>
@@ -155,9 +199,13 @@ async function fetchStatus() {
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
     setStatus('nginx', data.nginx);
+    setStatus('webhook', data.webhook);
+    setStatus('admin', data.adminServer);
     setStatus('print', data.printAgent);
   } catch {
     setStatus('nginx', null);
+    setStatus('webhook', null);
+    setStatus('admin', null);
     setStatus('print', null);
   }
 }

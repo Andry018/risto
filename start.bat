@@ -49,9 +49,8 @@ echo   [5/7] AVVIO WEBHOOK (AGGIORNAMENTI BACKGROUND)
 echo ===================================================
 cd /d C:\risto
 if exist "C:\risto\webhook.exe" (
-    start /min "" "C:\risto\webhook.exe" -hooks C:\risto\hooks.json -verbose -port 9000
-    REM Questo e' un test per il deploy automatico!
-    
+    powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'C:\risto\webhook.exe' -ArgumentList '-hooks C:\risto\hooks.json -verbose -port 9000'"
+    echo Webhook attivo su porta 9000 (nascosto).
 ) else (
     echo [ATTENZIONE] webhook.exe non trovato in C:\risto. Salto questo step.
 )
@@ -61,8 +60,8 @@ echo ===================================================
 echo   [6/7] AVVIO PANNELLO AMMINISTRAZIONE (PORTA 4000)
 echo ===================================================
 if exist "C:\risto\avvia_pannello.bat" (
-    start /min "" cmd /c "C:\risto\avvia_pannello.bat"
-    echo Dashboard di amministrazione attiva in background...
+    powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c C:\risto\avvia_pannello.bat'"
+    echo Dashboard di amministrazione attiva (nascosta).
 ) else (
     echo [ATTENZIONE] avvia_pannello.bat non trovato. Salto questo step.
 )
@@ -72,8 +71,8 @@ echo ===================================================
 echo   [7/7] AVVIO PRINT AGENT (STAMPANTE)
 echo ===================================================
 if exist "C:\risto\avvia_stampante.bat" (
-    start "" cmd /c "C:\risto\avvia_stampante.bat"
-    echo Monitoraggio stampante attivo...
+    powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c C:\risto\avvia_stampante.bat'"
+    echo Print agent attivo su porta 8787 (nascosto).
 ) else (
     echo [ERRORE] avvia_stampante.bat non trovato!
 )
@@ -81,7 +80,7 @@ echo.
 
 echo ===================================================
 echo   SISTEMA DI PRODUZIONE AVVIATO CON SUCCESSO!
-echo   Il sito e raggiungibile su: http://192.168.1.250
-echo   Pannello admin: http://192.168.1.250/admin
+echo   Il sito e raggiungibile su: http://gestionale.90-minuti.it
+echo   Pannello admin: http://gestionale.90-minuti.it/admin
 echo ===================================================
 pause

@@ -126,12 +126,19 @@ async function router(req, res) {
 
   // GET /api/status
   if (method === 'GET' && pathname === '/api/status') {
-    const [nginx, printAgent] = await Promise.all([
+    const [nginx, webhook, adminServer, printAgent] = await Promise.all([
       isRunning('nginx.exe'),
-      isRunning('cmd.exe'),
+      isRunning('webhook.exe'),
+      (async () => {
+        const r = await runCmd(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 4000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty State"`);
+        return r.stdout === 'Listen';
+      })(),
+      (async () => {
+        const r = await runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | Measure-Object | Select-Object -ExpandProperty Count"`);
+        return parseInt(r.stdout) > 0;
+      })(),
     ]);
-    const printRunning = printAgent; // window title check would need tasklist /v parsing
-    return json(res, 200, { nginx, printAgent: printRunning });
+    return json(res, 200, { nginx, webhook, adminServer, printAgent });
   }
 
   // GET /api/log
@@ -161,9 +168,7 @@ async function router(req, res) {
 
   // POST /api/restart-print
   if (method === 'POST' && pathname === '/api/restart-print') {
-    // Kill the print-agent cmd window (which kills the node child)
-    await runCmd('taskkill /f /fi "WINDOWTITLE eq AGENTE STAMPANTE*"');
-    // Backup: kill lingering node processes from the print-agent dir via PowerShell
+    // Kill the print-agent node process
     await runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`);
     // Start fresh via the auto-restart batch
     const child = spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_BAT], {
@@ -174,6 +179,53 @@ async function router(req, res) {
     });
     child.unref();
     return json(res, 200, { ok: true, message: 'Print Agent riavviato' });
+  }
+
+  // POST /api/restart-webhook
+  if (method === 'POST' && pathname === '/api/restart-webhook') {
+    await runCmd('taskkill /f /im webhook.exe');
+    const child = spawn('cmd.exe', ['/c', 'start', '', 'C:\\risto\\webhook.exe', '-hooks', 'C:\\risto\\hooks.json', '-verbose', '-port', '9000'], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: BASE,
+      windowsHide: true,
+    });
+    child.unref();
+    return json(res, 200, { ok: true, message: 'Webhook riavviato' });
+  }
+
+  // POST /api/restart-admin
+  if (method === 'POST' && pathname === '/api/restart-admin') {
+    // Riavvio in background dopo 1 secondo, così la response arriva prima
+    const child = spawn('cmd.exe', ['/c', 'timeout', '/t', '1', '&', 'start', '', 'cmd.exe', '/c', path.join(BASE, 'avvia_pannello.bat')], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: BASE,
+      windowsHide: true,
+    });
+    child.unref();
+    setTimeout(() => { process.exit(0); }, 500);
+    return json(res, 200, { ok: true, message: 'Admin server in riavvio...' });
+  }
+
+  // POST /api/restart-all
+  if (method === 'POST' && pathname === '/api/restart-all') {
+    const results = await Promise.allSettled([
+      runCmd('taskkill /f /im nginx.exe'),
+      runCmd('taskkill /f /im webhook.exe'),
+      runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`),
+    ]);
+    const errors = results.filter(r => r.status === 'rejected').map(r => r.reason?.message);
+    // Riavvia nginx
+    spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', `${NGINX_DIR}\\nginx.exe`], { detached: true, stdio: 'ignore', cwd: NGINX_DIR, windowsHide: true }).unref();
+    // Riavvia webhook
+    const whPath = path.join(BASE, 'webhook.exe');
+    if (fs.existsSync(whPath)) {
+      spawn('cmd.exe', ['/c', 'start', '', whPath, '-hooks', path.join(BASE, 'hooks.json'), '-verbose', '-port', '9000'], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+    }
+    // Riavvia print agent
+    spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_BAT], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+    return json(res, 200, { ok: errors.length === 0, message: errors.length ? 'Servizi riavviati con alcuni errori' : 'Tutti i servizi riavviati', errors });
   }
 
   // POST /api/exec (raw command — per admin esperti)
