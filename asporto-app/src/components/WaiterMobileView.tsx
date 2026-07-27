@@ -5,7 +5,7 @@ import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Po
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
@@ -752,13 +752,20 @@ export default function WaiterMobileView() {
                 </div>
                  <div className="flex items-center gap-2">
                    <PrinterStatusBadge />
-                   <button
-                     onClick={() => setIsReservationsOpen(true)}
-                     className="p-2 bg-surface rounded-xl text-gray-500 hover:text-amber-400 transition-colors"
-                     title="Prenotazioni"
-                   >
-                     <BookOpen size={20} />
-                   </button>
+                    <button
+                      onClick={() => setIsReservationsOpen(true)}
+                      className="p-2 bg-surface rounded-xl text-gray-500 hover:text-amber-400 transition-colors"
+                      title="Prenotazioni"
+                    >
+                      <BookOpen size={20} />
+                    </button>
+                    <Link
+                      to="/kitchen"
+                      className="p-2 bg-surface rounded-xl text-gray-500 hover:text-gold transition-colors"
+                      title="Gestione Menu"
+                    >
+                      <ChefHat size={20} />
+                    </Link>
                    {pendingSyncCount > 0 && (
                      <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
                        <WifiOff size={10} /> {pendingSyncCount}
@@ -846,9 +853,9 @@ export default function WaiterMobileView() {
               </div>
             </div>
             <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-black font-black shadow-lg">
-               €{total.toFixed(0)}
+                 €{total.toFixed(0)}
+              </div>
             </div>
-          </div>
 
           {/* Tab Switcher */}
           <div className="flex p-3 bg-charcoal shrink-0">
@@ -1317,6 +1324,33 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Quick Menu Admin Item ────────────────────── */
+function QuickMenuItem({ product, onToggle }: { product: Product; onToggle: () => void }) {
+  return (
+    <div className="bg-surface/60 border border-surface-light rounded-2xl px-4 py-3 flex items-center gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-sm text-white truncate">{product.nome}</span>
+          {!product.disponibile && (
+            <span className="shrink-0 text-[8px] font-black uppercase bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">Esaurito</span>
+          )}
+        </div>
+        <span className="text-xs font-black text-gold">€{product.prezzo.toFixed(2)}</span>
+      </div>
+      <button
+        onClick={onToggle}
+        className={`shrink-0 w-14 h-9 rounded-xl border font-black text-[9px] uppercase tracking-wider transition-all active:scale-90 ${
+          product.disponibile
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+            : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'
+        }`}
+      >
+        {product.disponibile ? 'ON' : 'OFF'}
+      </button>
     </div>
   );
 }
