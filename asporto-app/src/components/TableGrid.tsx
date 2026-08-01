@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Tavolo } from '../types/entities';
-import { Users, Clock, MoreVertical, ArrowRightLeft, UserCog } from 'lucide-react';
+import { Users, Clock, MoreVertical, ArrowRightLeft } from 'lucide-react';
 
 const ATTENTION_MINUTES = 20;
 
@@ -12,7 +12,6 @@ interface Props {
   tableApertura: Record<string, string>;
   onSelectTable: (table: Tavolo) => void;
   onTransferTable?: (table: Tavolo) => void;
-  onTransferCaptain?: (table: Tavolo) => void;
 }
 
 function elapsedStr(t: Tavolo, tableApertura: Record<string, string>, now: number): string | null {
@@ -40,13 +39,12 @@ function getStatusBadge(table: Tavolo, mins: number | null) {
   return { label: 'OCCUPATO', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' };
 }
 
-function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable, onTransferCaptain }: {
+function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }: {
   table: Tavolo;
   now: number;
   tableApertura: Record<string, string>;
   onSelectTable: (t: Tavolo) => void;
   onTransferTable?: (t: Tavolo) => void;
-  onTransferCaptain?: (t: Tavolo) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -106,15 +104,6 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable, 
                         Trasferisci Tavolo
                       </button>
                     )}
-                    {onTransferCaptain && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onTransferCaptain(table); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
-                      >
-                        <UserCog size={15} className="text-sky-400" />
-                        Trasferisci Cameriere
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
@@ -147,7 +136,7 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable, 
   );
 }
 
-export default function TableGrid({ tables, activeRoom, now, tableApertura, onSelectTable, onTransferTable, onTransferCaptain }: Props) {
+export default function TableGrid({ tables, activeRoom, now, tableApertura, onSelectTable, onTransferTable }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6 pt-2 grid grid-cols-2 gap-4">
       {tables
@@ -166,7 +155,6 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, onSe
             tableApertura={tableApertura}
             onSelectTable={onSelectTable}
             onTransferTable={onTransferTable}
-            onTransferCaptain={onTransferCaptain}
           />
         ))}
     </div>

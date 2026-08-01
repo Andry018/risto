@@ -25,3 +25,20 @@ export function setAperturaInNote(note: string | null | undefined, apertura: str
   }
   return JSON.stringify({ apertura, text });
 }
+
+export function clearAperturaInNote(note: string | null | undefined): string {
+  let text = '';
+  if (note) {
+    try {
+      const parsed = JSON.parse(note);
+      if (parsed && typeof parsed === 'object') {
+        text = typeof parsed.text === 'string' ? parsed.text : '';
+      } else {
+        text = note;
+      }
+    } catch {
+      text = note;
+    }
+  }
+  return JSON.stringify({ text });
+}

@@ -27,7 +27,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
-const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio'];
+const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio', 'Dolce', 'Dolci'];
 const VARIANT_NOISE = ['Pizze Bianca', 'Pizze Rosse', 'Pizze', 'Impasto'];
 const PIZZA_VARIANTS = new Set(['Bianca', 'Rossa', 'Rosè', 'Rose']);
 const PRIORITY_MODS = ['', ''];
@@ -213,6 +213,38 @@ async function printReceiptJob(job) {
   await executePrinter(printer, `Ricevuta ${job.tableName}`);
 }
 
+async function printSalaJob(job) {
+  const printer = createPrinter(resolvePrinterInterface(job));
+  setReadableText(printer);
+  const salaItems = (job.items || []).filter(i => CATEGORIES_NO_KITCHEN.includes(i.categoria));
+  const grouped = groupByPortata(salaItems);
+
+  topPadding(printer);
+  printer.alignCenter();
+  printer.setTextDoubleWidth();
+  printer.bold(true);
+  printer.println(truncate(job.tableName || 'TAVOLO', 20));
+  printer.bold(false);
+  printer.setTextNormal();
+  printer.drawLine();
+
+  printer.alignLeft();
+  for (const [portata, items] of grouped) {
+    printer.bold(true);
+    printer.setTextQuadArea();
+    printer.println(`[${portataLabel(portata).toUpperCase()}]`);
+    printer.setTextNormal();
+    printer.bold(false);
+    for (const item of items) {
+      printItemWithHeader(printer, item, 30);
+    }
+    printer.drawLine();
+  }
+
+  printer.cut();
+  await executePrinter(printer, `Comanda sala ${job.tableName}`);
+}
+
 function normalizeDbOrderItems(order) {
   const items = Array.isArray(order?.carrello) ? order.carrello : [];
   return items.map((item) => ({
@@ -306,54 +338,9 @@ async function stampaEtichettaHaccp(dati) {
   }
 }
 
-async function printDbOrder(order) {
-  const printer = createPrinter(resolvePrinterInterface(order));
-  const items = normalizeDbOrderItems(order);
-  const orderTime = formatDateTime(order?.created_at || new Date());
-
-  topPadding(printer);
-  printer.alignCenter();
-  printer.setTextDoubleWidth();
-  printer.bold(true);
-  printer.leftRight(truncate(order?.nome_cliente || 'TAVOLO', 18), orderTime);
-  printer.bold(false);
-  printer.setTextNormal();
-  printer.drawLine();
-
-  for (const item of items) {
-    const itemTotal = Number(item.prezzo_unitario || 0) * Number(item.quantity || 1);
-    printer.leftRight(`${item.quantity}x ${truncate(item.nome, 20)}`, `€${itemTotal.toFixed(2)}`);
-    printModLines(printer, item, 40);
-  }
-
-  printer.drawLine();
-  printer.alignRight();
-  printer.println(`TOTALE: €${Number(order?.totale || 0).toFixed(2)}`);
-  printer.cut();
-  await executePrinter(printer, `Ordine database ${order?.nome_cliente || 'sconosciuto'}`);
-}
-
 console.log('=== Print Agent Avviato ===');
-console.log('In ascolto di nuovi ordini da Supabase...');
 console.log(`HTTP print bridge on :${serverPort}`);
-
-const channel = supabase
-  .channel('public:ordini')
-  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ordini' }, (payload) => {
-    console.log('\n===========================================');
-    console.log('Nuovo Ordine Ricevuto!');
-    console.log(`Cliente: ${payload.new.nome_cliente}`);
-    console.log(`Ritiro: ${payload.new.orario_ritiro}`);
-    console.log('Generazione stampa in corso...');
-    void printDbOrder(payload.new).catch((error) => {
-      console.error('[DB PRINT ERROR]', error);
-    });
-  })
-  .subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      console.log('Connessione a Supabase Realtime stabilita correttamente.');
-    }
-  });
+console.log('Stampa automatica ordini DB disattivata (solo richieste esplicite /print)');
 
 const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
@@ -382,6 +369,8 @@ const server = http.createServer(async (req, res) => {
         const job = JSON.parse(body || '{}');
         if (job.kind === 'kitchen') {
           await printKitchenJob(job);
+        } else if (job.kind === 'sala') {
+          await printSalaJob(job);
         } else if (job.kind === 'receipt') {
           await printReceiptJob(job);
         } else if (job.kind === 'haccp_label') {
@@ -412,7 +401,6 @@ server.listen(serverPort, '0.0.0.0', () => {
 
 process.on('SIGINT', () => {
   console.log('Shutting down...');
-  supabase.removeChannel(channel);
   server.close();
   process.exit();
 });

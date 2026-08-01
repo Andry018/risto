@@ -23,7 +23,7 @@ import {
 import SyncStatusIndicator from './SyncStatusIndicator';
 import PrinterStatusBadge from './PrinterStatusBadge';
 import OrderHistoryModal from './OrderHistoryModal';
-import { parseAperturaFromNote, setAperturaInNote } from '../lib/tableUtils';
+import { parseAperturaFromNote, setAperturaInNote, clearAperturaInNote } from '../lib/tableUtils';
 import { notifyNewOrder } from '../lib/notify';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
@@ -57,6 +57,8 @@ export default function WaiterMobileView() {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
+  const [transferSource, setTransferSource] = useState<Tavolo | null>(null);
+  const [transferBusy, setTransferBusy] = useState(false);
   const currentUser = getCurrentUser();
   const [tableDrafts, setTableDrafts] = useState<Record<string, { cart: CustomizedItem[]; covers: number }>>({});
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
@@ -464,6 +466,78 @@ export default function WaiterMobileView() {
     setActiveTab('RIEPILOGO');
   };
 
+  /** Trasferisce ordini aperti, bozza e coperti dal tavolo sorgente al tavolo destinazione. */
+  const handleTransferTable = async (from: Tavolo, to: Tavolo) => {
+    if (to.status !== 'LIBERO') {
+      toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: `${to.nome} non è libero`, duration: 3000 });
+      return;
+    }
+    setTransferBusy(true);
+    try {
+      let movedOrders = 0;
+      if (!IS_DEMO_MODE && supabase) {
+        const { data: orders } = await supabase
+          .from('ordini')
+          .select('id')
+          .eq('nome_cliente', from.nome)
+          .eq('status', 'IN_ATTESA');
+        localUpdateRef.current = true;
+        if (orders && orders.length > 0) {
+          for (const order of orders) {
+            await syncManager.pushOrder({ id: order.id, nome_cliente: to.nome });
+          }
+          movedOrders = orders.length;
+        }
+        const apertura = tableApertura[from.id] || parseAperturaFromNote(from.note);
+        await syncManager.pushTableUpdate(from.id, { status: 'LIBERO', clienti: 0, note: clearAperturaInNote(from.note) });
+        await syncManager.pushTableUpdate(to.id, {
+          status: 'OCCUPATO',
+          clienti: from.clienti || 2,
+          note: apertura ? setAperturaInNote(to.note, apertura) : to.note,
+        });
+      }
+
+      const apertura = tableApertura[from.id] || parseAperturaFromNote(from.note);
+      setTables(prev => prev.map(t => {
+        if (t.id === from.id) return { ...t, status: 'LIBERO' as const, clienti: 0, note: clearAperturaInNote(t.note) };
+        if (t.id === to.id) return { ...t, status: 'OCCUPATO' as const, clienti: from.clienti || 2, note: apertura ? setAperturaInNote(t.note, apertura) : t.note };
+        return t;
+      }));
+      setTableApertura(prev => {
+        const next = { ...prev };
+        delete next[from.id];
+        if (apertura) next[to.id] = apertura;
+        return next;
+      });
+      setTableDrafts(prev => {
+        const next = { ...prev };
+        if (next[from.id]) {
+          next[to.id] = next[from.id];
+          delete next[from.id];
+        }
+        return next;
+      });
+      if (selectedTable?.id === from.id) {
+        setSelectedTable(null);
+        setCart([]);
+        setActiveOrderId(null);
+      }
+      toast.addToast({
+        type: 'success',
+        title: 'Tavolo trasferito',
+        message: `${from.nome} → ${to.nome}${movedOrders > 0 ? ` (${movedOrders} ordine${movedOrders > 1 ? 'i' : ''} spostati)` : ''}`,
+        duration: 3500,
+      });
+    } catch (error) {
+      console.error('Transfer failed:', error);
+      toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: 'Controlla la connessione e riprova', duration: 4000 });
+    } finally {
+      localUpdateRef.current = false;
+      setTransferSource(null);
+      setTransferBusy(false);
+    }
+  };
+
   const addToCart = (product: Product) => {
     setCart(prev => {
       const existingIdx = prev.findIndex(item =>
@@ -606,7 +680,15 @@ export default function WaiterMobileView() {
 
       if (printItems.length > 0) {
         const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        await printKitchenViaAgent(printItems, `${selectedTable.nome} (AGGIUNTA)`, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime).catch(() => {});
+        const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+        const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
+        const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
+        if (cucinaItems.length > 0) {
+          await printKitchenViaAgent(cucinaItems, `${selectedTable.nome} (AGGIUNTA)`, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime).catch(() => {});
+        }
+        if (salaItems.length > 0) {
+          await printSalaViaAgent(salaItems, `${selectedTable.nome} (AGGIUNTA)`, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT).catch(() => {});
+        }
       }
 
       clearDraft(selectedTable.id);
@@ -812,20 +894,11 @@ export default function WaiterMobileView() {
             tableApertura={tableApertura}
             onSelectTable={selectTable}
             onTransferTable={(table) => {
-              toast.addToast({
-                type: 'info',
-                title: 'Trasferimento Tavolo',
-                message: `Funzionalità in sviluppo per ${table.nome}`,
-                duration: 3000,
-              });
-            }}
-            onTransferCaptain={(table) => {
-              toast.addToast({
-                type: 'info',
-                title: 'Trasferimento Cameriere',
-                message: `Funzionalità in sviluppo per ${table.nome}`,
-                duration: 3000,
-              });
+              if (table.status === 'OCCUPATO' || table.status === 'PRENOTATO') {
+                setTransferSource(table);
+              } else {
+                toast.addToast({ type: 'info', title: 'Trasferimento Tavolo', message: `${table.nome} non ha un conto aperto`, duration: 3000 });
+              }
             }}
           />
         </div>
@@ -1034,6 +1107,84 @@ export default function WaiterMobileView() {
             >
               ANNULLA
             </button>
+          </div>
+        </div>
+      )}
+
+      {transferSource && (
+        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full sm:max-w-md max-h-[85vh] flex flex-col rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-surface-light shrink-0">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-xl font-black italic uppercase text-white">Trasferisci Tavolo</h2>
+                <button onClick={() => setTransferSource(null)} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90">
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                Da {transferSource.nome} · {transferSource.clienti || 0} coperti
+              </p>
+              <p className="text-[10px] text-gray-500 font-bold mt-1">
+                Ordini aperti, bozza e orario di apertura verranno spostati sul tavolo selezionato.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              {transferBusy ? (
+                <div className="flex items-center justify-center py-16 text-gray-500 font-black text-xs uppercase tracking-widest animate-pulse">
+                  Trasferimento in corso...
+                </div>
+              ) : (
+                SALE.map(room => {
+                  const roomTables = tables.filter(t => {
+                    const sala = (t.sala || 'Principale').toUpperCase();
+                    const normalized = sala === 'SALA' ? 'PRINCIPALE' : sala;
+                    return normalized === room.toUpperCase() && t.id !== transferSource.id;
+                  });
+                  if (roomTables.length === 0) return null;
+                  return (
+                    <div key={room}>
+                      <p className="text-[9px] font-black uppercase tracking-[0.25em] text-gray-600 mb-2 px-1">{room}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {roomTables.map(t => {
+                          const isFree = t.status === 'LIBERO';
+                          return (
+                            <button
+                              key={t.id}
+                              disabled={!isFree}
+                              onClick={() => void handleTransferTable(transferSource, t)}
+                              className={`rounded-2xl border-2 p-3 text-left transition-all flex flex-col gap-1.5 ${
+                                isFree
+                                  ? 'border-green-500/40 bg-green-500/5 hover:bg-green-500/15 active:scale-95'
+                                  : 'border-surface-light bg-charcoal/50 opacity-40 cursor-not-allowed'
+                              }`}
+                            >
+                              <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border self-start ${
+                                isFree ? 'border-green-500/40 text-green-400' : 'border-surface-light text-gray-600'
+                              }`}>
+                                {t.status === 'LIBERO' ? 'Libero' : t.status}
+                              </span>
+                              <span className="text-lg font-black text-white leading-none">{t.nome}</span>
+                              <span className="text-[10px] font-bold text-gray-500">{t.clienti || 0} coperti</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="p-4 border-t border-surface-light shrink-0">
+              <button
+                onClick={() => setTransferSource(null)}
+                disabled={transferBusy}
+                className="w-full py-4 rounded-2xl bg-charcoal border border-surface-light text-gray-400 font-black text-xs uppercase tracking-widest hover:text-white active:scale-95 disabled:opacity-30"
+              >
+                ANNULLA
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1324,33 +1475,6 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ── Quick Menu Admin Item ────────────────────── */
-function QuickMenuItem({ product, onToggle }: { product: Product; onToggle: () => void }) {
-  return (
-    <div className="bg-surface/60 border border-surface-light rounded-2xl px-4 py-3 flex items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-sm text-white truncate">{product.nome}</span>
-          {!product.disponibile && (
-            <span className="shrink-0 text-[8px] font-black uppercase bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">Esaurito</span>
-          )}
-        </div>
-        <span className="text-xs font-black text-gold">€{product.prezzo.toFixed(2)}</span>
-      </div>
-      <button
-        onClick={onToggle}
-        className={`shrink-0 w-14 h-9 rounded-xl border font-black text-[9px] uppercase tracking-wider transition-all active:scale-90 ${
-          product.disponibile
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-            : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'
-        }`}
-      >
-        {product.disponibile ? 'ON' : 'OFF'}
-      </button>
     </div>
   );
 }
