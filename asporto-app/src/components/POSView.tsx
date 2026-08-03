@@ -5,16 +5,17 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause, UtensilsCrossed } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import PaninoBuilderModal from './PaninoBuilderModal';
+import CustomItemModal from './CustomItemModal';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent } from '../lib/lanPrint';
-import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
+import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import {
   addedIngredientsFromStoredOrderLine,
   calculateRemovalsPrice,
@@ -61,6 +62,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
+  const [customItemModalOpen, setCustomItemModalOpen] = useState(false);
 
   // URY-style single/double click
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -767,7 +769,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
                 <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto custom-scrollbar">
                   <button
-                    onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                    onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
@@ -900,6 +902,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             className="w-[72px] h-[40px] rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[9px] font-black uppercase tracking-wider transition-all hover:bg-gold/20 active:scale-90 flex items-center justify-center gap-1"
           >
             <Sandwich size={14} /> Panino
+          </button>
+          <button
+            onClick={() => setCustomItemModalOpen(true)}
+            className="w-[72px] h-[40px] rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-wider transition-all hover:bg-emerald-500/20 active:scale-90 flex items-center justify-center gap-1"
+          >
+            <UtensilsCrossed size={14} /> Personal.
           </button>
         </div>
       </aside>
@@ -1174,14 +1182,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   return (
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                        onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
                         disabled={cucinaItems.length === 0}
                         className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                       >
                         <Printer size={14} /> CUCINA
                       </button>
                         <button
-                          onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
+                          onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
                           disabled={salaItems.length === 0}
                           className="w-full bg-charcoal hover:bg-surface-light text-sky-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                         >
@@ -1220,29 +1228,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {(() => {
-                    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
-                    const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
-                    const salaItems = cart.filter(i => salaCats.includes(i.categoria));
-                    return (
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
-                          disabled={cucinaItems.length === 0}
-                          className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                        >
-                          <Printer size={14} /> CUCINA
-                        </button>
-                        <button
-                          onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT)}
-                          disabled={salaItems.length === 0}
-                          className="w-full bg-charcoal hover:bg-surface-light text-sky-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                        >
-                          <Printer size={14} /> SALA
-                        </button>
-                      </div>
-                    );
-                  })()}
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={handleHoldBill}
@@ -1408,6 +1393,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         currentPortata="1"
         variant="pos"
         onClose={() => setPaninoModalOpen(false)}
+        onSave={addPaninoToCart}
+      />
+      <CustomItemModal
+        isOpen={customItemModalOpen}
+        currentPortata={currentPortata}
+        onClose={() => setCustomItemModalOpen(false)}
         onSave={addPaninoToCart}
       />
       <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" onSelect={resumeOrder} />

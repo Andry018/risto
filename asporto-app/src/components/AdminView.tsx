@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { requireManagerPin } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
@@ -6,11 +6,12 @@ import type { Product, Ingredient } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { getProductVariants, saveProductVariants, type ProductVariant } from '../lib/productVariants';
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
-import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal, ShieldCheck } from 'lucide-react';
+import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal, ShieldCheck, Palette } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import ProductFormModal from './ProductFormModal';
 import CategoryFilterBar from './CategoryFilterBar';
 import HaccpView from './HaccpView';
+import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 
 interface AdminViewProps {
   onNavigateHome?: () => void;
@@ -19,6 +20,7 @@ interface AdminViewProps {
 export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const { confirm } = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [themeId, setThemeId] = useState<string>(getThemeId());
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
@@ -235,161 +237,164 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     }
   };
 
-  const isEmbedded = onNavigateHome !== undefined;
+  const isEmbedded = true;
 
   return (
-    <div className={`min-h-screen ${isEmbedded ? 'bg-charcoal text-gray-300' : 'bg-slate-900 text-slate-300'} font-sans ${isEmbedded ? '' : 'selection:bg-indigo-500/30'}`}>
+    <div className={`min-h-screen ${'bg-charcoal text-gray-300'} font-sans ${''}`}>
       
       {/* Sidebar / Topnav layout */}
-      <div className="flex flex-col md:flex-row h-screen overflow-hidden">
+      <div className="flex flex-col md:flex-row h-dvh overflow-hidden">
         
         {/* Modern Sidebar Nav */}
-        <aside className={`w-full md:w-72 ${isEmbedded ? 'bg-surface border-r border-surface-light' : 'bg-slate-950 border-r border-slate-800/60'} p-6 flex flex-col z-20 shadow-2xl`}>
-          <div className="flex items-center gap-3 mb-12">
-            <div className={`${isEmbedded ? 'bg-gold' : 'bg-gradient-to-br from-indigo-500 to-fuchsia-600'} p-2.5 rounded-xl ${isEmbedded ? '' : 'shadow-lg shadow-indigo-500/20'}`}>
-              <ChefHat size={28} className={isEmbedded ? 'text-black' : 'text-white'} />
+        <aside className={`w-full md:w-72 ${'bg-surface md:border-r md:border-surface-light'} p-3 md:p-6 flex flex-col z-20 shadow-2xl`}>
+          <div className="flex items-center justify-between gap-3 mb-3 md:mb-12">
+            <div className="flex items-center gap-3">
+              <div className={`${'bg-gold'} p-2.5 rounded-xl ${''}`}>
+                <ChefHat size={28} className={'text-black'} />
+              </div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Kitchen<span className={'text-gold'}>Hub</span></h1>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Kitchen<span className={isEmbedded ? 'text-gold' : 'text-indigo-400'}>Hub</span></h1>
+            <div className="md:hidden flex items-center gap-2">
+              <Palette size={16} className="text-gold" />
+              <select
+                value={themeId}
+                onChange={(e) => { applyTheme(e.target.value); setThemeId(e.target.value); }}
+                className="text-xs rounded-lg px-2 py-1 outline-none cursor-pointer bg-surface-light text-gray-200 border border-surface-light"
+              >
+                {THEMES.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <nav className="space-y-3 flex-1">
+          <nav className="flex md:flex-col gap-2 md:gap-1 overflow-x-auto hide-scrollbar md:flex-1 pb-1 md:pb-0">
             {onNavigateHome ? (
               <button
                 onClick={onNavigateHome}
-                className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all duration-300"
+                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all duration-300"
               >
                 <LayoutDashboard size={20} />
-                Dashboard Principale
+                <span className="whitespace-nowrap">Dashboard Principale</span>
               </button>
             ) : (
               <Link
                 to="/"
-                className="w-full flex items-center gap-3 p-4 rounded-xl text-slate-400 hover:bg-slate-900 hover:text-white transition-all duration-300"
+                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all duration-300"
               >
                 <LayoutDashboard size={20} />
-                Dashboard Principale
+                <span className="whitespace-nowrap">Dashboard Principale</span>
               </Link>
             )}
-            <div className={`h-px ${isEmbedded ? 'bg-surface-light/50' : 'bg-slate-800/50'} my-2`} />
+            <div className="hidden md:block h-px bg-surface-light/50 my-2" />
             <button 
               onClick={() => setActiveTab('menu')} 
-              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'menu' 
-                  ? isEmbedded
-                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
-                  : isEmbedded
-                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
-               <List size={20} className={activeTab === 'menu' ? (isEmbedded ? 'text-gold' : 'text-fuchsia-400') : ''} />
-                Disponibilità Menu
+               <List size={20} className={activeTab === 'menu' ? 'text-gold' : ''} />
+                <span className="whitespace-nowrap">Disponibilità Menu</span>
               </div>
             </button>
             <button 
               onClick={() => setActiveTab('ingredients')} 
-              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'ingredients' 
-                  ? isEmbedded
-                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
-                  : isEmbedded
-                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
-                <Plus size={20} className={activeTab === 'ingredients' ? (isEmbedded ? 'text-gold' : 'text-emerald-400') : ''} />
-                Gestione Aggiunte
+                <Plus size={20} className={activeTab === 'ingredients' ? 'text-gold' : ''} />
+                <span className="whitespace-nowrap">Gestione Aggiunte</span>
               </div>
             </button>
             <button 
               onClick={() => setActiveTab('removals')} 
-              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'removals' 
-                  ? isEmbedded
-                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
-                  : isEmbedded
-                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
-                <Minus size={20} className={activeTab === 'removals' ? (isEmbedded ? 'text-gold' : 'text-rose-400') : ''} />
-                Gestione Rimozioni
+                <Minus size={20} className={activeTab === 'removals' ? 'text-gold' : ''} />
+                <span className="whitespace-nowrap">Gestione Rimozioni</span>
               </div>
             </button>
             <button 
               onClick={() => setActiveTab('variants')} 
-              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'variants' 
-                  ? isEmbedded
-                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
-                  : isEmbedded
-                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
-                <SlidersHorizontal size={20} className={activeTab === 'variants' ? (isEmbedded ? 'text-gold' : 'text-sky-400') : ''} />
-                Gestione Varianti
+                <SlidersHorizontal size={20} className={activeTab === 'variants' ? 'text-gold' : ''} />
+                <span className="whitespace-nowrap">Gestione Varianti</span>
               </div>
             </button>
-            <div className={`h-px ${isEmbedded ? 'bg-surface-light/50' : 'bg-slate-800/50'} my-2`} />
+            <div className="hidden md:block h-px bg-surface-light/50 my-2" />
             <button
               onClick={() => setActiveTab('haccp')}
-              className={`w-full flex items-center justify-between p-4 rounded-xl transition-all duration-300 ${
+              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'haccp'
-                  ? isEmbedded
-                    ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                    : 'bg-slate-800/80 text-white shadow-md border border-slate-700/50'
-                  : isEmbedded
-                    ? 'text-gray-500 hover:bg-charcoal hover:text-white'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
-                <ShieldCheck size={20} className={activeTab === 'haccp' ? (isEmbedded ? 'text-gold' : 'text-amber-400') : ''} />
-                HACCP Etichette
+                <ShieldCheck size={20} className={activeTab === 'haccp' ? 'text-gold' : ''} />
+                <span className="whitespace-nowrap">HACCP Etichette</span>
               </div>
             </button>
           </nav>
           
-          <div className={`mt-auto p-4 ${isEmbedded ? 'bg-gold/10 border-gold/20' : 'bg-emerald-500/10 border-emerald-500/20'} border rounded-xl flex items-center gap-3`}>
-             <div className={`w-2 h-2 rounded-full ${isEmbedded ? 'bg-gold' : 'bg-emerald-500'} animate-ping absolute`}></div>
-             <div className={`w-2 h-2 rounded-full ${isEmbedded ? 'bg-gold' : 'bg-emerald-500'} relative`}></div>
-             <span className={`${isEmbedded ? 'text-gold' : 'text-emerald-400'} text-sm font-medium`}>Sistema Online</span>
+          <div className={`mt-auto hidden md:flex p-4 ${'bg-gold/10 border-gold/20'} border rounded-xl items-center gap-3`}>
+             <div className={`w-2 h-2 rounded-full ${'bg-gold'} animate-ping absolute`}></div>
+             <div className={`w-2 h-2 rounded-full ${'bg-gold'} relative`}></div>
+             <span className={`${'text-gold'} text-sm font-medium`}>Sistema Online</span>
           </div>
         </aside>
 
         {/* Dashboard Content */}
-        <main className={`flex-1 p-6 md:p-10 overflow-y-auto ${isEmbedded ? 'bg-charcoal' : 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-slate-950'}`}>
+        <main className={`flex-1 p-4 md:p-10 overflow-y-auto ${'bg-charcoal'}`}>
           
           {activeTab === 'menu' && (
             <div className={`max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500`}>
-              <header className="mb-8 flex justify-between items-center">
+              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Gestione Menu</h2>
-                  <p className={isEmbedded ? 'text-gray-500' : 'text-slate-400'}>Aggiungi o modifica i piatti della giornata.</p>
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Menu</h2>
+                  <p className={'text-gray-500'}>Aggiungi o modifica i piatti della giornata.</p>
                 </div>
-                <div className="flex gap-4">
-                  <div className="relative w-64">
-                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`} size={18} />
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                  <div className="relative w-full sm:w-64">
+                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
                     <input 
                       type="text" 
                       placeholder="Cerca piatto..."
                       value={menuSearch}
                       onChange={e => setMenuSearch(e.target.value)}
-                      className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none transition-all text-sm`}
+                      className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
                     />
+                    {menuSearch && (
+                      <button
+                        onClick={() => setMenuSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
+                        aria-label="Cancella ricerca"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
                   <button 
                       onClick={() => { setEditingProduct(null); setNewProduct(prev => ({ ...prev, categoria: menuCategory || prev.categoria })); setIsModalOpen(true); }}
-                      className={`${isEmbedded ? 'bg-gold text-black' : 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-lg shadow-indigo-500/20'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
+                      className={`${'bg-gold text-black'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
                   >
                       <Plus size={20} /> Nuovo Piatto
                   </button>
@@ -424,7 +429,6 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   setNewProduct({ ...newProduct, categoria: name });
                   setMenuCategory(name);
                 }}
-                isEmbedded={isEmbedded}
               />
 
               <div className="space-y-12">
@@ -438,10 +442,10 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
                   return (
                     <section key={cat}>
-                      <h3 className={`text-sm font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase tracking-[0.3em] mb-6 flex items-center gap-3`}>
-                          <div className={`h-px ${isEmbedded ? 'bg-surface-light' : 'bg-slate-800'} flex-1`}></div>
+                      <h3 className={`text-sm font-black ${'text-gray-500'} uppercase tracking-[0.3em] mb-6 flex items-center gap-3`}>
+                          <div className={`h-px ${'bg-surface-light'} flex-1`}></div>
                           {cat}
-                          <div className={`h-px ${isEmbedded ? 'bg-surface-light' : 'bg-slate-800'} flex-1`}></div>
+                          <div className={`h-px ${'bg-surface-light'} flex-1`}></div>
                       </h3>
                       {filteredProducts.some(p => p.sottocategoria) ? (
                         (() => {
@@ -450,24 +454,24 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                             const subProducts = filteredProducts.filter(p => (p.sottocategoria || 'Altro') === sub);
                             return (
                               <div key={sub} className="mb-6">
-                                <h4 className={`text-[10px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-400'} uppercase tracking-[0.3em] mb-4 ml-1`}>{sub}</h4>
+                                <h4 className={`text-[10px] font-black ${'text-gray-500'} uppercase tracking-[0.3em] mb-4 ml-1`}>{sub}</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                   {subProducts.map(product => (
-                                    <div key={product.id} className={`group relative ${isEmbedded ? 'bg-surface border-surface-light hover:border-gold/30' : 'bg-slate-900 border-slate-800 hover:border-slate-700'} border rounded-2xl p-5 transition-all`}>
+                                    <div key={product.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
                                       <div className="flex justify-between items-start mb-4">
                                         <div>
-                                          <h4 className={`font-bold text-white ${isEmbedded ? 'group-hover:text-gold' : 'group-hover:text-indigo-400'} transition-colors uppercase text-sm`}>{product.nome}</h4>
-                                          <p className={`${isEmbedded ? 'text-gold' : 'text-indigo-400'} font-black mt-1`}>€{product.prezzo.toFixed(2)}</p>
+                                          <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{product.nome}</h4>
+                                          <p className={`${'text-gold'} font-black mt-1`}>â‚¬{product.prezzo.toFixed(2)}</p>
                                           {product.ingredienti.length > 0 && (
-                                            <p className={`text-[9px] ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
+                                            <p className={`text-[9px] ${'text-gray-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
                                           )}
                                         </div>
                                         <div className="flex gap-2">
-                                          <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className={`p-2 ${isEmbedded ? 'bg-charcoal text-gray-500 hover:text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                                          <button onClick={() => deleteProduct(product.id)} className={`p-2 ${isEmbedded ? 'bg-charcoal' : 'bg-slate-800'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
+                                          <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
+                                          <button onClick={() => deleteProduct(product.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
                                         </div>
                                       </div>
-                                      <div className={`flex items-center justify-between pt-4 border-t ${isEmbedded ? 'border-surface-light/50' : 'border-slate-800/50'}`}>
+                                      <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
                                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${product.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                                           {product.disponibile ? 'Disponibile' : 'Esaurito'}
                                         </span>
@@ -486,22 +490,22 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                       ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {filteredProducts.map(product => (
-                            <div key={product.id} className={`group relative ${isEmbedded ? 'bg-surface border-surface-light hover:border-gold/30' : 'bg-slate-900 border-slate-800 hover:border-slate-700'} border rounded-2xl p-5 transition-all`}>
+                            <div key={product.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
                                <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h4 className={`font-bold text-white ${isEmbedded ? 'group-hover:text-gold' : 'group-hover:text-indigo-400'} transition-colors uppercase text-sm`}>{product.nome}</h4>
-                                    <p className={`${isEmbedded ? 'text-gold' : 'text-indigo-400'} font-black mt-1`}>€{product.prezzo.toFixed(2)}</p>
+                                    <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{product.nome}</h4>
+                                    <p className={`${'text-gold'} font-black mt-1`}>â‚¬{product.prezzo.toFixed(2)}</p>
                                     {product.ingredienti.length > 0 && (
-                                      <p className={`text-[9px] ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
+                                      <p className={`text-[9px] ${'text-gray-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
                                     )}
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className={`p-2 ${isEmbedded ? 'bg-charcoal text-gray-500 hover:text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                                    <button onClick={() => deleteProduct(product.id)} className={`p-2 ${isEmbedded ? 'bg-charcoal' : 'bg-slate-800'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
+                                    <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
+                                    <button onClick={() => deleteProduct(product.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
                                 </div>
                              </div>
                              
-                             <div className={`flex items-center justify-between pt-4 border-t ${isEmbedded ? 'border-surface-light/50' : 'border-slate-800/50'}`}>
+                             <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
                                 <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${product.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                                     {product.disponibile ? 'Disponibile' : 'Esaurito'}
                                 </span>
@@ -525,25 +529,34 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
           {activeTab === 'ingredients' && (
             <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <header className="mb-8 flex justify-between items-center">
+              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Gestione Aggiunte</h2>
-                  <p className={isEmbedded ? 'text-gray-500' : 'text-slate-400'}>Modifica i prezzi e la disponibilità degli ingredienti extra.</p>
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Aggiunte</h2>
+                  <p className={'text-gray-500'}>Modifica i prezzi e la disponibilità degli ingredienti extra.</p>
                 </div>
-                <div className="flex gap-4">
-                  <div className="relative w-64">
-                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`} size={18} />
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                  <div className="relative w-full sm:w-64">
+                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
                     <input 
                       type="text" 
                       placeholder="Cerca aggiunta..."
                       value={ingredientSearch}
                       onChange={e => setIngredientSearch(e.target.value)}
-                      className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-emerald-500'} border rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none transition-all text-sm`}
+                      className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
                     />
+                    {ingredientSearch && (
+                      <button
+                        onClick={() => setIngredientSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
+                        aria-label="Cancella ricerca"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
                   <button 
                       onClick={() => { setEditingIngredient(null); setIsIngredientsModalOpen(true); }}
-                      className={`${isEmbedded ? 'bg-gold text-black' : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
+                      className={`${'bg-gold text-black'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
                   >
                       <Plus size={20} /> Nuova Aggiunta
                   </button>
@@ -554,20 +567,20 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   {ingredients
                     .filter(ing => ing.nome.toLowerCase().includes(ingredientSearch.toLowerCase()))
                     .map(ing => (
-                    <div key={ing.id} className={`group relative ${isEmbedded ? 'bg-surface border-surface-light hover:border-gold/30' : 'bg-slate-900 border-slate-800 hover:border-slate-700'} border rounded-2xl p-5 transition-all`}>
+                    <div key={ing.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
                        <div className="flex justify-between items-start mb-4">
                           <div>
-                              <h4 className={`font-bold text-white ${isEmbedded ? 'group-hover:text-gold' : 'group-hover:text-emerald-400'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
+                              <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
                           </div>
                           <div className="flex gap-2">
-                              <button onClick={() => { setEditingIngredient(ing); setIsIngredientsModalOpen(true); }} className={`p-2 ${isEmbedded ? 'bg-charcoal text-gray-500 hover:text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                              <button onClick={() => deleteIngredient(ing.id)} className={`p-2 ${isEmbedded ? 'bg-charcoal' : 'bg-slate-800'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
+                              <button onClick={() => { setEditingIngredient(ing); setIsIngredientsModalOpen(true); }} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
+                              <button onClick={() => deleteIngredient(ing.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
                           </div>
                        </div>
                        
-                       <div className={`flex items-center justify-between pt-4 border-t ${isEmbedded ? 'border-surface-light/50' : 'border-slate-800/50'}`}>
+                       <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
                           <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase`}>Prezzo</span>
+                            <span className={`text-[10px] font-black ${'text-gray-500'} uppercase`}>Prezzo</span>
                             <input 
                               type="text"
                               inputMode="decimal"
@@ -583,9 +596,9 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                   setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: (ing.prezzo ?? 0).toFixed(2) }));
                                 }
                               }}
-                              className={`w-20 ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold text-gold' : 'bg-slate-950 border-slate-800 focus:border-emerald-500 text-emerald-400'} border rounded-lg py-1.5 px-2 font-bold text-xs text-center outline-none transition-all`}
+                              className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold text-gold'} border rounded-lg py-1.5 px-2 font-bold text-xs text-center outline-none transition-all`}
                             />
-                            <span className={`text-[10px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`}>€</span>
+                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>â‚¬</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
@@ -607,20 +620,29 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
           {activeTab === 'removals' && (
             <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <header className="mb-8 flex justify-between items-center">
+              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Gestione Rimozioni</h2>
-                  <p className={isEmbedded ? 'text-gray-500' : 'text-slate-400'}>Imposta lo sconto per la rimozione di ogni ingrediente.</p>
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Rimozioni</h2>
+                  <p className={'text-gray-500'}>Imposta lo sconto per la rimozione di ogni ingrediente.</p>
                 </div>
-                <div className="relative w-64">
-                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`} size={18} />
+                <div className="relative w-full sm:w-64">
+                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
                   <input 
                     type="text" 
                     placeholder="Cerca ingrediente..."
                     value={ingredientSearch}
                     onChange={e => setIngredientSearch(e.target.value)}
-                    className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-rose-500'} border rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none transition-all text-sm`}
+                    className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
                   />
+                  {ingredientSearch && (
+                    <button
+                      onClick={() => setIngredientSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
+                      aria-label="Cancella ricerca"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
               </header>
 
@@ -628,17 +650,17 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   {ingredients
                     .filter(ing => ing.nome.toLowerCase().includes(ingredientSearch.toLowerCase()))
                     .map(ing => (
-                    <div key={ing.id} className={`group relative ${isEmbedded ? 'bg-surface border-surface-light hover:border-gold/30' : 'bg-slate-900 border-slate-800 hover:border-slate-700'} border rounded-2xl p-5 transition-all`}>
+                    <div key={ing.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
                        <div className="flex justify-between items-start mb-4">
                           <div>
-                              <h4 className={`font-bold text-white ${isEmbedded ? 'group-hover:text-gold' : 'group-hover:text-rose-400'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
-                              <p className="text-rose-400 font-black mt-1">-€{(ing.prezzo_rimozione || 0).toFixed(2)}</p>
+                              <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
+                              <p className="text-rose-400 font-black mt-1">-â‚¬{(ing.prezzo_rimozione || 0).toFixed(2)}</p>
                           </div>
                        </div>
                        
-                       <div className={`flex items-center justify-between pt-4 border-t ${isEmbedded ? 'border-surface-light/50' : 'border-slate-800/50'}`}>
+                       <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
                           <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase`}>Riduzione</span>
+                            <span className={`text-[10px] font-black ${'text-gray-500'} uppercase`}>Riduzione</span>
                             <input 
                               type="text"
                               inputMode="decimal"
@@ -654,9 +676,9 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                   setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: (ing.prezzo_rimozione ?? 0).toFixed(2) }));
                                 }
                               }}
-                              className={`w-20 ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-rose-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
+                              className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
                             />
-                            <span className={`text-[10px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`}>€</span>
+                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>â‚¬</span>
                           </div>
                           <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                               {ing.disponibile ? 'Disponibile' : 'Esaurito'}
@@ -670,16 +692,16 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
           {activeTab === 'variants' && (
             <div className={`max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500`}>
-              <header className="mb-8 flex justify-between items-center">
+              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Gestione Varianti</h2>
-                  <p className={isEmbedded ? 'text-gray-500' : 'text-slate-400'}>Modifica le varianti rapide per ogni categoria di piatti.</p>
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Varianti</h2>
+                  <p className={'text-gray-500'}>Modifica le varianti rapide per ogni categoria di piatti.</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <select
                     value={variantCategoryFilter || ''}
                     onChange={e => setVariantCategoryFilter(e.target.value || null)}
-                    className={`${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-xl py-2.5 px-4 text-white font-bold text-sm outline-none transition-all`}
+                    className={`${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-2.5 px-4 text-white font-bold text-sm outline-none transition-all`}
                   >
                     <option value="">Tutte le categorie</option>
                     {allCategories.map(cat => (
@@ -702,7 +724,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                       setVariantEditingId(newV.id);
                       setVariantEditDraft(newV);
                     }}
-                    className={`${isEmbedded ? 'bg-gold text-black' : 'bg-sky-500 hover:bg-sky-400 text-white shadow-lg shadow-sky-500/20'} font-bold py-2.5 px-5 rounded-2xl flex items-center gap-2 transition-all`}
+                    className={`${'bg-gold text-black'} font-bold py-2.5 px-5 rounded-2xl flex items-center gap-2 transition-all`}
                   >
                     <Plus size={18} /> Nuova Variante
                   </button>
@@ -728,7 +750,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 const variantCard = (v: typeof filtered[0]) => {
                   const isEditing = variantEditingId === v.id;
                   return (
-                    <div key={v.id} className={`group relative ${isEmbedded ? 'bg-surface border-surface-light hover:border-gold/30' : 'bg-slate-900 border-slate-800 hover:border-sky-700'} border rounded-2xl p-5 transition-all ${isEditing ? (isEmbedded ? 'ring-2 ring-gold/40 border-gold/30' : 'ring-2 ring-sky-400/40 border-sky-500/30') : ''}`}>
+                    <div key={v.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all ${isEditing ? ('ring-2 ring-gold/40 border-gold/30') : ''}`}>
                       {isEditing ? (
                         <div className="space-y-3">
                           <input
@@ -736,11 +758,11 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                             value={variantEditDraft.label ?? ''}
                             onChange={e => setVariantEditDraft(prev => ({ ...prev, label: e.target.value }))}
                             placeholder="Nome variante"
-                            className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-xl py-2 px-3 text-white font-bold text-sm outline-none transition-all`}
+                            className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-2 px-3 text-white font-bold text-sm outline-none transition-all`}
                           />
                           <div className="flex gap-2">
                             <div className="flex-1">
-                              <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Prezzo</label>
+                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Prezzo</label>
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -750,26 +772,26 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                   const val = parseFloat(raw);
                                   setVariantEditDraft(prev => ({ ...prev, price: isNaN(val) ? 0 : val }));
                                 }}
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
                               />
                             </div>
                             <div className="flex-1">
-                              <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Ordine</label>
+                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Ordine</label>
                               <input
                                 type="number"
                                 value={variantEditDraft.order ?? 0}
                                 onChange={e => setVariantEditDraft(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
                               />
                             </div>
                           </div>
                           <div className="flex gap-2">
                             <div className="flex-1">
-                              <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Sezione</label>
+                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Sezione</label>
                               <select
                                 value={variantEditDraft.section ?? 'EXTRA'}
                                 onChange={e => setVariantEditDraft(prev => ({ ...prev, section: e.target.value }))}
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
                               >
                                 <option value="VARIANTI RAPIDE">VARIANTI RAPIDE</option>
                                 <option value="MODIFICHE">MODIFICHE</option>
@@ -781,11 +803,11 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                               </select>
                             </div>
                             <div className="flex-1">
-                              <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Stile</label>
+                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Stile</label>
                               <select
                                 value={variantEditDraft.style ?? 'gold'}
                                 onChange={e => setVariantEditDraft(prev => ({ ...prev, style: e.target.value as 'gold' | 'emerald' | 'rose' }))}
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
                               >
                                 <option value="gold">Gold</option>
                                 <option value="emerald">Emerald</option>
@@ -795,18 +817,18 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                           </div>
                           <div className="flex gap-3">
                             <div className="flex-1">
-                              <label className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1 block`}>Categorie</label>
+                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Categorie</label>
                               <input
                                 type="text"
                                 value={variantEditDraft.categories ?? ''}
                                 onChange={e => setVariantEditDraft(prev => ({ ...prev, categories: e.target.value }))}
                                 placeholder="es: Pizze Rosse,Antipasti"
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-sky-500'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
                               />
                             </div>
                             <div className="flex items-end pb-1">
                               <label className="flex items-center gap-2 cursor-pointer">
-                                <span className={`text-[9px] font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase`}>Stackable</span>
+                                <span className={`text-[9px] font-black ${'text-gray-500'} uppercase`}>Stackable</span>
                                 <input
                                   type="checkbox"
                                   checked={variantEditDraft.stackable ?? false}
@@ -825,7 +847,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                   setVariantEditDraft({});
                                 }
                               }}
-                              className={`flex-1 ${isEmbedded ? 'bg-emerald-500 text-black' : 'bg-emerald-500 hover:bg-emerald-400 text-white'} font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-all`}
+                              className={`flex-1 ${'bg-emerald-500 text-black'} font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-all`}
                             >
                               <Save size={14} /> Salva
                             </button>
@@ -835,7 +857,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                 setVariantEditingId(null);
                                 setVariantEditDraft({});
                               }}
-                              className={`flex-1 ${isEmbedded ? 'bg-charcoal border border-surface-light text-gray-500' : 'bg-slate-800 border border-slate-700 text-slate-400'} font-bold py-2 rounded-xl text-xs transition-all`}
+                              className={`flex-1 ${'bg-charcoal border border-surface-light text-gray-500'} font-bold py-2 rounded-xl text-xs transition-all`}
                             >
                               Annulla
                             </button>
@@ -845,19 +867,19 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                         <>
                           <div className="flex justify-between items-start mb-3">
                             <div>
-                              <h4 className={`font-bold text-white ${isEmbedded ? 'group-hover:text-gold' : 'group-hover:text-sky-400'} transition-colors uppercase text-sm`}>{v.label || '(senza nome)'}</h4>
+                              <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{v.label || '(senza nome)'}</h4>
                               <p className="text-xs text-gray-500 mt-0.5 font-medium">{v.categories}</p>
                             </div>
                             <div className="flex gap-1">
                               <button
                                 onClick={() => { setVariantEditingId(v.id); setVariantEditDraft({ ...v }); }}
-                                className={`p-1.5 rounded-lg ${isEmbedded ? 'hover:bg-charcoal text-gray-500 hover:text-gold' : 'hover:bg-slate-800 text-slate-500 hover:text-sky-400'} transition-all`}
+                                className={`p-1.5 rounded-lg ${'hover:bg-charcoal text-gray-500 hover:text-gold'} transition-all`}
                               >
                                 <Edit2 size={14} />
                               </button>
                               <button
                                 onClick={() => persistVariants(variants.filter(x => x.id !== v.id))}
-                                className={`p-1.5 rounded-lg ${isEmbedded ? 'hover:bg-charcoal text-gray-500 hover:text-red-400' : 'hover:bg-slate-800 text-slate-500 hover:text-red-400'} transition-all`}
+                                className={`p-1.5 rounded-lg ${'hover:bg-charcoal text-gray-500 hover:text-red-400'} transition-all`}
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -867,7 +889,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${v.style === 'gold' ? 'bg-gold/10 text-gold' : v.style === 'emerald' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                               {v.section}
                             </span>
-                            {v.price > 0 && <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">+€{v.price.toFixed(2)}</span>}
+                            {v.price > 0 && <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">+â‚¬{v.price.toFixed(2)}</span>}
                             {v.stackable && <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Stackable</span>}
                             <span className="text-[10px] text-gray-600 font-bold px-2 py-0.5">ord. {v.order}</span>
                           </div>
@@ -879,8 +901,8 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 return sortedSections.length > 0 ? sortedSections.map(section => (
                   <div key={section} className="mb-6 last:mb-0">
                     <div className="flex items-center gap-3 mb-3">
-                      <h3 className={`text-xs font-black uppercase tracking-[0.25em] ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`}>{section}</h3>
-                      <div className={`flex-1 h-px ${isEmbedded ? 'bg-surface-light' : 'bg-slate-800'}`} />
+                      <h3 className={`text-xs font-black uppercase tracking-[0.25em] ${'text-gray-500'}`}>{section}</h3>
+                      <div className={`flex-1 h-px ${'bg-surface-light'}`} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {grouped[section].map(v => variantCard(v))}
@@ -888,7 +910,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   </div>
                 )) : (
                   <div className="text-center py-12">
-                    <p className={`text-sm font-bold ${isEmbedded ? 'text-gray-500' : 'text-slate-500'}`}>Nessuna variante per questa categoria.</p>
+                    <p className={`text-sm font-bold ${'text-gray-500'}`}>Nessuna variante per questa categoria.</p>
                   </div>
                 );
               })()}
@@ -900,7 +922,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                     setVariantEditingId(null);
                     setVariantEditDraft({});
                   }}
-                  className={`${isEmbedded ? 'text-gray-500 hover:text-red-400 border-surface-light hover:border-red-400/30' : 'text-slate-500 hover:text-red-400 border-slate-800 hover:border-red-400/30'} border rounded-xl py-2 px-6 text-xs font-bold transition-all`}
+                  className={`${'text-gray-500 hover:text-red-400 border-surface-light hover:border-red-400/30'} border rounded-xl py-2 px-6 text-xs font-bold transition-all`}
                 >
                   Ripristina varianti predefinite
                 </button>
@@ -925,34 +947,33 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
             onNewProductChange={setNewProduct}
             onPriceDraftChange={setProductPriceDraft}
             onSave={handleSaveProduct}
-            isEmbedded={isEmbedded}
           />
 
           {/* New/Edit Ingredient Modal */}
           {isIngredientsModalOpen && (
-              <div className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${isEmbedded ? 'bg-black/80' : 'bg-slate-950/80'} backdrop-blur-md animate-in fade-in duration-200`}>
-                  <div className={`${isEmbedded ? 'bg-surface border-surface-light' : 'bg-slate-900 border-slate-800'} border w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200`}>
-                      <div className={`p-8 border-b ${isEmbedded ? 'border-surface-light bg-surface-light/20' : 'border-slate-800 bg-slate-800/20'} flex justify-between items-center`}>
+              <div className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${'bg-black/80'} backdrop-blur-md animate-in fade-in duration-200`}>
+                  <div className={`${'bg-surface border-surface-light'} border w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200`}>
+                      <div className={`p-8 border-b ${'border-surface-light bg-surface-light/20'} flex justify-between items-center`}>
                           <h3 className="text-2xl font-bold text-white italic uppercase tracking-tighter">
-                              {editingIngredient ? 'Modifica' : 'Nuova'} <span className={isEmbedded ? 'text-gold' : 'text-emerald-400'}>Aggiunta</span>
+                              {editingIngredient ? 'Modifica' : 'Nuova'} <span className={'text-gold'}>Aggiunta</span>
                           </h3>
-                          <button onClick={() => setIsIngredientsModalOpen(false)} className={`p-2 ${isEmbedded ? 'text-gray-500 hover:text-white' : 'text-slate-500 hover:text-white'}`}><X size={24} /></button>
+                          <button onClick={() => setIsIngredientsModalOpen(false)} className={`p-2 ${'text-gray-500 hover:text-white'}`}><X size={24} /></button>
                       </div>
                       
                       <div className="p-8 space-y-6">
                           <div>
-                              <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-2`}>Nome Aggiunta</label>
+                              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-2`}>Nome Aggiunta</label>
                               <input 
                                 type="text" 
                                 value={editingIngredient ? editingIngredient.nome : newIngredient.nome}
                                 onChange={e => editingIngredient ? setEditingIngredient({...editingIngredient, nome: e.target.value}) : setNewIngredient({...newIngredient, nome: e.target.value})}
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-emerald-500'} border rounded-xl py-3 px-4 text-white outline-none`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
                                 placeholder="Esempio: Mozzarella di Bufala"
                               />
                           </div>
 
                           <div>
-                               <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-2`}>Prezzo Extra (€)</label>
+                               <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-2`}>Prezzo Extra (â‚¬)</label>
                               <input 
                                 type="text"
                                 inputMode="decimal"
@@ -968,15 +989,15 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                     setIngredientPriceDraft(String(editingIngredient?.prezzo ?? newIngredient.prezzo ?? 1.5));
                                   }
                                 }}
-                                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-emerald-500'} border rounded-xl py-3 px-4 text-white outline-none`}
+                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
                               />
                           </div>
                       </div>
 
-                      <div className={`p-8 ${isEmbedded ? 'bg-surface-light/20 border-surface-light' : 'bg-slate-800/20 border-slate-800'} border-t flex flex-col gap-3`}>
+                      <div className={`p-8 ${'bg-surface-light/20 border-surface-light'} border-t flex flex-col gap-3`}>
                           <button 
                             onClick={handleSaveIngredient}
-                            className={`w-full ${isEmbedded ? 'bg-gold text-black' : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20'} font-bold py-4 rounded-xl flex items-center justify-center gap-2`}
+                            className={`w-full ${'bg-gold text-black'} font-bold py-4 rounded-xl flex items-center justify-center gap-2`}
                           >
                             <Save size={20} /> Salva Aggiunta
                           </button>

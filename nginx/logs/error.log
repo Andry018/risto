@@ -53,3 +53,10 @@
 2026/07/22 17:05:33 [notice] 16608#10180: signal process started
 2026/07/22 17:05:33 [error] 16608#10180: OpenEvent("Global\ngx_reload_9724") failed (2: The system cannot find the file specified)
 >>>>>>> Stashed changes
+2026/08/01 17:57:33 [emerg] 13288#18732: unknown directive "<<<<<<<" in C:\risto\nginx/conf/nginx.conf:31
+2026/08/01 17:58:05 [emerg] 2856#22000: cannot load certificate "C:/risto/nginx/ssl/gestionale.90-minuti.it-chain.pem": PEM_read_bio_X509_AUX() failed (SSL: error:04800064:PEM routines::bad base64 decode)
+2026/08/01 17:58:06 [emerg] 17048#1608: cannot load certificate "C:/risto/nginx/ssl/gestionale.90-minuti.it-chain.pem": PEM_read_bio_X509_AUX() failed (SSL: error:04800064:PEM routines::bad base64 decode)
+2026/08/01 18:00:54 [emerg] 23508#23812: cannot load certificate "C:/risto/nginx/ssl/gestionale.90-minuti.it-chain.pem": PEM_read_bio_X509_AUX() failed (SSL: error:04800064:PEM routines::bad base64 decode)
+2026/08/01 18:01:30 [emerg] 19180#17136: cannot load certificate "C:/risto/nginx/ssl/gestionale.90-minuti.it-chain.pem": PEM_read_bio_X509() failed (SSL: error:04800066:PEM routines::bad end line)
+2026/08/01 18:12:40 [error] 22244#21900: *4 connect() failed (10061: No connection could be made because the target machine actively refused it) while connecting to upstream, client: 192.168.1.250, server: localhost, request: "GET /admin/ HTTP/1.1", upstream: "http://127.0.0.1:4000/", host: "gestionale.90-minuti.it"
+2026/08/02 03:22:27 [error] 22244#21900: *1244 CreateFile() "C:/risto/asporto-app/dist/assets/index-30TsojA6.js" failed (2: The system cannot find the file specified), client: 192.168.1.250, server: localhost, request: "GET /assets/index-30TsojA6.js HTTP/1.1", host: "gestionale.90-minuti.it", referrer: "https://gestionale.90-minuti.it/"

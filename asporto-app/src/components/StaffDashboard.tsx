@@ -5,106 +5,28 @@ import type { Tavolo, Reservation } from '../types/entities';
 import { 
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   BellRing, Utensils, Tags, FilePlus, Zap, History, PauseCircle,
-  Settings, ChevronRight, ArrowRight, UserPlus, Table2, X
+  Settings, ChevronRight, ArrowRight, UserPlus, Table2, X, Clock
 } from 'lucide-react';
-import { requireManagerPin, setManagerPin } from '../lib/staffAuth';
-import { dbUtils } from '../lib/DatabaseUtils';
-import { useConfirm } from '../components/ConfirmModal';
-import { useToast } from '../components/Toast';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
-import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
-import { getWakeLockEnabled, setWakeLockEnabled } from '../hooks/useWakeLock';
+import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
-  const { confirm } = useConfirm();
-  const { addToast } = useToast();
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restaurantName] = useSetting(SETTINGS_KEYS.restaurantName, 'IL GIRASOLE');
+  const [restaurantTagline] = useSetting(SETTINGS_KEYS.restaurantTagline, 'Ristorante Italiano');
+  const [now, setNow] = useState(() => new Date());
   
   // Settings State
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [newOrderName, setNewOrderName] = useState('');
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
-  const [printDeltaQty, setPrintDeltaQty] = useState(() => localStorage.getItem('risto_print_delta_qty') === 'true');
-  const [wakeLockEnabled, setWakeLockLocal] = useState(() => getWakeLockEnabled());
-  const [newPin, setNewPin] = useState('');
-  const [confirmNewPin, setConfirmNewPin] = useState('');
 
-  const handleTestConnection = async () => {
-    setIsTestingConnection(true);
-    setConnectionTestMessage(null);
-    try {
-      const normalizedAgentUrl = PRINT_AGENT_URL.trim().replace(/\/+$/, '');
-      if (!normalizedAgentUrl) throw new Error('Print Agent URL mancante');
-
-      const healthResponse = await fetch(`${normalizedAgentUrl}/health`, { method: 'GET' });
-      if (!healthResponse.ok) {
-        throw new Error(`Print Agent non raggiungibile (${healthResponse.status})`);
-      }
-
-      const payload = {
-        kind: 'kitchen',
-        tableName: 'TEST STAMPA',
-        orderTime: new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        printerIp: PRINTER_IP,
-        printerPort: PRINTER_PORT,
-        items: [
-          {
-            nome: 'TEST STAMPA',
-            quantity: 1,
-            prezzo: 0,
-            categoria: 'Generale',
-            disponibile: true,
-            ingredienti: [],
-            addedIngredients: [],
-            removedIngredients: [],
-            notes: '',
-            uniqueId: 'printer-test',
-            portata: '1',
-          },
-        ],
-      };
-
-      const printResponse = await fetch(`${normalizedAgentUrl}/print`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!printResponse.ok) {
-        const text = await printResponse.text().catch(() => '');
-        throw new Error(text || `Errore stampa test (${printResponse.status})`);
-      }
-
-      setConnectionTestMessage('Connessione OK. Test stampato.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Connessione non riuscita';
-      setConnectionTestMessage(message);
-    } finally {
-      setIsTestingConnection(false);
-    }
-  };
-  const handleCleanup = async () => {
-    if (!(await requireManagerPin('svuotare il database'))) return;
-    const ok = await confirm({ title: 'Pulisci database', message: 'Eliminare TUTTI gli ordini e resettare i tavoli?', destructive: true });
-    if (!ok) return;
-    setLoadingAction('cleanup');
-    try { await dbUtils.cleanupDatabase(); addToast({ type: 'success', title: 'Database pulito!' }); } catch { addToast({ type: 'error', title: 'Errore pulizia' }); }
-    finally { setLoadingAction(null); }
-  };
-
-  const handlePopulate = async () => {
-    if (!(await requireManagerPin('ripristinare i dati demo'))) return;
-    setLoadingAction('populate');
-    try { await dbUtils.populateDemoData(); addToast({ type: 'success', title: 'Dati demo ripristinati!' }); }
-    catch { addToast({ type: 'error', title: 'Errore salvataggio' }); }
-    finally { setLoadingAction(null); }
-  };
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -139,83 +61,105 @@ export default function StaffDashboard() {
   const occupiedCount = tables.filter(t => t.status === 'OCCUPATO').length;
   const availableCount = tables.filter(t => t.status === 'LIBERO').length;
   const reservedCount = tables.filter(t => t.status === 'PRENOTATO').length;
+  const expectedPeople = reservations.reduce((sum, r) => sum + (r.persone || 0), 0);
 
-  const currentDate = new Date().toLocaleDateString('it-IT', { weekday: 'short', month: 'short', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const statCard = (label: string, value: number, accent: 'gold' | 'green' | 'gray' | 'blue', icon: React.ReactNode) => (
+    <div className="bg-surface border border-surface-light rounded-2xl p-4 flex items-center gap-4">
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+        accent === 'gold' ? 'bg-gold/10 text-gold' :
+        accent === 'green' ? 'bg-emerald-500/10 text-emerald-400' :
+        accent === 'blue' ? 'bg-sky-500/10 text-sky-400' :
+        'bg-gray-500/10 text-gray-400'
+      }`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-2xl font-black text-white leading-none">{value}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-1">{label}</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-dvh bg-charcoal text-white flex flex-col font-sans overflow-hidden">
       {/* Header */}
-      <div className="flex justify-between items-center py-6 px-8 shrink-0">
+      <div className="flex justify-between items-center py-5 px-5 md:px-8 shrink-0">
         <div className="flex items-center gap-3">
           <div className="text-gold">
              <Sun size={38} strokeWidth={1.5} />
           </div>
           <div>
-             <h1 className="text-[28px] font-serif tracking-widest text-[#f5f5f5] leading-tight">IL GIRASOLE</h1>
-             <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">Ristorante Italiano</p>
+             <h1 className="text-[26px] md:text-[28px] font-serif tracking-widest text-[#f5f5f5] leading-tight">{restaurantName}</h1>
+             <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">{restaurantTagline}</p>
           </div>
         </div>
         <div className="flex items-center gap-5">
-           <PrinterStatusBadge />
-           <button 
-             onClick={() => setIsSettingsOpen(true)}
-             className="text-white hover:text-gold transition-colors cursor-pointer"
-             title="Impostazioni"
-           >
-             <Settings size={28} strokeWidth={1.5} />
-           </button>
+          <div className="hidden md:flex items-center gap-3 mr-2">
+            <div className="text-right">
+              <p className="text-xl font-black text-white leading-none tabular-nums">{timeStr}</p>
+              <p className="text-[10px] font-bold text-gray-500 capitalize mt-0.5">{dateStr}</p>
+            </div>
+            <Clock size={22} className="text-gold" />
+          </div>
+          <PrinterStatusBadge />
+          <button 
+            onClick={() => navigate('/settings')}
+            className="text-white hover:text-gold transition-colors cursor-pointer"
+            title="Impostazioni"
+          >
+            <Settings size={28} strokeWidth={1.5} />
+          </button>
         </div>
       </div>
 
+      {/* KPI Row */}
+      <div className="px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+        {statCard('Tavoli occupati', occupiedCount, 'gold', <Table2 size={20} />)}
+        {statCard('Tavoli liberi', availableCount, 'green', <MapIcon size={20} />)}
+        {statCard('Tavoli prenotati', reservedCount, 'blue', <CalendarDays size={20} />)}
+        {statCard('Persone attese', expectedPeople, 'gray', <UserPlus size={20} />)}
+      </div>
+
       {/* Main Grid */}
-      <div className="grid grid-cols-4 gap-5 px-8 flex-1 min-h-0 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-5 md:px-8 flex-1 min-h-0 py-5">
         
         {/* MAPS */}
         <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-6">
+          <div className="flex justify-between items-start mb-5 shrink-0">
              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">MAPPA</h2>
+                <h2 className="text-xl font-bold text-white mb-1">MAPPA</h2>
                 <p className="text-[11px] text-gold">Visualizza & gestisci tavoli</p>
              </div>
              <div className="text-gold">
-                <MapIcon size={32} strokeWidth={1.5} />
+                <MapIcon size={30} strokeWidth={1.5} />
              </div>
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center">
             {/* Visual Map Representation */}
-            <div className="w-full aspect-square border border-surface-light rounded-xl p-4 flex items-center justify-center relative mb-6">
-               <div className="grid grid-cols-3 gap-4 w-full h-full relative">
-                 {tables.slice(0, 9).map(t => (
-                   <div key={t.id} className={`rounded-xl border flex items-center justify-center text-sm font-bold ${
-                      t.status === 'OCCUPATO' ? 'border-gold bg-gold/10 text-gold' :
-                      t.status === 'LIBERO' ? 'border-[#4ade80] bg-[#4ade80]/10 text-[#4ade80]' :
-                      'border-[#888] bg-[#888]/10 text-[#888]'
-                   }`}>
-                     {t.nome}
-                   </div>
-                 ))}
-               </div>
-            </div>
-
-            <div className="flex justify-between w-full px-2 text-center mt-auto">
-               <div className="flex-1">
-                 <p className="text-2xl font-bold text-gold">{occupiedCount}</p>
-                 <p className="text-[10px] text-[#888] mt-1">Occupati</p>
-               </div>
-               <div className="flex-1">
-                 <p className="text-2xl font-bold text-[#4ade80]">{availableCount}</p>
-                 <p className="text-[10px] text-[#888] mt-1">Liberi</p>
-               </div>
-               <div className="flex-1">
-                 <p className="text-2xl font-bold text-[#888]">{reservedCount}</p>
-                 <p className="text-[10px] text-[#888] mt-1">Prenotati</p>
-               </div>
+            <div className="w-full border border-surface-light rounded-xl p-3 mb-5">
+              <div className={`grid gap-2 w-full ${tables.length > 12 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                {tables.map(t => (
+                  <div key={t.id} className={`rounded-lg border py-2.5 flex items-center justify-center text-xs font-bold transition ${
+                     t.status === 'OCCUPATO' ? 'border-gold bg-gold/10 text-gold' :
+                     t.status === 'LIBERO' ? 'border-emerald-400/40 bg-emerald-400/5 text-emerald-400' :
+                     'border-gray-500/40 bg-gray-500/5 text-gray-400'
+                  }`}>
+                    {t.nome}
+                  </div>
+                ))}
+                {tables.length === 0 && !loading && (
+                  <div className="col-span-full text-center text-[11px] text-gray-500 py-4">Nessun tavolo</div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="pt-6 shrink-0">
-             <button onClick={() => navigate('/map')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+          <div className="pt-5 shrink-0">
+             <button onClick={() => navigate('/map')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
                 Apri Mappa <ArrowRight size={18} />
              </button>
           </div>
@@ -223,13 +167,13 @@ export default function StaffDashboard() {
 
         {/* KITCHEN */}
         <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-6 shrink-0">
+          <div className="flex justify-between items-start mb-5 shrink-0">
              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">CUCINA</h2>
+                <h2 className="text-xl font-bold text-white mb-1">CUCINA</h2>
                 <p className="text-[11px] text-gold">Gestione menu e piatti</p>
              </div>
              <div className="text-gold">
-                <ChefHat size={32} strokeWidth={1.5} />
+                <ChefHat size={30} strokeWidth={1.5} />
              </div>
           </div>
           
@@ -239,8 +183,8 @@ export default function StaffDashboard() {
              <KitchenItem icon={<Tags size={20} />} title="Modificatori" desc="Gestisci modifiche e opzioni" onClick={() => navigate('/kitchen?tab=variants')} />
           </div>
 
-          <div className="pt-6 shrink-0">
-             <button onClick={() => navigate('/kitchen?tab=menu')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+          <div className="pt-5 shrink-0">
+             <button onClick={() => navigate('/kitchen?tab=menu')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
                 Apri Cucina <ArrowRight size={18} />
              </button>
           </div>
@@ -248,13 +192,13 @@ export default function StaffDashboard() {
 
         {/* POS */}
         <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-6 shrink-0">
+          <div className="flex justify-between items-start mb-5 shrink-0">
              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">POS</h2>
+                <h2 className="text-xl font-bold text-white mb-1">POS</h2>
                 <p className="text-[11px] text-gold">Crea conto (senza tavolo)</p>
              </div>
              <div className="text-gold">
-                <Calculator size={32} strokeWidth={1.5} />
+                <Calculator size={30} strokeWidth={1.5} />
              </div>
           </div>
           
@@ -265,8 +209,8 @@ export default function StaffDashboard() {
              <PosBox icon={<PauseCircle size={24} />} title="Conti in Sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
           </div>
 
-          <div className="pt-6 shrink-0">
-             <button onClick={() => navigate('/pos')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+          <div className="pt-5 shrink-0">
+             <button onClick={() => navigate('/pos')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
                 Apri POS <ArrowRight size={18} />
              </button>
           </div>
@@ -274,19 +218,19 @@ export default function StaffDashboard() {
 
         {/* RESERVATIONS */}
         <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-6 shrink-0">
+          <div className="flex justify-between items-start mb-5 shrink-0">
              <div>
-                <h2 className="text-2xl font-bold text-white mb-1">PRENOTAZIONI</h2>
+                <h2 className="text-xl font-bold text-white mb-1">PRENOTAZIONI</h2>
                 <p className="text-[11px] text-gold">Visualizza & gestisci prenotazioni</p>
              </div>
              <div className="text-gold">
-                <CalendarDays size={32} strokeWidth={1.5} />
+                <CalendarDays size={30} strokeWidth={1.5} />
              </div>
           </div>
 
           <div className="flex justify-between items-center mb-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-[#888] uppercase">OGGI</span>
-              <span className="text-[11px] text-[#888]">{currentDate}</span>
+              <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">OGGI</span>
+              <span className="text-[11px] text-gray-500 capitalize">{dateStr}</span>
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
@@ -294,25 +238,25 @@ export default function StaffDashboard() {
                 <div key={r.id} className="flex justify-between items-center border-b border-surface-light pb-4 last:border-0 last:pb-0">
                   <div>
                     <h4 className="text-[13px] font-bold text-white mb-1">{r.ora?.split(':').slice(0, 2).join(':')}</h4>
-                    <p className="text-[11px] text-[#888]">{r.persone} Persone</p>
-                    <p className="text-[11px] text-[#888]">{r.nome}</p>
+                    <p className="text-[11px] text-gray-500">{r.persone} Persone</p>
+                    <p className="text-[11px] text-gray-500">{r.nome}</p>
                   </div>
                   <span className={`px-2.5 py-1 rounded border text-[9px] uppercase tracking-wider font-semibold ${
                      r.status === 'CONFERMATA' ? 'border-gold text-gold' :
-                     r.status === 'ARRIVATA' ? 'border-[#4ade80] text-[#4ade80]' :
-                     'border-[#666] text-[#666]'
+                     r.status === 'ARRIVATA' ? 'border-emerald-400/40 text-emerald-400' :
+                     'border-gray-500/40 text-gray-400'
                   }`}>
                      {r.status}
                   </span>
                 </div>
               ))}
               {reservations.length === 0 && !loading && (
-                 <div className="h-full flex items-center justify-center text-[#888] text-[11px]">Nessuna prenotazione oggi</div>
+                 <div className="h-full flex items-center justify-center text-gray-500 text-[11px]">Nessuna prenotazione oggi</div>
               )}
           </div>
 
-          <div className="pt-6 shrink-0">
-              <button onClick={() => navigate('/reservations')} className="w-full bg-gold text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+          <div className="pt-5 shrink-0">
+              <button onClick={() => navigate('/reservations')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
                  Apri Prenotazioni <ArrowRight size={18} />
               </button>
           </div>
@@ -374,144 +318,6 @@ export default function StaffDashboard() {
         </div>
       )}
 
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-surface border border-surface-light w-full max-w-2xl rounded-[32px] shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-             <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light transition cursor-pointer">
-               <X size={20} />
-             </button>
-             <div className="p-6">
-               <h2 className="text-xl font-black text-white mb-6">Impostazioni</h2>
-               <div className="space-y-4">
-
-                 <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Stampa LAN</p>
-                   <h3 className="text-base font-black text-white mb-3">Test connessione</h3>
-                   <p className="text-xs text-gray-400 mb-3">
-                     Configura nel file <strong className="text-white">.env</strong>: <strong className="text-white">VITE_PRINT_AGENT_URL</strong>, <strong className="text-white">VITE_PRINTER_IP</strong>, <strong className="text-white">VITE_PRINTER_PORT</strong>
-                   </p>
-                   <div className="flex items-center gap-2">
-                     <button
-                       onClick={handleTestConnection}
-                       disabled={isTestingConnection}
-                       className="bg-gold hover:bg-gold-hover text-black px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer disabled:opacity-60"
-                     >
-                       {isTestingConnection ? 'Test in corso...' : 'Test connessione'}
-                     </button>
-                     <div className="flex-1 min-h-[42px] rounded-xl border border-surface-light px-3 py-2 text-xs font-bold flex items-center text-white">
-                       {connectionTestMessage || 'Stato stampante'}
-                     </div>
-                   </div>
-                 </div>
-
-                 <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
-                   <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Comande</p>
-                   <h3 className="text-base font-black text-white mb-3">Ristampa quantità</h3>
-                   <div className="flex items-center justify-between">
-                     <p className="text-sm text-gray-300">
-                       Quando si cambia la quantità di un piatto già in comanda, stampa l'aggiunta in cucina
-                     </p>
-                     <button
-                       onClick={() => {
-                         const next = !printDeltaQty;
-                         setPrintDeltaQty(next);
-                         localStorage.setItem('risto_print_delta_qty', String(next));
-                       }}
-                       className={`relative w-14 h-8 rounded-full transition-all shrink-0 ml-4 ${printDeltaQty ? 'bg-gold' : 'bg-surface-light/40'}`}
-                     >
-                       <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${printDeltaQty ? 'left-7' : 'left-1'}`} />
-                     </button>
-                   </div>
-                 </div>
-
-                  <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Schermo</p>
-                    <h3 className="text-base font-black text-white mb-3">Always On Display</h3>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-300">
-                        Impedisce al dispositivo di andare in sospensione mentre l'app è aperta
-                      </p>
-                      <button
-                        onClick={() => {
-                          const next = !wakeLockEnabled;
-                          setWakeLockLocal(next);
-                          setWakeLockEnabled(next);
-                        }}
-                        className={`relative w-14 h-8 rounded-full transition-all shrink-0 ml-4 ${wakeLockEnabled ? 'bg-gold' : 'bg-surface-light/40'}`}
-                      >
-                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${wakeLockEnabled ? 'left-7' : 'left-1'}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="border border-surface-light rounded-2xl p-5 bg-charcoal/40">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-1">Sicurezza</p>
-                   <h3 className="text-base font-black text-white mb-3">Cambia PIN</h3>
-                   <div className="space-y-2">
-                     <div className="flex items-center gap-2">
-                       <input
-                         type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
-                         placeholder="Nuovo PIN (4-6 cifre)"
-                         value={newPin}
-                         onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                         className="w-full bg-charcoal border border-surface-light rounded-xl px-3 py-2.5 text-sm text-white font-bold text-center placeholder:text-gray-600 focus:outline-none focus:border-gold/50"
-                       />
-                       <input
-                         type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
-                         placeholder="Conferma PIN"
-                         value={confirmNewPin}
-                         onChange={e => setConfirmNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                         className="w-full bg-charcoal border border-surface-light rounded-xl px-3 py-2.5 text-sm text-white font-bold text-center placeholder:text-gray-600 focus:outline-none focus:border-gold/50"
-                       />
-                        <button
-                          onClick={async () => {
-                            if (newPin.length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
-                            if (newPin !== confirmNewPin) { addToast({ type: 'error', title: 'PIN non corrispondono', message: 'I due PIN non coincidono' }); return; }
-                            if (await requireManagerPin('cambiare il PIN')) {
-                              setManagerPin(newPin);
-                              setNewPin('');
-                              setConfirmNewPin('');
-                              addToast({ type: 'success', title: 'PIN cambiato', message: `Nuovo PIN: ${newPin}` });
-                            }
-                          }}
-                          className="bg-gold hover:bg-gold-hover text-black shrink-0 px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
-                        >
-                          Salva
-                        </button>
-                     </div>
-                     <p className="text-[10px] text-gray-500 font-bold">Il PIN attuale è richiesto per azioni sensibili (svuota DB, cambio PIN)</p>
-                   </div>
-                 </div>
-
-                 <div className="flex flex-col sm:flex-row gap-2">
-                   <button
-                     onClick={() => { setIsSettingsOpen(false); navigate('/reports'); }}
-                     className="flex-1 bg-surface-light/40 border border-gold/30 text-gold py-3 rounded-xl font-bold text-xs text-center hover:bg-gold/10 transition cursor-pointer"
-                   >
-                     Report e Statistiche
-                   </button>
-                   <button
-                     onClick={handleCleanup}
-                     disabled={loadingAction === 'cleanup'}
-                     className="flex-1 bg-surface-light/40 border border-red-500/30 text-red-400 py-3 rounded-xl font-bold text-xs text-center hover:bg-red-500/10 transition cursor-pointer disabled:opacity-60"
-                   >
-                     {loadingAction === 'cleanup' ? 'Pulizia...' : 'Svuota Database'}
-                   </button>
-                   <button
-                     onClick={handlePopulate}
-                     disabled={loadingAction === 'populate'}
-                     className="flex-1 bg-surface-light/40 border border-emerald-500/30 text-emerald-400 py-3 rounded-xl font-bold text-xs text-center hover:bg-emerald-500/10 transition cursor-pointer disabled:opacity-60"
-                   >
-                     {loadingAction === 'populate' ? 'Ripristino...' : 'Ripristina Dati Demo'}
-                   </button>
-                 </div>
-
-               </div>
-             </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -522,9 +328,9 @@ function KitchenItem({ icon, title, desc, onClick }: { icon: React.ReactNode, ti
        <div className="text-gold">{icon}</div>
        <div className="flex-1">
          <h3 className="text-[13px] font-semibold text-[#f5f5f5] group-hover:text-gold transition">{title}</h3>
-         <p className="text-[11px] text-[#888]">{desc}</p>
+         <p className="text-[11px] text-gray-500">{desc}</p>
        </div>
-       <ChevronRight size={16} className="text-[#888] group-hover:text-gold" />
+       <ChevronRight size={16} className="text-gray-500 group-hover:text-gold" />
     </button>
   );
 }
@@ -535,7 +341,7 @@ function PosBox({ icon, title, desc, onClick }: { icon: React.ReactNode, title: 
       <div className="text-gold">{icon}</div>
       <div>
         <h3 className="text-[13px] font-semibold text-[#f5f5f5] group-hover:text-gold transition">{title}</h3>
-        <p className="text-[10px] text-[#888] mt-1">{desc}</p>
+        <p className="text-[10px] text-gray-500 mt-1">{desc}</p>
       </div>
     </button>
   );

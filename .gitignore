@@ -23,3 +23,4 @@ log_stampante.txt
 logs/error.log
 logs/nginx.pid
 nginx/logs/error.log
+log_stampante.txt

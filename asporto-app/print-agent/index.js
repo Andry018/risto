@@ -181,6 +181,13 @@ async function printKitchenJob(job) {
     printer.drawLine();
   }
 
+  printer.alignCenter();
+  printer.setTextDoubleWidth();
+  printer.bold(true);
+  printer.println(truncate(job.tableName || 'TAVOLO', 18));
+  printer.bold(false);
+  printer.setTextNormal();
+
   printer.cut();
   await executePrinter(printer, `Comanda cucina ${job.tableName}`);
 }

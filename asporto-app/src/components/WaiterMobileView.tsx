@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Portata, Reservation } from '../types/entities';
@@ -9,7 +9,7 @@ import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut,
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
-import { PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT } from '../lib/printConfig';
+import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import ProductCustomizationModal from './ProductCustomizationModal';
@@ -28,6 +28,7 @@ import { notifyNewOrder } from '../lib/notify';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
 import PaninoBuilderModal from './PaninoBuilderModal';
+import CustomItemModal from './CustomItemModal';
 import { SALE } from '../lib/salas';
 
 export default function WaiterMobileView() {
@@ -62,6 +63,7 @@ export default function WaiterMobileView() {
   const currentUser = getCurrentUser();
   const [tableDrafts, setTableDrafts] = useState<Record<string, { cart: CustomizedItem[]; covers: number }>>({});
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
+  const [customItemModalOpen, setCustomItemModalOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -87,17 +89,17 @@ export default function WaiterMobileView() {
 
   const handlePrint = async () => {
     if (cart.length === 0) return;
-    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caff� e Liquori'];
     const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
     const salaItems = cart.filter(i => salaCats.includes(i.categoria));
     const tableName = selectedTable?.nome || 'Tavolo';
     try {
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       if (cucinaItems.length > 0) {
-        await printKitchenViaAgent(cucinaItems, tableName, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime);
+        await printKitchenViaAgent(cucinaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime);
       }
       if (salaItems.length > 0) {
-        await printSalaViaAgent(salaItems, tableName, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT);
+        await printSalaViaAgent(salaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
       }
       toast.addToast({
         type: 'success',
@@ -312,7 +314,7 @@ export default function WaiterMobileView() {
               toast.addToast({
                 type: 'success',
                 title: 'Conto chiuso dalla cassa',
-                message: `Il conto del ${t.nome} è stato chiuso dal POS`,
+                message: `Il conto del ${t.nome} � stato chiuso dal POS`,
                 duration: 4000,
               });
               setSelectedTable(null);
@@ -351,7 +353,7 @@ export default function WaiterMobileView() {
             toast.addToast({
               type: 'info',
               title: 'Tavolo liberato',
-              message: `${t.nome} è stato liberato dalla cassa`,
+              message: `${t.nome} � stato liberato dalla cassa`,
               duration: 4000,
             });
             setSelectedTable(null);
@@ -469,7 +471,7 @@ export default function WaiterMobileView() {
   /** Trasferisce ordini aperti, bozza e coperti dal tavolo sorgente al tavolo destinazione. */
   const handleTransferTable = async (from: Tavolo, to: Tavolo) => {
     if (to.status !== 'LIBERO') {
-      toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: `${to.nome} non è libero`, duration: 3000 });
+      toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: `${to.nome} non � libero`, duration: 3000 });
       return;
     }
     setTransferBusy(true);
@@ -525,7 +527,7 @@ export default function WaiterMobileView() {
       toast.addToast({
         type: 'success',
         title: 'Tavolo trasferito',
-        message: `${from.nome} → ${to.nome}${movedOrders > 0 ? ` (${movedOrders} ordine${movedOrders > 1 ? 'i' : ''} spostati)` : ''}`,
+        message: `${from.nome} ? ${to.nome}${movedOrders > 0 ? ` (${movedOrders} ordine${movedOrders > 1 ? 'i' : ''} spostati)` : ''}`,
         duration: 3500,
       });
     } catch (error) {
@@ -602,7 +604,7 @@ export default function WaiterMobileView() {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
     if (IS_DEMO_MODE) {
-      toast.addToast({ type: 'info', title: 'Demo', message: 'Comanda simulata (Modalità Demo)' });
+      toast.addToast({ type: 'info', title: 'Demo', message: 'Comanda simulata (Modalit� Demo)' });
       if (selectedTable) clearDraft(selectedTable.id);
       setCart([]);
       setSelectedTable(null);
@@ -680,14 +682,14 @@ export default function WaiterMobileView() {
 
       if (printItems.length > 0) {
         const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+        const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caff� e Liquori'];
         const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
         const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
         if (cucinaItems.length > 0) {
-          await printKitchenViaAgent(cucinaItems, `${selectedTable.nome} (AGGIUNTA)`, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT, orderTime).catch(() => {});
+          await printKitchenViaAgent(cucinaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime).catch(() => {});
         }
         if (salaItems.length > 0) {
-          await printSalaViaAgent(salaItems, `${selectedTable.nome} (AGGIUNTA)`, PRINT_AGENT_URL, PRINTER_IP, PRINTER_PORT).catch(() => {});
+          await printSalaViaAgent(salaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort()).catch(() => {});
         }
       }
 
@@ -796,7 +798,7 @@ export default function WaiterMobileView() {
       onTouchStart={handleTouchStartPull}
       onTouchMove={handleTouchMovePull}
       onTouchEnd={handleTouchEndPull}
-      className="h-screen overflow-hidden bg-charcoal text-white font-sans flex flex-col max-w-2xl mx-auto relative border-x border-surface"
+      className="h-dvh overflow-hidden bg-charcoal text-white font-sans flex flex-col max-w-2xl mx-auto relative border-x border-surface"
     >
       
       {/* Pull-to-refresh indicator */}
@@ -829,7 +831,7 @@ export default function WaiterMobileView() {
                 <div>
                   <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
                   {currentUser && (
-                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.name} • {currentUser.role}</p>
+                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.name} � {currentUser.role}</p>
                   )}
                 </div>
                  <div className="flex items-center gap-2">
@@ -926,7 +928,7 @@ export default function WaiterMobileView() {
               </div>
             </div>
             <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-black font-black shadow-lg">
-                 €{total.toFixed(0)}
+                 �{total.toFixed(0)}
               </div>
             </div>
 
@@ -960,6 +962,7 @@ export default function WaiterMobileView() {
               onAddToCart={addToCart}
               onOpenCustomization={openCustomization}
               onOpenPaninoBuilder={() => setPaninoModalOpen(true)}
+              onOpenCustomItem={() => setCustomItemModalOpen(true)}
             />
           ) : (
             <div className="flex-1 overflow-y-auto pb-44">
@@ -967,7 +970,7 @@ export default function WaiterMobileView() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Totale</p>
-                    <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
+                    <p className="text-4xl font-black text-gold italic">�{total.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setBillsDayOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[9px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
@@ -982,7 +985,7 @@ export default function WaiterMobileView() {
                 </div>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-sm font-bold text-white">{selectedTable?.nome} · {selectedTable?.clienti} coperti</span>
+                  <span className="text-sm font-bold text-white">{selectedTable?.nome} � {selectedTable?.clienti} coperti</span>
                   <span className="text-[10px] font-black text-gray-500 uppercase">{activeOrderId ? 'Servizio in corso' : 'Occupato'}</span>
                 </div>
               </div>
@@ -1012,7 +1015,7 @@ export default function WaiterMobileView() {
                         <div key={portataKey}>
                           <div className={`flex items-center justify-between mb-3 px-3 py-2 rounded-2xl border ${portataInfo?.color || 'border-surface-light bg-charcoal'}`}>
                             <span className="font-black text-sm uppercase tracking-wider">{portataInfo?.label || 'SENZA USCITA'}</span>
-                            <span className="font-black text-sm opacity-80">€{groupTotal.toFixed(2)}</span>
+                            <span className="font-black text-sm opacity-80">�{groupTotal.toFixed(2)}</span>
                           </div>
                           <div className="space-y-2 pl-2">
                             {items.map(item => (
@@ -1054,7 +1057,7 @@ export default function WaiterMobileView() {
                     : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
                 } disabled:opacity-30`}
               >
-                {orderActionBusy ? '…' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
+                {orderActionBusy ? '�' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
               </button>
             </div>
             {IS_DEMO_MODE && (
@@ -1122,7 +1125,7 @@ export default function WaiterMobileView() {
                 </button>
               </div>
               <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">
-                Da {transferSource.nome} · {transferSource.clienti || 0} coperti
+                Da {transferSource.nome} � {transferSource.clienti || 0} coperti
               </p>
               <p className="text-[10px] text-gray-500 font-bold mt-1">
                 Ordini aperti, bozza e orario di apertura verranno spostati sul tavolo selezionato.
@@ -1238,6 +1241,13 @@ export default function WaiterMobileView() {
         onSave={addPaninoToCart}
       />
 
+      <CustomItemModal
+        isOpen={customItemModalOpen}
+        currentPortata={currentPortata}
+        onClose={() => setCustomItemModalOpen(false)}
+        onSave={addPaninoToCart}
+      />
+
       {/* Reservation Create/Edit Modal */}
       {reservationModal.open && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
@@ -1348,7 +1358,7 @@ export default function WaiterMobileView() {
                                <p className="text-base font-black text-white truncate">{res.nome}</p>
                                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-0.5">
                                  {res.persone} {res.persone === 1 ? 'Persona' : 'Persone'}
-                                 {res.tavolo_id && tables.find(t => t.id === res.tavolo_id) && ` • ${tables.find(t => t.id === res.tavolo_id)!.nome}`}
+                                 {res.tavolo_id && tables.find(t => t.id === res.tavolo_id) && ` � ${tables.find(t => t.id === res.tavolo_id)!.nome}`}
                                </p>
                                {res.note && <p className="text-[10px] text-gray-500 italic mt-1 truncate">"{res.note}"</p>}
                             </div>
@@ -1439,7 +1449,7 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
             <h5 className="font-bold text-white text-sm truncate">{item.nome}</h5>
             {item.portata && (
               <span className={`shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
-                {item.portata}ª
+                {item.portata}�
               </span>
             )}
           </div>

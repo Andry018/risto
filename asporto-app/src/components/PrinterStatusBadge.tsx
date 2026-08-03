@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PRINT_AGENT_URL } from '../lib/printConfig';
+import { getPrintAgentUrl } from '../lib/printConfig';
 
 type Status = 'checking' | 'online' | 'offline' | 'error';
 
@@ -11,7 +11,7 @@ export default function PrinterStatusBadge({ size = 'sm' }: { size?: 'sm' | 'md'
     const check = async () => {
       if (!navigator.onLine) { if (!cancelled) setStatus('offline'); return; }
       try {
-        const res = await fetch(`${PRINT_AGENT_URL}/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${getPrintAgentUrl()}/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
         if (!cancelled) setStatus(res.ok ? 'online' : 'error');
       } catch { if (!cancelled) setStatus('error'); }
     };

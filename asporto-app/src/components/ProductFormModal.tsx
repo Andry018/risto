@@ -1,4 +1,4 @@
-import { X, Save, Upload } from 'lucide-react';
+﻿import { X, Save, Upload } from 'lucide-react';
 import { ALLERGEN_META, type Product } from '../types/entities';
 import { supabase } from '../lib/supabase';
 import { useToast } from './Toast';
@@ -14,13 +14,13 @@ interface Props {
   onNewProductChange: (p: Partial<Product>) => void;
   onPriceDraftChange: (v: string) => void;
   onSave: () => void;
-  isEmbedded: boolean;
+  
 }
 
 export default function ProductFormModal({
   isOpen, editingProduct, newProduct, productPriceDraft, allCategories,
   onClose, onEditingProductChange, onNewProductChange, onPriceDraftChange,
-  onSave, isEmbedded,
+  onSave,
 }: Props) {
   const { addToast } = useToast();
 
@@ -34,29 +34,29 @@ export default function ProductFormModal({
   if (!isOpen) return null;
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${isEmbedded ? 'bg-black/80' : 'bg-slate-950/80'} backdrop-blur-md animate-in fade-in duration-200`}>
-      <div className={`${isEmbedded ? 'bg-surface border-surface-light' : 'bg-slate-900 border-slate-800'} border w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200`}>
-        <div className={`p-6 border-b ${isEmbedded ? 'border-surface-light bg-surface-light/20' : 'border-slate-800 bg-slate-800/20'} flex justify-between items-center`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${'bg-black/80'} backdrop-blur-md animate-in fade-in duration-200`}>
+      <div className={`${'bg-surface border-surface-light'} border w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200`}>
+        <div className={`p-6 border-b ${'border-surface-light bg-surface-light/20'} flex justify-between items-center`}>
           <h3 className="text-xl font-bold text-white italic uppercase tracking-tighter">
-            {editingProduct ? 'Modifica' : 'Nuovo'} <span className={isEmbedded ? 'text-gold' : 'text-indigo-400'}>Piatto</span>
+            {editingProduct ? 'Modifica' : 'Nuovo'} <span className={'text-gold'}>Piatto</span>
           </h3>
-          <button onClick={onClose} className={`p-2 ${isEmbedded ? 'text-gray-500 hover:text-white' : 'text-slate-500 hover:text-white'}`}><X size={24} /></button>
+          <button onClick={onClose} className={`p-2 ${'text-gray-500 hover:text-white'}`}><X size={24} /></button>
         </div>
 
         <div className="p-6 space-y-5">
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
-              <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Nome Piatto</label>
+              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Nome Piatto</label>
               <input
                 type="text"
                 value={curr.nome ?? ''}
                 onChange={e => set({ nome: e.target.value })}
-                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-xl py-3 px-4 text-white outline-none`}
+                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
                 placeholder="Esempio: Linguine allo Scoglio"
               />
             </div>
             <div>
-              <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Prezzo (€)</label>
+              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Prezzo (â‚¬)</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -72,35 +72,35 @@ export default function ProductFormModal({
                     onPriceDraftChange(String(curr.prezzo ?? 0));
                   }
                 }}
-                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-xl py-3 px-4 text-white outline-none`}
+                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Categoria</label>
+              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Categoria</label>
               <select
                 value={curr.categoria ?? ''}
                 onChange={e => {
                   const cat = e.target.value;
-                  const hasSub = cat === 'Bevande' || cat === 'Caffè e Liquori';
+                  const hasSub = cat === 'Bevande' || cat === 'CaffÃ¨ e Liquori';
                   set({ categoria: cat, sottocategoria: hasSub ? (curr.sottocategoria || '') : '' });
                 }}
-                className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-xl py-3 px-4 text-white outline-none appearance-none`}
+                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none appearance-none`}
               >
                 {allCategories.map(c => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
-            {['Bevande', 'Caffè e Liquori'].includes(curr.categoria ?? '') ? (
+            {['Bevande', 'CaffÃ¨ e Liquori'].includes(curr.categoria ?? '') ? (
               <div>
-                <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Sotto-Categoria</label>
+                <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Sotto-Categoria</label>
                 <select
                   value={curr.sottocategoria || ''}
                   onChange={e => set({ sottocategoria: e.target.value })}
-                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-xl py-3 px-4 text-white outline-none appearance-none`}
+                  className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none appearance-none`}
                 >
                   <option value="">Nessuna</option>
                   {(curr.categoria) === 'Bevande' ? (
@@ -116,7 +116,7 @@ export default function ProductFormModal({
                     </>
                   ) : (
                     <>
-                      <option value="Caffè">Caffè</option>
+                      <option value="CaffÃ¨">CaffÃ¨</option>
                       <option value="Amari e Liquori">Amari e Liquori</option>
                     </>
                   )}
@@ -124,14 +124,14 @@ export default function ProductFormModal({
               </div>
             ) : (
               <div>
-                <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Ingredienti</label>
+                <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Ingredienti</label>
                 <input
                   value={curr.ingredienti?.join(', ') ?? ''}
                   onChange={e => {
                     const ings = e.target.value.split(',').map(i => i.trim()).filter(i => i !== '');
                     set({ ingredienti: ings });
                   }}
-                  className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-xl py-3 px-4 text-white outline-none`}
+                  className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
                   placeholder="Pomodoro, Mozzarella, Basilico..."
                 />
               </div>
@@ -140,7 +140,7 @@ export default function ProductFormModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Immagine</label>
+              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Immagine</label>
               <div className="flex items-center gap-3">
                 {(curr.immagine) ? (
                   <div className="relative w-16 h-16 shrink-0 rounded-xl overflow-hidden border border-surface-light">
@@ -152,7 +152,7 @@ export default function ProductFormModal({
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-                  <label className={`cursor-pointer flex items-center justify-center gap-2 px-3 py-2 rounded-xl ${isEmbedded ? 'bg-charcoal border-surface-light' : 'bg-slate-950 border-slate-800'} border text-[10px] font-black ${isEmbedded ? 'text-gray-400 hover:text-white' : 'text-slate-400 hover:text-white'} transition-all`}>
+                  <label className={`cursor-pointer flex items-center justify-center gap-2 px-3 py-2 rounded-xl ${'bg-charcoal border-surface-light'} border text-[10px] font-black ${'text-gray-400 hover:text-white'} transition-all`}>
                     <Upload size={14} />
                     Carica
                     <input type="file" accept="image/*" className="hidden" onChange={async e => {
@@ -171,13 +171,13 @@ export default function ProductFormModal({
                     placeholder="Oppure incolla un link..."
                     value={curr.immagine || ''}
                     onChange={e => set({ immagine: e.target.value.trim() || undefined })}
-                    className={`w-full ${isEmbedded ? 'bg-charcoal border-surface-light focus:border-gold' : 'bg-slate-950 border-slate-800 focus:border-indigo-500'} border rounded-xl py-1.5 px-3 text-white text-[10px] outline-none placeholder:text-gray-600`}
+                    className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-1.5 px-3 text-white text-[10px] outline-none placeholder:text-gray-600`}
                   />
                 </div>
               </div>
             </div>
             <div>
-              <label className={`block text-xs font-black ${isEmbedded ? 'text-gray-500' : 'text-slate-500'} uppercase mb-1.5`}>Allergeni</label>
+              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Allergeni</label>
               <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
                 {ALLERGEN_META.map(({ label, icon, color, bg }) => {
                   const currentList = (curr.allergeni || []);
@@ -206,10 +206,10 @@ export default function ProductFormModal({
           </div>
         </div>
 
-        <div className={`p-6 ${isEmbedded ? 'bg-surface-light/20 border-surface-light' : 'bg-slate-800/20 border-slate-800'} border-t`}>
+        <div className={`p-6 ${'bg-surface-light/20 border-surface-light'} border-t`}>
           <button
             onClick={onSave}
-            className={`w-full ${isEmbedded ? 'bg-gold text-black' : 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-lg shadow-indigo-500/20'} font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm`}
+            className={`w-full ${'bg-gold text-black'} font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 text-sm`}
           >
             <Save size={18} /> Salva Modifiche
           </button>

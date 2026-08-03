@@ -11,9 +11,11 @@ import MenuQRView from './components/MenuQRView';
 import MenuQRPrint from './components/MenuQRPrint';
 import ReportsView from './components/ReportsView';
 import ReservationsView from './components/ReservationsView';
+import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
 import ExitGuard from './components/ExitGuard';
 import { isTablet } from './lib/DeviceUtils';
+import { initTheme } from './lib/theme';
 import DatabaseStatusGuard from './components/DatabaseStatusGuard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
@@ -21,6 +23,8 @@ import { ConfirmProvider } from './components/ConfirmModal';
 import { PinProvider } from './components/PinModal';
 import { PromptProvider } from './components/PromptModal';
 import { WakeLockManager } from './components/WakeLockManager';
+
+initTheme();
 
 function RootRoute() {
   return isTablet() ? <StaffDashboard /> : <WaiterMobileView />;
@@ -50,6 +54,7 @@ export default function App() {
           <Route path="/pos" element={<POSView />} />
           <Route path="/reports" element={<ReportsView />} />
           <Route path="/reservations" element={<ReservationsView />} />
+          <Route path="/settings" element={<SettingsView />} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
         </Routes>
         </ExitGuard>

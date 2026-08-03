@@ -2,11 +2,19 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
 @theme {
-  --color-charcoal: #121212;
-  --color-surface: #1E1E1E;
-  --color-surface-light: #2A2A2A;
-  --color-gold: #CFA055;
-  --color-gold-hover: #b88b44;
+  --color-charcoal: var(--c-charcoal);
+  --color-surface: var(--c-surface);
+  --color-surface-light: var(--c-surface-light);
+  --color-gold: var(--c-gold);
+  --color-gold-hover: var(--c-gold-hover);
+}
+
+:root {
+  --c-charcoal: #121212;
+  --c-surface: #1E1E1E;
+  --c-surface-light: #2A2A2A;
+  --c-gold: #CFA055;
+  --c-gold-hover: #b88b44;
 }
 
 @layer base {

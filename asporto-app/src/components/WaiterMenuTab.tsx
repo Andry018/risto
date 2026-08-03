@@ -1,5 +1,5 @@
 import type { Product, CustomizedItem, Portata, Ingredient } from '../types/entities';
-import { Search, Edit3, Plus, Sandwich } from 'lucide-react';
+import { Search, Edit3, Plus, Sandwich, UtensilsCrossed, X } from 'lucide-react';
 
 interface Props {
   products: Product[];
@@ -14,6 +14,7 @@ interface Props {
   onAddToCart: (product: Product) => void;
   onOpenCustomization: (product: Product) => void;
   onOpenPaninoBuilder?: () => void;
+  onOpenCustomItem?: () => void;
 }
 
 const CATEGORY_DEFS: { label: string; match: string[] }[] = [
@@ -51,6 +52,7 @@ export default function WaiterMenuTab({
   onAddToCart,
   onOpenCustomization,
   onOpenPaninoBuilder,
+  onOpenCustomItem,
 }: Props) {
   const filtered = products.filter(p => {
     const q = searchQuery.toLowerCase();
@@ -103,6 +105,14 @@ export default function WaiterMenuTab({
               <Sandwich size={14} /> PANINO
             </button>
           )}
+          {onOpenCustomItem && (
+            <button
+              onClick={onOpenCustomItem}
+              className="shrink-0 px-3 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest border border-dashed border-emerald-400/30 text-emerald-400/90 hover:text-emerald-300 hover:border-emerald-400/60 active:scale-95 transition-all flex items-center gap-1.5 bg-emerald-500/5"
+            >
+              <UtensilsCrossed size={14} /> PERSONALIZZATO
+            </button>
+          )}
         </div>
 
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto hide-scrollbar pb-1">
@@ -134,8 +144,17 @@ export default function WaiterMenuTab({
             placeholder="Cerca piatto..."
             value={searchQuery}
             onChange={e => onSearchChange(e.target.value)}
-            className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-10 pr-4 text-white font-bold outline-none focus:border-gold transition-all text-sm shadow-inner"
+            className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-10 pr-12 text-white font-bold outline-none focus:border-gold transition-all text-sm shadow-inner"
           />
+          {searchQuery && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-charcoal border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
+              aria-label="Cancella ricerca"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1">

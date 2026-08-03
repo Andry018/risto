@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Edit3, Trash2, ChevronUp, ChevronDown, Plus, PenLine } from 'lucide-react';
 
 interface Props {
@@ -10,13 +10,13 @@ interface Props {
   onCategoryMoveUp: (cat: string) => void;
   onCategoryMoveDown: (cat: string) => void;
   onCategoryAdd: (name: string) => void;
-  isEmbedded: boolean;
+  
 }
 
 export default function CategoryFilterBar({
   allCategories, activeCategory, onCategoryChange,
   onCategoryRename, onCategoryDelete, onCategoryMoveUp, onCategoryMoveDown,
-  onCategoryAdd, isEmbedded,
+  onCategoryAdd,
 }: Props) {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryDraft, setEditCategoryDraft] = useState('');
@@ -30,12 +30,8 @@ export default function CategoryFilterBar({
         onClick={() => onCategoryChange(null)}
         className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
           !activeCategory
-            ? isEmbedded
-              ? 'bg-gold text-black'
-              : 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-            : isEmbedded
-              ? 'bg-surface text-gray-500 hover:text-white'
-              : 'bg-slate-800 text-slate-400 hover:text-white'
+            ? 'bg-gold text-black'
+            : 'bg-surface text-gray-500 hover:text-white'
         }`}
       >
         Tutte
@@ -46,12 +42,8 @@ export default function CategoryFilterBar({
             onClick={() => onCategoryChange(activeCategory === cat ? null : cat)}
             className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
               activeCategory === cat
-                ? isEmbedded
-                  ? 'bg-gold text-black'
-                  : 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                : isEmbedded
-                  ? 'bg-surface text-gray-500 hover:text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-gold text-black'
+                : 'bg-surface text-gray-500 hover:text-white'
             }`}
           >
             {editingCategory === cat ? (
@@ -79,7 +71,7 @@ export default function CategoryFilterBar({
             <div className="inline-flex items-center gap-0.5 ml-1">
               <button
                 onClick={e => { e.stopPropagation(); setEditingCategory(cat); setEditCategoryDraft(cat); }}
-                className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-400'} transition-all`}
+                className={`p-1 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
                 title="Rinomina"
               >
                 <Edit3 size={12} />
@@ -93,15 +85,15 @@ export default function CategoryFilterBar({
               </button>
               <button
                 onClick={e => { e.stopPropagation(); onCategoryMoveUp(cat); }}
-                className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-400'} transition-all`}
+                className={`p-1 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
                 title="Sposta su"
               >
                 <ChevronUp size={12} />
               </button>
               <button
                 onClick={e => { e.stopPropagation(); onCategoryMoveDown(cat); }}
-                className={`p-1 rounded ${isEmbedded ? 'hover:bg-charcoal text-gray-400' : 'hover:bg-slate-700 text-slate-400'} transition-all`}
-                title="Sposta giù"
+                className={`p-1 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
+                title="Sposta giÃ¹"
               >
                 <ChevronDown size={12} />
               </button>
@@ -113,14 +105,14 @@ export default function CategoryFilterBar({
         {editMode ? (
           <button
             onClick={() => setEditMode(false)}
-            className={`shrink-0 px-3 py-2 rounded-xl font-bold text-sm transition-all ${isEmbedded ? 'bg-gold text-black' : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'} hover:opacity-80`}
+            className={`shrink-0 px-3 py-2 rounded-xl font-bold text-sm transition-all ${'bg-gold text-black'} hover:opacity-80`}
           >
             Fine
           </button>
         ) : (
           <button
             onClick={() => setEditMode(true)}
-            className={`p-2 rounded-xl ${isEmbedded ? 'text-gray-400 hover:text-white hover:bg-charcoal' : 'text-slate-500 hover:text-white hover:bg-slate-700'} transition-all`}
+            className={`p-2 rounded-xl ${'text-gray-400 hover:text-white hover:bg-charcoal'} transition-all`}
             title="Modifica categorie"
           >
             <PenLine size={18} />
@@ -141,12 +133,12 @@ export default function CategoryFilterBar({
                 if (e.key === 'Escape') { setShowNewCatInput(false); setNewCatName(''); }
               }}
               placeholder="Nome..."
-              className={`w-32 ${isEmbedded ? 'bg-charcoal border-gold/50 focus:border-gold' : 'bg-slate-950 border-indigo-500/50 focus:border-indigo-500'} border rounded-xl py-2 px-3 text-white text-sm outline-none`}
+              className={`w-32 ${'bg-charcoal border-gold/50 focus:border-gold'} border rounded-xl py-2 px-3 text-white text-sm outline-none`}
               autoFocus
             />
             <button
               onClick={() => { if (newCatName.trim()) { onCategoryAdd(newCatName.trim()); setShowNewCatInput(false); setNewCatName(''); } }}
-              className={`p-2 ${isEmbedded ? 'bg-gold text-black' : 'bg-indigo-500'} rounded-lg text-white`}
+              className={`p-2 ${'bg-gold text-black'} rounded-lg text-white`}
             >
               <Plus size={16} />
             </button>
@@ -154,7 +146,7 @@ export default function CategoryFilterBar({
         ) : (
           <button
             onClick={() => { setShowNewCatInput(true); setEditMode(false); }}
-            className={`shrink-0 px-3 py-2 rounded-xl font-bold text-sm ${isEmbedded ? 'bg-surface text-gray-500 hover:bg-charcoal hover:text-white' : 'bg-slate-800 text-slate-500 hover:text-white hover:bg-slate-700'} transition-all`}
+            className={`shrink-0 px-3 py-2 rounded-xl font-bold text-sm ${'bg-surface text-gray-500 hover:bg-charcoal hover:text-white'} transition-all`}
             title="Aggiungi categoria"
           >
             <Plus size={18} />

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import { printLabelViaAgent, type HaccpLabelData } from '../lib/lanPrint';
-import { PRINT_AGENT_URL } from '../lib/printConfig';
+import { getPrintAgentUrl } from '../lib/printConfig';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -309,7 +309,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
         lotto: printLotto.trim() || undefined,
         conservazione: p.conservazione || undefined,
       };
-      await printLabelViaAgent(data, PRINT_AGENT_URL);
+      await printLabelViaAgent(data, getPrintAgentUrl());
 
       // Save to storico etichette
       const etichettaRecord = {
