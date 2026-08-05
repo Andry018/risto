@@ -10,6 +10,7 @@ import BillsHistoryModal from './BillsHistoryModal';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import PaninoBuilderModal from './PaninoBuilderModal';
 import CustomItemModal from './CustomItemModal';
+import NumericKeypad from './NumericKeypad';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { useToast } from './Toast';
@@ -56,6 +57,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [showBillReview, setShowBillReview] = useState(false);
   const [scontoTipo, setScontotipo] = useState<'percentuale' | 'fisso' | null>(null);
   const [scontoValore, setScontoValore] = useState(0);
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [discountDraftTipo, setDiscountDraftTipo] = useState<'percentuale' | 'fisso'>('percentuale');
+  const [discountDraftValue, setDiscountDraftValue] = useState('');
   const [currentPortata, setCurrentPortata] = useState<(typeof PORTATA_OPTIONS)[number]['value']>('1');
 
   // Customization state
@@ -409,6 +413,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     setCurrentPortata(PORTATA_OPTIONS[nextIndex].value);
   };
 
+  const retreatPortata = () => {
+    const currentIndex = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
+    const prevIndex = Math.max(currentIndex - 1, 0);
+    setCurrentPortata(PORTATA_OPTIONS[prevIndex].value);
+  };
+
+  const activePortataMeta = PORTATA_OPTIONS.find(p => p.value === currentPortata) ?? PORTATA_OPTIONS[0];
+
   const handleFinishOrder = async () => {
     if (cart.length === 0 || finishingOrder) return;
 
@@ -540,6 +552,26 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     }
   };
 
+  const openDiscountModal = () => {
+    setDiscountDraftTipo(scontoTipo || 'percentuale');
+    setDiscountDraftValue(scontoValore > 0 ? String(scontoValore) : '');
+    setDiscountModalOpen(true);
+  };
+
+  const applyDiscount = () => {
+    const value = parseFloat(discountDraftValue);
+    if (isNaN(value) || value <= 0) return;
+    setScontotipo(discountDraftTipo);
+    setScontoValore(discountDraftTipo === 'percentuale' ? Math.min(100, value) : value);
+    setDiscountModalOpen(false);
+  };
+
+  const removeDiscount = () => {
+    setScontotipo(null);
+    setScontoValore(0);
+    setDiscountModalOpen(false);
+  };
+
   const resumeOrder = (order: Order) => {
     setActiveOrderId(order.id);
     const prods = productsRef.current;
@@ -601,6 +633,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             nome: i.nome,
             quantity: i.quantity,
             prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            portata: i.portata,
             modifiche: {
               aggiunte: i.addedIngredients.map(a => a.nome),
               rimozioni: i.removedIngredients,
@@ -715,6 +748,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                       ) : (
                         <p className="text-4xl font-black text-gold italic leading-none">€{total.toFixed(2)}</p>
                       )}
+                      <button
+                        type="button"
+                        onClick={openDiscountModal}
+                        className="mt-3 w-full text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-gold border border-dashed border-surface-light hover:border-gold/40 rounded-xl py-2 transition-all"
+                      >
+                        {scontoTipo ? 'Modifica sconto' : 'Applica sconto'}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -985,33 +1025,30 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             )}
           </div>
 
-          {/* Portate (uscita) selector row */}
+          {/* Portate (uscita) stepper */}
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 mr-1">Portata</span>
-            {PORTATA_OPTIONS.map(portata => {
-              const isActive = currentPortata === portata.value;
-              return (
-                <button
-                  key={portata.value}
-                  type="button"
-                  onClick={() => setCurrentPortata(portata.value)}
-                  className={`px-3 h-8 rounded-xl border text-[10px] font-black tracking-wider transition-all active:scale-90 ${
-                    isActive
-                      ? `${portata.color} shadow-lg shadow-black/10 border-current`
-                      : 'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-gray-500'
-                  }`}
-                >
-                  {portata.value}ª {portata.label}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={advancePortata}
-              className="px-3 h-8 rounded-xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black tracking-wider transition-all hover:bg-gold/20 active:scale-90"
-            >
-              → Tutte
-            </button>
+            <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Portata</span>
+            <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
+              <button
+                type="button"
+                onClick={retreatPortata}
+                disabled={currentPortata === PORTATA_OPTIONS[0].value}
+                className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-surface-light active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+              >
+                <Minus size={16} />
+              </button>
+              <span className={`min-w-[110px] text-center px-3 py-2 rounded-xl border text-[10px] font-black tracking-wider ${activePortataMeta.color} border-current`}>
+                {activePortataMeta.label}
+              </span>
+              <button
+                type="button"
+                onClick={advancePortata}
+                disabled={currentPortata === PORTATA_OPTIONS[PORTATA_OPTIONS.length - 1].value}
+                className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-surface-light active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
           </div>
 
         </header>
@@ -1068,7 +1105,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 >
                   {inCart && (
                     <div className="absolute top-2 right-2 z-10">
-                      <span className="bg-gold text-black text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-lg shadow-gold/30">Ã—{cartCount}</span>
+                      <span className="bg-gold text-black text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-lg shadow-gold/30">×{cartCount}</span>
                     </div>
                   )}
                   <div>
@@ -1101,7 +1138,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         </div>
       </div>
 
-      <aside className="w-full max-w-[450px] shrink-0 md:w-[420px] lg:w-[450px] bg-surface flex flex-col min-h-0 border-l border-surface-light shadow-2xl relative overflow-hidden">
+      <aside className="w-full max-w-[450px] shrink-0 md:portrait:w-[320px] md:landscape:w-[420px] lg:landscape:w-[450px] bg-surface flex flex-col min-h-0 border-l border-surface-light shadow-2xl relative overflow-hidden">
         {/* Decor */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 blur-3xl pointer-events-none" />
 
@@ -1164,9 +1201,26 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         {/* Total & Checkout */}
         <div className="p-4 border-t border-surface-light bg-surface-light/10 relative z-10">
 
-          <div className="flex justify-between items-end mb-3">
+          <div className="flex justify-between items-end mb-1">
             <span className="text-[10px] font-black text-gray-400 uppercase tracking-[.3em]">Totale</span>
-            <span className="text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{total.toFixed(2)}</span></span>
+            {scontoTipo ? (
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-black text-gray-500 line-through">€{total.toFixed(2)}</span>
+                <span className="text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{discountedTotal.toFixed(2)}</span></span>
+              </div>
+            ) : (
+              <span className="text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{total.toFixed(2)}</span></span>
+            )}
+          </div>
+          <div className="flex justify-end mb-3">
+            <button
+              type="button"
+              onClick={openDiscountModal}
+              disabled={cart.length === 0}
+              className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-gold disabled:opacity-30 disabled:pointer-events-none transition-all"
+            >
+              {scontoTipo ? `Sconto: ${scontoTipo === 'percentuale' ? scontoValore + '%' : '€' + scontoValore.toFixed(2)} · Modifica` : '+ Applica sconto'}
+            </button>
           </div>
 
           {orderSuccess ? (
@@ -1293,7 +1347,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                   <button onClick={() => setSplitType('CUSTOM')} className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${splitType === 'CUSTOM' ? 'bg-gold text-black' : 'bg-surface'}`}>N</button>
                   <div>
                     <div className="text-xs font-black uppercase tracking-widest">Dividi per numero...</div>
-                    {splitType === 'CUSTOM' && <div className="text-[10px] opacity-60 mt-1">€{(total / customSplitCount).toFixed(2)} a testa</div>}
+                    {splitType === 'CUSTOM' && <div className="text-[10px] opacity-60 mt-1">€{(discountedTotal / customSplitCount).toFixed(2)} a testa</div>}
                   </div>
                 </div>
                 {splitType === 'CUSTOM' && (
@@ -1309,7 +1363,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             <button 
               onClick={() => {
                 const parts = splitType === 'EQUAL' ? 2 : splitType === 'GUESTS' ? (tableClienti || 1) : customSplitCount;
-                setSplitResult({ parts, eachAmount: total / parts });
+                setSplitResult({ parts, eachAmount: discountedTotal / parts });
               }}
               disabled={splitType === 'NONE' || finishingOrder}
               className="w-full bg-gold hover:bg-gold-hover text-black font-black py-6 rounded-3xl text-xl shadow-2xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30"
@@ -1329,13 +1383,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
             <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter mb-2">Conto Diviso</h2>
             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-8">
-              {splitResult.parts} quote da €{total.toFixed(2)}
+              {splitResult.parts} quote da €{discountedTotal.toFixed(2)}
             </p>
 
             <div className="bg-charcoal border border-surface-light rounded-3xl p-6 mb-8">
               <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Importo per quota</p>
               <p className="text-5xl font-black italic text-gold">€{splitResult.eachAmount.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-2">Ã— {splitResult.parts} persone</p>
+              <p className="text-xs text-gray-500 mt-2">× {splitResult.parts} persone</p>
             </div>
 
             <div className="flex gap-3">
@@ -1354,12 +1408,77 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 disabled={finishingOrder}
                 className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
               >
-                {finishingOrder ? '?' : 'CONFERMA E CHIUDI CONTO'}
+                {finishingOrder ? 'ATTENDI...' : 'CONFERMA E CHIUDI CONTO'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Discount Modal */}
+      {discountModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black italic uppercase text-white tracking-tighter">Applica <span className="text-gold">Sconto</span></h2>
+              <button onClick={() => setDiscountModalOpen(false)} className="p-2 bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => setDiscountDraftTipo('percentuale')}
+                className={`py-3 rounded-2xl border font-black text-sm uppercase tracking-widest transition-all ${
+                  discountDraftTipo === 'percentuale' ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
+                }`}
+              >
+                Percentuale %
+              </button>
+              <button
+                type="button"
+                onClick={() => setDiscountDraftTipo('fisso')}
+                className={`py-3 rounded-2xl border font-black text-sm uppercase tracking-widest transition-all ${
+                  discountDraftTipo === 'fisso' ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
+                }`}
+              >
+                Importo €
+              </button>
+            </div>
+
+            <div className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 mb-4 text-right text-4xl font-black italic text-gold tabular-nums">
+              {discountDraftValue || '0'}{discountDraftTipo === 'percentuale' ? '%' : '€'}
+            </div>
+
+            <NumericKeypad
+              value={discountDraftValue}
+              onChange={setDiscountDraftValue}
+              allowDecimal={discountDraftTipo === 'fisso'}
+              className="mb-4"
+            />
+
+            <div className="flex gap-3">
+              {scontoTipo && (
+                <button
+                  onClick={removeDiscount}
+                  className="flex-1 bg-charcoal border border-red-500/20 text-red-400 font-black py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-red-500/10 active:scale-95 transition-all"
+                >
+                  Rimuovi
+                </button>
+              )}
+              <button
+                onClick={applyDiscount}
+                disabled={!discountDraftValue || parseFloat(discountDraftValue) <= 0}
+                className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
+              >
+                Applica
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ProductCustomizationModal
         isOpen={isModalOpen}
         editingItem={editingItem}

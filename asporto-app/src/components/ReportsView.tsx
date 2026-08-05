@@ -59,7 +59,9 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
     const now = new Date();
     let startDate: string;
     if (period === 'today') {
-      startDate = now.toISOString().split('T')[0];
+      const localMidnight = new Date(now);
+      localMidnight.setHours(0, 0, 0, 0);
+      startDate = localMidnight.toISOString();
     } else if (period === 'week') {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       startDate = weekAgo.toISOString();

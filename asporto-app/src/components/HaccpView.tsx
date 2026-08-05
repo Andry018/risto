@@ -178,10 +178,12 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       }
     } else {
       if (editingId) {
-        await supabase.from('haccp_prodotti').update(payload).eq('id', editingId);
+        const { error } = await supabase.from('haccp_prodotti').update(payload).eq('id', editingId);
+        if (error) { addToast({ type: 'error', title: 'Errore', message: 'Salvataggio ricetta fallito.' }); return; }
         await saveLinks(editingId, formFornitoriIds);
       } else {
-        const { data } = await supabase.from('haccp_prodotti').insert([payload]).select('id').single();
+        const { data, error } = await supabase.from('haccp_prodotti').insert([payload]).select('id').single();
+        if (error) { addToast({ type: 'error', title: 'Errore', message: 'Salvataggio ricetta fallito.' }); return; }
         if (data) {
           await saveLinks(data.id, formFornitoriIds);
         }
@@ -250,11 +252,10 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       setFornitori(updated);
       localStorage.setItem('risto_haccp_fornitori', JSON.stringify(updated));
     } else {
-      if (fornEditId) {
-        await supabase.from('haccp_fornitori').update(payload).eq('id', fornEditId);
-      } else {
-        await supabase.from('haccp_fornitori').insert([payload]);
-      }
+      const { error } = fornEditId
+        ? await supabase.from('haccp_fornitori').update(payload).eq('id', fornEditId)
+        : await supabase.from('haccp_fornitori').insert([payload]);
+      if (error) { addToast({ type: 'error', title: 'Errore', message: 'Salvataggio fornitore fallito.' }); return; }
       await fetchFornitori();
     }
     resetFornForm();

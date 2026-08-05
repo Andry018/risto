@@ -55,8 +55,9 @@ export default function TakeawayTabletView() {
       return;
     }
     if (!supabase) return;
-    const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase.from('ordini').select('*').gte('created_at', today);
+    const localMidnight = new Date();
+    localMidnight.setHours(0, 0, 0, 0);
+    const { data } = await supabase.from('ordini').select('*').gte('created_at', localMidnight.toISOString());
     if (data) setAllOrders(data);
   }
 

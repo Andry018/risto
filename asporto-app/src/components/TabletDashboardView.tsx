@@ -35,9 +35,10 @@ export default function TabletDashboardView() {
 
   async function fetchStats() {
     if (!supabase) return;
-    const today = new Date().toISOString().split('T')[0];
+    const localMidnight = new Date();
+    localMidnight.setHours(0, 0, 0, 0);
     const [ordersRes, tablesRes] = await Promise.all([
-      supabase.from('ordini').select('status, totale').gte('created_at', today),
+      supabase.from('ordini').select('status, totale').gte('created_at', localMidnight.toISOString()),
       supabase.from('tavoli').select('status')
     ]);
     type OrderRow = { status: string; totale: number };

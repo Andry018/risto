@@ -1,5 +1,6 @@
+import { useMemo } from 'react';
 import type { Product, CustomizedItem, Portata, Ingredient } from '../types/entities';
-import { Search, Edit3, Plus, Sandwich, UtensilsCrossed, X } from 'lucide-react';
+import { Search, Edit3, Plus, Minus, Sandwich, UtensilsCrossed, X } from 'lucide-react';
 
 interface Props {
   products: Product[];
@@ -54,7 +55,7 @@ export default function WaiterMenuTab({
   onOpenPaninoBuilder,
   onOpenCustomItem,
 }: Props) {
-  const filtered = products.filter(p => {
+  const filtered = useMemo(() => products.filter(p => {
     const q = searchQuery.toLowerCase();
     if (q && !p.nome.toLowerCase().includes(q)) return false;
 
@@ -73,18 +74,20 @@ export default function WaiterMenuTab({
     });
 
     return p.disponibile && missingIngredients.length === 0;
-  });
+  }), [products, ingredients, searchQuery, activeCategory]);
 
-  const coveredCats = new Set(CATEGORY_DEFS.flatMap(d => d.match));
-  const extraCats = Array.from(new Set(products.map(p => p.categoria)))
-    .filter(c => !coveredCats.has(c) && c !== 'EXTRA')
-    .sort((a, b) => {
-      const ai = CATEGORY_ORDER.indexOf(a);
-      const bi = CATEGORY_ORDER.indexOf(b);
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    });
-  const categories = [...CATEGORY_DEFS, ...extraCats.map(c => ({ label: c, match: [c] }))]
-    .filter(def => def.match.some(c => products.some(p => p.categoria === c && p.disponibile)));
+  const categories = useMemo(() => {
+    const coveredCats = new Set(CATEGORY_DEFS.flatMap(d => d.match));
+    const extraCats = Array.from(new Set(products.map(p => p.categoria)))
+      .filter(c => !coveredCats.has(c) && c !== 'EXTRA')
+      .sort((a, b) => {
+        const ai = CATEGORY_ORDER.indexOf(a);
+        const bi = CATEGORY_ORDER.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      });
+    return [...CATEGORY_DEFS, ...extraCats.map(c => ({ label: c, match: [c] }))]
+      .filter(def => def.match.some(c => products.some(p => p.categoria === c && p.disponibile)));
+  }, [products]);
 
   const cartCount = (id: string) => cart.filter(c => c.id === id).reduce((s, c) => s + c.quantity, 0);
   const activePortataMeta = PORTATA_OPTIONS.find(p => p.value === currentPortata) ?? PORTATA_OPTIONS[0];
@@ -115,23 +118,34 @@ export default function WaiterMenuTab({
           )}
         </div>
 
-        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto hide-scrollbar pb-1">
-          {PORTATA_OPTIONS.map(p => {
-            const isActive = currentPortata === p.value;
-            return (
-              <button
-                key={p.value}
-                onClick={() => onPortataChange(p.value)}
-                className={`shrink-0 min-w-[52px] px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] border transition-all active:scale-95 ${
-                  isActive ? `${p.color} border-current shadow-lg` : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'
-                }`}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-          <div className="ml-auto px-3 py-2 rounded-xl border border-surface-light bg-charcoal text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap">
-            {activePortataMeta.label} attiva
+        <div className="mt-3 flex items-center gap-3">
+          <span className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-500">Portata</span>
+          <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
+            <button
+              type="button"
+              onClick={() => {
+                const idx = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
+                onPortataChange(PORTATA_OPTIONS[Math.max(idx - 1, 0)].value);
+              }}
+              disabled={currentPortata === PORTATA_OPTIONS[0].value}
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+            >
+              <Minus size={18} />
+            </button>
+            <span className={`min-w-[64px] text-center px-2 py-2 rounded-xl border text-sm font-black tracking-wider ${activePortataMeta.color} border-current`}>
+              {activePortataMeta.label}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const idx = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
+                onPortataChange(PORTATA_OPTIONS[Math.min(idx + 1, PORTATA_OPTIONS.length - 1)].value);
+              }}
+              disabled={currentPortata === PORTATA_OPTIONS[PORTATA_OPTIONS.length - 1].value}
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+            >
+              <Plus size={18} />
+            </button>
           </div>
         </div>
       </div>

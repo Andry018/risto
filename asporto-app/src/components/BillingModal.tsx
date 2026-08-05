@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, FileText, Link, Type, Share2, CheckCircle, AlertCircle } from 'lucide-react';
 import { IS_DEMO_MODE } from '../lib/supabase';
+import { useToast } from './Toast';
 import {
   generateInvoicePdf,
   uploadPdfToStorage,
@@ -9,6 +10,7 @@ import {
   generateDocNumber,
   fetchUniqueCustomers,
 } from '../lib/billingUtils';
+import { toLocalISODate } from '../lib/dateUtils';
 
 interface Props {
   isOpen: boolean;
@@ -16,7 +18,15 @@ interface Props {
   onSuccess?: () => void;
 }
 
+/** Interpreta un importo scritto in formato italiano ("1.234,56" o "18,50") o semplice ("18.50"). */
+function parseEuroAmount(raw: string): number {
+  const s = raw.trim();
+  if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  return parseFloat(s);
+}
+
 export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
+  const { addToast } = useToast();
   const [mode, setMode] = useState<'linked' | 'manual'>('linked');
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [manualDescription, setManualDescription] = useState('');
@@ -51,7 +61,7 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
     setCompanyName('');
     setPaymentMethod('contanti');
     generateDocNumber().then(setDocNumber);
-    setDocDate(new Date().toISOString().split('T')[0]);
+    setDocDate(toLocalISODate());
 
     if (!IS_DEMO_MODE) {
       fetchCompletedOrders().then(setCompletedOrders);
@@ -66,7 +76,7 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
 
   const selectedOrder = completedOrders.find(o => o.id === selectedOrderId);
   const description = mode === 'linked' ? 'Consumazione Pranzo/Cena' : manualDescription;
-  const total = mode === 'linked' ? selectedOrder?.totale : parseFloat(manualTotal.replace(',', '.'));
+  const total = mode === 'linked' ? selectedOrder?.totale : parseEuroAmount(manualTotal);
   const canGenerate = mode === 'linked'
     ? selectedOrderId && customerName.trim()
     : manualDescription.trim() && manualTotal.trim() && !isNaN(total as number) && (total as number) >= 0 && customerName.trim();
@@ -140,14 +150,23 @@ export default function BillingModal({ isOpen, onClose, onSuccess }: Props) {
 
   const handleShare = async () => {
     if (!result?.fileUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Fattura ${result.docNumber}`,
+          text: `Fattura ${result.docNumber} - ${customerName}`,
+          url: result.fileUrl,
+        });
+      } catch {
+        // utente ha annullato la condivisione
+      }
+      return;
+    }
     try {
-      await navigator.share({
-        title: `Fattura ${result.docNumber}`,
-        text: `Fattura ${result.docNumber} - ${customerName}`,
-        url: result.fileUrl,
-      });
+      await navigator.clipboard.writeText(result.fileUrl);
+      addToast({ type: 'success', title: 'Link copiato', message: 'Condivisione non disponibile su questo browser: link negli appunti.' });
     } catch {
-      // user cancelled or unsupported
+      addToast({ type: 'error', title: 'Errore', message: 'Impossibile copiare il link.' });
     }
   };
 

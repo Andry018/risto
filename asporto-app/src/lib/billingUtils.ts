@@ -47,7 +47,8 @@ export async function generateInvoicePdf(doc: {
 
   // --- Extract sequential number ---
   const seq = doc.docNumber.split('-').pop() || '000';
-  const seqNum = parseInt(seq, 10).toString();
+  const parsedSeq = parseInt(seq, 10);
+  const seqNum = Number.isNaN(parsedSeq) ? doc.docNumber : parsedSeq.toString();
 
   // --- Header: Logo left, Title right ---
   const logo = await getLogoDataUrl();
@@ -135,7 +136,7 @@ export async function generateInvoicePdf(doc: {
   pdf.text('DESCRIZIONE', m, y);
 
   const tableData = [[doc.description, `€ ${doc.total.toFixed(2)}`]];
-  const tableResult = autoTable(pdf, {
+  autoTable(pdf, {
     startY: y + 4,
     margin: { left: m, right: m },
     tableWidth: pw,
@@ -156,7 +157,7 @@ export async function generateInvoicePdf(doc: {
     },
   });
 
-  const fy = (tableResult as any)?.lastFinalY || y + 16;
+  const fy = (pdf as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || y + 16;
 
   // --- Total line ---
   pdf.setDrawColor(212, 175, 55);

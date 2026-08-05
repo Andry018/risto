@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
+import { toLocalISODate } from '../lib/dateUtils';
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export default function StaffDashboard() {
   useEffect(() => {
     async function fetchData() {
       if (!supabase) return;
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalISODate();
 
       const [tablesRes, reservationsRes] = await Promise.all([
         supabase.from('tavoli').select('*').order('nome'),

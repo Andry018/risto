@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { SETTINGS_KEYS, useBooleanSetting } from '../lib/appSettings';
 
-const STORAGE_KEY = 'risto_wake_lock';
+const STORAGE_KEY = SETTINGS_KEYS.wakeLock;
 
 export function getWakeLockEnabled(): boolean {
   return localStorage.getItem(STORAGE_KEY) === 'true';
@@ -12,6 +13,7 @@ export function setWakeLockEnabled(enabled: boolean) {
 
 export function useWakeLock() {
   const sentinelRef = useRef<WakeLockSentinel | null>(null);
+  const [enabled] = useBooleanSetting(SETTINGS_KEYS.wakeLock, false);
 
   const release = useCallback(async () => {
     if (sentinelRef.current) {
@@ -34,23 +36,29 @@ export function useWakeLock() {
   }, [release]);
 
   useEffect(() => {
-    const enabled = getWakeLockEnabled();
-    if (!enabled) return;
+    if (!enabled) {
+      release();
+      return;
+    }
 
-    const handleVisibility = () => {
+    const handleReacquire = () => {
       if (document.visibilityState === 'visible') {
         request();
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('visibilitychange', handleReacquire);
+    window.addEventListener('pageshow', handleReacquire);
+    window.addEventListener('focus', handleReacquire);
     request();
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
+      document.removeEventListener('visibilitychange', handleReacquire);
+      window.removeEventListener('pageshow', handleReacquire);
+      window.removeEventListener('focus', handleReacquire);
       release();
     };
-  }, [request, release]);
+  }, [enabled, request, release]);
 
-  return { request, release };
+  return { request, release, supported: typeof navigator !== 'undefined' && 'wakeLock' in navigator };
 }

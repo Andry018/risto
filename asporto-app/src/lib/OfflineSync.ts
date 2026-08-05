@@ -9,7 +9,10 @@ export interface PendingOrder {
   type: 'INSERT' | 'UPDATE_ORDER' | 'TABLE_UPDATE';
   tableId?: string;
   tableUpdates?: Partial<Tavolo>;
+  attempts?: number;
 }
+
+const MAX_ATTEMPTS = 5;
 
 class OfflineSync {
   private queue: PendingOrder[] = [];
@@ -56,7 +59,6 @@ class OfflineSync {
       while (this.queue.length > 0) {
         const item = this.queue[0];
         let success = false;
-        let isTableUpdate = false;
         try {
           if (item.type === 'INSERT') {
             const payload = { ...item.data };
@@ -70,7 +72,6 @@ class OfflineSync {
             if (!error) success = true;
             else console.error('Supabase Sync Error (update ordine):', error);
           } else if (item.type === 'TABLE_UPDATE' && item.tableId) {
-            isTableUpdate = true;
             const { error } = await supabase.from('tavoli').update(item.tableUpdates!).eq('id', item.tableId);
             if (!error) success = true;
             else console.error('Supabase Sync Error (update tavolo):', error);
@@ -79,10 +80,19 @@ class OfflineSync {
           console.error('OfflineSync: Sync failed for item', item.id, e);
         }
 
-        if (success || isTableUpdate) {
+        if (success) {
           this.queue = this.queue.filter((q) => q.id !== item.id);
           this.saveQueue();
         } else {
+          item.attempts = (item.attempts || 0) + 1;
+          if (item.attempts >= MAX_ATTEMPTS && this.queue.length > 1) {
+            console.error('OfflineSync: item stuck after max attempts, moving to back of queue to unblock others', item.id);
+            this.queue.shift();
+            this.queue.push(item);
+            this.saveQueue();
+            continue;
+          }
+          this.saveQueue();
           break;
         }
       }

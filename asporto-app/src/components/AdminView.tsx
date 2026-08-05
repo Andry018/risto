@@ -8,6 +8,7 @@ import { getProductVariants, saveProductVariants, type ProductVariant } from '..
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
 import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal, ShieldCheck, Palette } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
+import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
 import CategoryFilterBar from './CategoryFilterBar';
 import HaccpView from './HaccpView';
@@ -19,6 +20,7 @@ interface AdminViewProps {
 
 export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const { confirm } = useConfirm();
+  const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [themeId, setThemeId] = useState<string>(getThemeId());
   const [products, setProducts] = useState<Product[]>([]);
@@ -173,13 +175,18 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const toggleAvailability = async (id: string, currentStatus: boolean) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, disponibile: !currentStatus } : p));
     if (!supabase) return;
-    await supabase.from('prodotti').update({ disponibile: !currentStatus }).eq('id', id);
+    const { error } = await supabase.from('prodotti').update({ disponibile: !currentStatus }).eq('id', id);
+    if (error) {
+      addToast({ type: 'error', title: 'Errore', message: 'Impossibile aggiornare la disponibilità del prodotto.' });
+      fetchProducts();
+    }
   };
 
   const toggleIngredientAvailability = async (id: string, currentStatus: boolean) => {
     setIngredients(prev => prev.map(i => i.id === id ? { ...i, disponibile: !currentStatus } : i));
     if (!supabase) return;
-    await supabase.from('ingredienti').update({ disponibile: !currentStatus }).eq('id', id);
+    const { error } = await supabase.from('ingredienti').update({ disponibile: !currentStatus }).eq('id', id);
+    if (error) addToast({ type: 'error', title: 'Errore', message: 'Impossibile aggiornare la disponibilità dell\'ingrediente.' });
     fetchIngredients();
   };
 
@@ -188,12 +195,15 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     const productData = editingProduct || newProduct;
     if (!productData.nome || productData.prezzo === undefined || productData.prezzo === null) return;
 
-    if (editingProduct && editingProduct.id) {
-        await supabase.from('prodotti').update(productData).eq('id', editingProduct.id);
-    } else {
-        await supabase.from('prodotti').insert([productData]);
+    const { error } = editingProduct && editingProduct.id
+      ? await supabase.from('prodotti').update(productData).eq('id', editingProduct.id)
+      : await supabase.from('prodotti').insert([productData]);
+
+    if (error) {
+      addToast({ type: 'error', title: 'Errore', message: 'Salvataggio prodotto fallito. Riprova.' });
+      return;
     }
-    
+
     setIsModalOpen(false);
     setEditingProduct(null);
     setNewProduct({ nome: '', prezzo: 0, categoria: 'Antipasti', sottocategoria: '', disponibile: true, ingredienti: [] });
@@ -205,12 +215,15 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     const ingData = editingIngredient || newIngredient;
     if (!ingData.nome) return;
 
-    if (editingIngredient && editingIngredient.id) {
-        await supabase.from('ingredienti').update(ingData).eq('id', editingIngredient.id);
-    } else {
-        await supabase.from('ingredienti').insert([ingData]);
+    const { error } = editingIngredient && editingIngredient.id
+      ? await supabase.from('ingredienti').update(ingData).eq('id', editingIngredient.id)
+      : await supabase.from('ingredienti').insert([ingData]);
+
+    if (error) {
+      addToast({ type: 'error', title: 'Errore', message: 'Salvataggio ingrediente fallito. Riprova.' });
+      return;
     }
-    
+
     setIsIngredientsModalOpen(false);
     setEditingIngredient(null);
     setNewIngredient({ nome: '', prezzo: 1.5, prezzo_rimozione: 0, disponibile: true });
@@ -461,7 +474,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                       <div className="flex justify-between items-start mb-4">
                                         <div>
                                           <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{product.nome}</h4>
-                                          <p className={`${'text-gold'} font-black mt-1`}>â‚¬{product.prezzo.toFixed(2)}</p>
+                                          <p className={`${'text-gold'} font-black mt-1`}>€{product.prezzo.toFixed(2)}</p>
                                           {product.ingredienti.length > 0 && (
                                             <p className={`text-[9px] ${'text-gray-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
                                           )}
@@ -494,7 +507,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                <div className="flex justify-between items-start mb-4">
                                 <div>
                                     <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{product.nome}</h4>
-                                    <p className={`${'text-gold'} font-black mt-1`}>â‚¬{product.prezzo.toFixed(2)}</p>
+                                    <p className={`${'text-gold'} font-black mt-1`}>€{product.prezzo.toFixed(2)}</p>
                                     {product.ingredienti.length > 0 && (
                                       <p className={`text-[9px] ${'text-gray-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
                                     )}
@@ -598,7 +611,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                               }}
                               className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold text-gold'} border rounded-lg py-1.5 px-2 font-bold text-xs text-center outline-none transition-all`}
                             />
-                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>â‚¬</span>
+                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>€</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
@@ -654,7 +667,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                        <div className="flex justify-between items-start mb-4">
                           <div>
                               <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
-                              <p className="text-rose-400 font-black mt-1">-â‚¬{(ing.prezzo_rimozione || 0).toFixed(2)}</p>
+                              <p className="text-rose-400 font-black mt-1">-€{(ing.prezzo_rimozione || 0).toFixed(2)}</p>
                           </div>
                        </div>
                        
@@ -678,7 +691,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                               }}
                               className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
                             />
-                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>â‚¬</span>
+                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>€</span>
                           </div>
                           <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                               {ing.disponibile ? 'Disponibile' : 'Esaurito'}
@@ -889,7 +902,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${v.style === 'gold' ? 'bg-gold/10 text-gold' : v.style === 'emerald' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                               {v.section}
                             </span>
-                            {v.price > 0 && <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">+â‚¬{v.price.toFixed(2)}</span>}
+                            {v.price > 0 && <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">+€{v.price.toFixed(2)}</span>}
                             {v.stackable && <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Stackable</span>}
                             <span className="text-[10px] text-gray-600 font-bold px-2 py-0.5">ord. {v.order}</span>
                           </div>
@@ -973,7 +986,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                           </div>
 
                           <div>
-                               <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-2`}>Prezzo Extra (â‚¬)</label>
+                               <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-2`}>Prezzo Extra (€)</label>
                               <input 
                                 type="text"
                                 inputMode="decimal"

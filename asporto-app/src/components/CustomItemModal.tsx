@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import type { CustomizedItem, Portata } from '../types/entities';
 import { newUniqueId } from '../lib/id';
+import NumericKeypad from './NumericKeypad';
 
 interface Props {
   isOpen: boolean;
@@ -70,15 +71,10 @@ export default function CustomItemModal({ isOpen, currentPortata, onClose, onSav
             </div>
             <div className="space-y-1.5">
               <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Prezzo (€)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="es. 8.50"
-                value={prezzo}
-                onChange={e => setPrezzo(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-base text-white font-bold outline-none focus:border-gold transition-all"
-              />
+              <div className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-2xl text-white font-black text-right tabular-nums">
+                {prezzo || '0'}
+              </div>
+              <NumericKeypad value={prezzo} onChange={setPrezzo} />
             </div>
           </div>
         </div>

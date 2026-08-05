@@ -71,31 +71,31 @@ export default function CategoryFilterBar({
             <div className="inline-flex items-center gap-0.5 ml-1">
               <button
                 onClick={e => { e.stopPropagation(); setEditingCategory(cat); setEditCategoryDraft(cat); }}
-                className={`p-1 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
+                className={`p-2.5 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
                 title="Rinomina"
               >
-                <Edit3 size={12} />
+                <Edit3 size={16} />
               </button>
               <button
                 onClick={e => { e.stopPropagation(); onCategoryDelete(cat); }}
-                className={`p-1 rounded hover:bg-red-500/10 text-red-400 transition-all`}
+                className={`p-2.5 rounded hover:bg-red-500/10 text-red-400 transition-all`}
                 title="Elimina"
               >
-                <Trash2 size={12} />
+                <Trash2 size={16} />
               </button>
               <button
                 onClick={e => { e.stopPropagation(); onCategoryMoveUp(cat); }}
-                className={`p-1 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
+                className={`p-2.5 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
                 title="Sposta su"
               >
-                <ChevronUp size={12} />
+                <ChevronUp size={16} />
               </button>
               <button
                 onClick={e => { e.stopPropagation(); onCategoryMoveDown(cat); }}
-                className={`p-1 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
-                title="Sposta giÃ¹"
+                className={`p-2.5 rounded ${'hover:bg-charcoal text-gray-400'} transition-all`}
+                title="Sposta giù"
               >
-                <ChevronDown size={12} />
+                <ChevronDown size={16} />
               </button>
             </div>
           )}

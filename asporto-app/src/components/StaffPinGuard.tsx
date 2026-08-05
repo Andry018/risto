@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowRight, Users, ChevronRight } from 'lucide-react';
 import {
@@ -13,7 +13,8 @@ import {
   type StaffUser,
 } from '../lib/staffAuth';
 
-export default function StaffPinGuard() {
+/** Usabile sia come layout route (con <Outlet/>) sia wrappando direttamente un componente con `children`. */
+export default function StaffPinGuard({ children }: { children?: ReactNode } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [pin, setPin] = useState('');
@@ -163,5 +164,5 @@ export default function StaffPinGuard() {
     );
   }
 
-  return <Outlet />;
+  return children ? <>{children}</> : <Outlet />;
 }

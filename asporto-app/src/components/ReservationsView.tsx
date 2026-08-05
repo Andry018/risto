@@ -5,6 +5,7 @@ import type { Reservation, Tavolo } from '../types/entities';
 import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, ArrowLeft } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
+import { toLocalISODate } from '../lib/dateUtils';
 
 export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void }) {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   const { addToast } = useToast();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<Tavolo[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(toLocalISODate());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   // New Reservation State
   const [newRes, setNewRes] = useState<Partial<Reservation>>({
     nome: '',
-    data: new Date().toISOString().split('T')[0],
+    data: toLocalISODate(),
     ora: '20:00',
     persone: 2,
     status: 'CONFERMATA',
@@ -129,7 +130,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
 
   async function handleCheckIn(res: Reservation) {
     if (!supabase) return;
-    await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', res.id);
+    const { error } = await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', res.id);
+    if (error) { addToast({ type: 'error', title: 'Errore', message: 'Check-in fallito. Riprova.' }); return; }
     if (res.tavolo_id) {
       await setTableStatus(res.tavolo_id, 'OCCUPATO', res.persone);
     }
@@ -140,7 +142,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     const ok = await confirm({ title: 'Annulla prenotazione', message: `Annullare la prenotazione di ${res.nome}?` });
     if (!ok) return;
     if (!supabase) return;
-    await supabase.from('prenotazioni').update({ status: 'ANNULLATA' }).eq('id', res.id);
+    const { error } = await supabase.from('prenotazioni').update({ status: 'ANNULLATA' }).eq('id', res.id);
+    if (error) { addToast({ type: 'error', title: 'Errore', message: 'Annullamento fallito. Riprova.' }); return; }
     if (res.tavolo_id) {
       await setTableStatus(res.tavolo_id, 'LIBERO');
     }
@@ -151,17 +154,19 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione di ${res.nome}?`, destructive: true });
     if (!ok) return;
     if (!supabase) return;
+    const { error } = await supabase.from('prenotazioni').delete().eq('id', res.id);
+    if (error) { addToast({ type: 'error', title: 'Errore', message: 'Eliminazione fallita. Riprova.' }); return; }
     if (res.tavolo_id) {
       await setTableStatus(res.tavolo_id, 'LIBERO');
     }
-    await supabase.from('prenotazioni').delete().eq('id', res.id);
     fetchReservations();
   }
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    setSelectedDate(toLocalISODate(dt));
   };
 
   return (

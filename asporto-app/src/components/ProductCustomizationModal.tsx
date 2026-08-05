@@ -73,7 +73,7 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
             <button
               key={p.value}
               onClick={() => setLocalItem({ ...localItem, portata: p.value })}
-              className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${
+              className={`px-3 min-h-11 rounded-xl text-[10px] font-black uppercase border transition-all ${
                 isActive
                   ? `${p.color} border-current shadow-lg`
                   : 'bg-charcoal border-surface-light text-gray-500 hover:text-white'

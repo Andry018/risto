@@ -56,7 +56,7 @@ export default function ProductFormModal({
               />
             </div>
             <div>
-              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Prezzo (â‚¬)</label>
+              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Prezzo (€)</label>
               <input
                 type="text"
                 inputMode="decimal"
@@ -84,7 +84,7 @@ export default function ProductFormModal({
                 value={curr.categoria ?? ''}
                 onChange={e => {
                   const cat = e.target.value;
-                  const hasSub = cat === 'Bevande' || cat === 'CaffÃ¨ e Liquori';
+                  const hasSub = cat === 'Bevande' || cat === 'Caffè e Liquori';
                   set({ categoria: cat, sottocategoria: hasSub ? (curr.sottocategoria || '') : '' });
                 }}
                 className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none appearance-none`}
@@ -94,7 +94,7 @@ export default function ProductFormModal({
                 ))}
               </select>
             </div>
-            {['Bevande', 'CaffÃ¨ e Liquori'].includes(curr.categoria ?? '') ? (
+            {['Bevande', 'Caffè e Liquori'].includes(curr.categoria ?? '') ? (
               <div>
                 <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-1.5`}>Sotto-Categoria</label>
                 <select
@@ -116,7 +116,7 @@ export default function ProductFormModal({
                     </>
                   ) : (
                     <>
-                      <option value="CaffÃ¨">CaffÃ¨</option>
+                      <option value="Caffè">Caffè</option>
                       <option value="Amari e Liquori">Amari e Liquori</option>
                     </>
                   )}

@@ -4,8 +4,13 @@ import {
   ArrowLeft, ArrowRight, Palette, Printer, KeyRound,
   BarChart3, Trash2, RotateCcw, Sun, Store, UtensilsCrossed,
   Smartphone, MonitorCog, Info, Save, Check, Wifi, Database, FileText,
+  Users, Plus, Edit3, X,
 } from 'lucide-react';
-import { requireManagerPin, setManagerPin } from '../lib/staffAuth';
+import {
+  requireManagerPin, setManagerPin,
+  getStaffUsers, addStaffUser, updateStaffUser, removeStaffUser,
+  type StaffUser, type StaffRole,
+} from '../lib/staffAuth';
 import { dbUtils } from '../lib/DatabaseUtils';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -78,10 +83,65 @@ export default function SettingsView() {
 
   const [printDeltaQty, setPrintDeltaQty] = useBooleanSetting(SETTINGS_KEYS.printDeltaQty, false);
   const [wakeLockEnabled, setWakeLockLocal] = useBooleanSetting(SETTINGS_KEYS.wakeLock, false);
+  const wakeLockSupported = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>(() => getStaffUsers());
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserPin, setNewUserPin] = useState('');
+  const [newUserRole, setNewUserRole] = useState<StaffRole>('waiter');
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserPin, setEditUserPin] = useState('');
+  const [editUserRole, setEditUserRole] = useState<StaffRole>('waiter');
+
+  const refreshStaffUsers = () => setStaffUsers(getStaffUsers());
+
+  const handleAddUser = () => {
+    if (!newUserName.trim()) { addToast({ type: 'error', title: 'Nome mancante', message: 'Inserisci un nome per l\'operatore' }); return; }
+    if (newUserPin.trim().length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
+    addStaffUser(newUserName, newUserPin, newUserRole);
+    refreshStaffUsers();
+    setNewUserName('');
+    setNewUserPin('');
+    setNewUserRole('waiter');
+    setIsAddingUser(false);
+    addToast({ type: 'success', title: 'Operatore aggiunto' });
+  };
+
+  const startEditUser = (user: StaffUser) => {
+    setEditingUserId(user.id);
+    setEditUserName(user.name);
+    setEditUserPin('');
+    setEditUserRole(user.role);
+  };
+
+  const handleSaveEditUser = (id: string) => {
+    if (!editUserName.trim()) { addToast({ type: 'error', title: 'Nome mancante', message: 'Inserisci un nome per l\'operatore' }); return; }
+    const updates: Partial<StaffUser> = { name: editUserName.trim(), role: editUserRole };
+    if (editUserPin.trim()) {
+      if (editUserPin.trim().length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
+      updates.pin = editUserPin.trim();
+    }
+    updateStaffUser(id, updates);
+    refreshStaffUsers();
+    setEditingUserId(null);
+    addToast({ type: 'success', title: 'Operatore aggiornato' });
+  };
+
+  const handleRemoveUser = async (user: StaffUser) => {
+    const ok = await confirm({ title: 'Elimina operatore', message: `Eliminare "${user.name}"? Dovrà reinserire i dati per accedere di nuovo.`, destructive: true });
+    if (!ok) return;
+    removeStaffUser(user.id);
+    refreshStaffUsers();
+    addToast({ type: 'success', title: 'Operatore eliminato' });
+  };
+
+  const ROLE_LABELS: Record<StaffRole, string> = { admin: 'Amministratore / Cassa', waiter: 'Cameriere', kitchen: 'Cucina' };
 
   const handleTestConnection = async () => {
     setIsTestingConnection(true);
@@ -352,6 +412,11 @@ export default function SettingsView() {
                       }}
                     />
                   </div>
+                  {wakeLockEnabled && !wakeLockSupported && (
+                    <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                      Questo browser/dispositivo non supporta la funzione "sempre acceso". Su iPad serve Safari aggiornato (iOS 16.4+) e l'app aperta come PWA installata dalla schermata Home, non come semplice scheda del browser.
+                    </p>
+                  )}
                 </div>
               </Card>
             )}
@@ -383,7 +448,7 @@ export default function SettingsView() {
                           setManagerPin(newPin);
                           setNewPin('');
                           setConfirmNewPin('');
-                          addToast({ type: 'success', title: 'PIN cambiato', message: `Nuovo PIN: ${newPin}` });
+                          addToast({ type: 'success', title: 'PIN cambiato' });
                         }
                       }}
                       className="bg-gold hover:bg-gold-hover text-black shrink-0 px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
@@ -393,6 +458,94 @@ export default function SettingsView() {
                   </div>
                   <p className="text-[10px] text-gray-500 font-bold">Il PIN attuale è richiesto per azioni sensibili (svuota DB, cambio PIN)</p>
                 </div>
+              </Card>
+            )}
+
+            {section === 'sicurezza' && (
+              <Card title="Operatori" subtitle="Aggiungi, modifica o rimuovi gli operatori che possono accedere da cameriere.">
+                <div className="space-y-2 mb-4">
+                  {staffUsers.length === 0 && !isAddingUser && (
+                    <p className="text-xs text-gray-500 font-bold py-4 text-center">Nessun operatore configurato. Il PIN responsabile qui sopra resta valido come accesso di riserva.</p>
+                  )}
+                  {staffUsers.map(user => (
+                    <div key={user.id} className="bg-charcoal border border-surface-light rounded-2xl p-4">
+                      {editingUserId === user.id ? (
+                        <div className="space-y-2">
+                          <input type="text" placeholder="Nome" value={editUserName} onChange={e => setEditUserName(e.target.value)}
+                            className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold" />
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} placeholder="Nuovo PIN (lascia vuoto per non cambiare)" value={editUserPin}
+                            onChange={e => setEditUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold" />
+                          <select value={editUserRole} onChange={e => setEditUserRole(e.target.value as StaffRole)}
+                            className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold">
+                            <option value="waiter">Cameriere</option>
+                            <option value="kitchen">Cucina</option>
+                            <option value="admin">Amministratore / Cassa</option>
+                          </select>
+                          <div className="flex gap-2">
+                            <button onClick={() => setEditingUserId(null)}
+                              className="flex-1 py-2 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black uppercase text-gray-400">Annulla</button>
+                            <button onClick={() => handleSaveEditUser(user.id)}
+                              className="flex-1 py-2 bg-gold text-black rounded-xl text-[10px] font-black uppercase">Salva</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gold font-black shrink-0">{user.name.charAt(0).toUpperCase()}</div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-white text-sm truncate">{user.name}</p>
+                              <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{ROLE_LABELS[user.role]}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={() => startEditUser(user)} className="p-2 text-gray-500 hover:text-gold" title="Modifica">
+                              <Edit3 size={16} />
+                            </button>
+                            <button onClick={() => handleRemoveUser(user)} className="p-2 text-gray-500 hover:text-red-500" title="Elimina">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {isAddingUser ? (
+                  <div className="bg-charcoal border border-dashed border-gold/30 rounded-2xl p-4 space-y-2">
+                    <input type="text" placeholder="Nome operatore" autoFocus value={newUserName} onChange={e => setNewUserName(e.target.value)}
+                      className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold" />
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} placeholder="PIN (4-6 cifre)" value={newUserPin}
+                      onChange={e => setNewUserPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold" />
+                    <select value={newUserRole} onChange={e => setNewUserRole(e.target.value as StaffRole)}
+                      className="w-full bg-surface border border-surface-light rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-gold">
+                      <option value="waiter">Cameriere</option>
+                      <option value="kitchen">Cucina</option>
+                      <option value="admin">Amministratore / Cassa</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setIsAddingUser(false); setNewUserName(''); setNewUserPin(''); }}
+                        className="flex-1 py-2.5 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black uppercase text-gray-400">
+                        <X size={14} className="inline mr-1" /> Annulla
+                      </button>
+                      <button onClick={handleAddUser} className="flex-1 py-2.5 bg-gold text-black rounded-xl text-[10px] font-black uppercase">
+                        <Save size={14} className="inline mr-1" /> Aggiungi
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setIsAddingUser(true)}
+                    className="w-full py-3.5 bg-charcoal border border-dashed border-surface-light hover:border-gold/40 rounded-2xl text-gray-400 hover:text-gold font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus size={16} /> Aggiungi operatore
+                  </button>
+                )}
+
+                <p className="text-[10px] text-gray-500 font-bold mt-4 flex items-center gap-1.5">
+                  <Users size={12} /> Il cameriere sceglie il proprio nome e inserisce il PIN una volta sola per dispositivo: resta collegato finché non fa logout.
+                </p>
               </Card>
             )}
 

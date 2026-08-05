@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Portata, Reservation } from '../types/entities';
@@ -89,7 +89,7 @@ export default function WaiterMobileView() {
 
   const handlePrint = async () => {
     if (cart.length === 0) return;
-    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caff� e Liquori'];
+    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
     const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
     const salaItems = cart.filter(i => salaCats.includes(i.categoria));
     const tableName = selectedTable?.nome || 'Tavolo';
@@ -123,7 +123,11 @@ export default function WaiterMobileView() {
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
   const selectedTableRef = useRef(selectedTable);
-  const localUpdateRef = useRef(false);
+  /** Flag separati per sopprimere il toast "aggiornato dalla cassa" solo per l'evento realtime
+   *  generato dalla propria scrittura, evitando che un evento sulla tabella ordini consumi
+   *  (o venga consumato da) un flag pensato per la tabella tavoli, o viceversa. */
+  const localUpdateOrdiniRef = useRef(false);
+  const localUpdateTavoliRef = useRef(false);
   const savedItemQtysRef = useRef<Map<string, number>>(new Map());
 
   const getItemKey = (item: CustomizedItem): string => {
@@ -149,6 +153,10 @@ export default function WaiterMobileView() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // Se nel frattempo l'utente ha selezionato un altro tavolo, non applicare questo risultato:
+    // eviterebbe di popolare il carrello con i dati del tavolo sbagliato.
+    if (selectedTableRef.current?.id !== table.id) return false;
 
     if (data) {
       setActiveOrderId(data.id);
@@ -308,13 +316,13 @@ export default function WaiterMobileView() {
           filter: `nome_cliente=eq.${t.nome}`,
         },
         (payload) => {
-          if (!localUpdateRef.current) {
+          if (!localUpdateOrdiniRef.current) {
             const newStatus = (payload.new as { status?: string })?.status;
             if (newStatus === 'COMPLETATO') {
               toast.addToast({
                 type: 'success',
                 title: 'Conto chiuso dalla cassa',
-                message: `Il conto del ${t.nome} � stato chiuso dal POS`,
+                message: `Il conto del ${t.nome} è stato chiuso dal POS`,
                 duration: 4000,
               });
               setSelectedTable(null);
@@ -327,7 +335,7 @@ export default function WaiterMobileView() {
               duration: 3000,
             });
           }
-          localUpdateRef.current = false;
+          localUpdateOrdiniRef.current = false;
           const cur = selectedTableRef.current;
           if (cur?.id === t.id && cur.status === 'OCCUPATO') {
             void loadOpenOrderForTable(cur);
@@ -349,17 +357,17 @@ export default function WaiterMobileView() {
         (payload) => {
           const row = payload.new as Partial<Tavolo> & { id?: string };
           if (!row?.id) return;
-          if (!localUpdateRef.current && row.status === 'LIBERO') {
+          if (!localUpdateTavoliRef.current && row.status === 'LIBERO') {
             toast.addToast({
               type: 'info',
               title: 'Tavolo liberato',
-              message: `${t.nome} � stato liberato dalla cassa`,
+              message: `${t.nome} è stato liberato dalla cassa`,
               duration: 4000,
             });
             setSelectedTable(null);
             return;
           }
-          localUpdateRef.current = false;
+          localUpdateTavoliRef.current = false;
           const merged = { ...t, ...row } as Tavolo;
           setSelectedTable((prev) => (prev && prev.id === row.id ? { ...prev, ...row } as Tavolo : prev));
           void loadOpenOrderForTable(merged);
@@ -418,6 +426,7 @@ export default function WaiterMobileView() {
     setActiveOrderId(null);
     (async () => {
       const hadOrder = await loadOpenOrderForTable(table);
+      if (selectedTableRef.current?.id !== table.id) return;
       if (!hadOrder) {
         const copertoProd = products.find(p => p.nome === 'COPERTO') || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
         if (copertoProd) {
@@ -448,7 +457,7 @@ export default function WaiterMobileView() {
     setIsCoversModalOpen(false);
     setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
 
-    localUpdateRef.current = true;
+    localUpdateTavoliRef.current = true;
     if (!IS_DEMO_MODE) {
       await syncManager.pushTableUpdate(selectedTable.id, { clienti: tempCovers, status: 'OCCUPATO', note: newNote });
     }
@@ -471,7 +480,7 @@ export default function WaiterMobileView() {
   /** Trasferisce ordini aperti, bozza e coperti dal tavolo sorgente al tavolo destinazione. */
   const handleTransferTable = async (from: Tavolo, to: Tavolo) => {
     if (to.status !== 'LIBERO') {
-      toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: `${to.nome} non � libero`, duration: 3000 });
+      toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: `${to.nome} non è libero`, duration: 3000 });
       return;
     }
     setTransferBusy(true);
@@ -483,7 +492,8 @@ export default function WaiterMobileView() {
           .select('id')
           .eq('nome_cliente', from.nome)
           .eq('status', 'IN_ATTESA');
-        localUpdateRef.current = true;
+        localUpdateOrdiniRef.current = true;
+        localUpdateTavoliRef.current = true;
         if (orders && orders.length > 0) {
           for (const order of orders) {
             await syncManager.pushOrder({ id: order.id, nome_cliente: to.nome });
@@ -527,14 +537,15 @@ export default function WaiterMobileView() {
       toast.addToast({
         type: 'success',
         title: 'Tavolo trasferito',
-        message: `${from.nome} ? ${to.nome}${movedOrders > 0 ? ` (${movedOrders} ordine${movedOrders > 1 ? 'i' : ''} spostati)` : ''}`,
+        message: `${from.nome} → ${to.nome}${movedOrders > 0 ? ` (${movedOrders} ordine${movedOrders > 1 ? 'i' : ''} spostati)` : ''}`,
         duration: 3500,
       });
     } catch (error) {
       console.error('Transfer failed:', error);
       toast.addToast({ type: 'error', title: 'Trasferimento non riuscito', message: 'Controlla la connessione e riprova', duration: 4000 });
     } finally {
-      localUpdateRef.current = false;
+      localUpdateOrdiniRef.current = false;
+      localUpdateTavoliRef.current = false;
       setTransferSource(null);
       setTransferBusy(false);
     }
@@ -598,20 +609,23 @@ export default function WaiterMobileView() {
     setCart(prev => [...prev, item]);
   };
 
-  const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
+  const total = useMemo(
+    () => cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0),
+    [cart, ingredients]
+  );
 
   const saveOrder = async () => {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
     if (IS_DEMO_MODE) {
-      toast.addToast({ type: 'info', title: 'Demo', message: 'Comanda simulata (Modalit� Demo)' });
+      toast.addToast({ type: 'info', title: 'Demo', message: 'Comanda simulata (Modalità Demo)' });
       if (selectedTable) clearDraft(selectedTable.id);
       setCart([]);
       setSelectedTable(null);
       return;
     }
 
-    localUpdateRef.current = true;
+    localUpdateOrdiniRef.current = true;
     setOrderActionBusy(true);
 
     const isUpdate = !!activeOrderId;
@@ -666,6 +680,7 @@ export default function WaiterMobileView() {
       } else {
         const nowISO = new Date().toISOString();
         await syncManager.pushOrder(orderData);
+        localUpdateTavoliRef.current = true;
         const newNote = setAperturaInNote(selectedTable.note, nowISO);
         await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', note: newNote });
         setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
@@ -682,7 +697,7 @@ export default function WaiterMobileView() {
 
       if (printItems.length > 0) {
         const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caff� e Liquori'];
+        const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
         const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
         const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
         if (cucinaItems.length > 0) {
@@ -697,6 +712,8 @@ export default function WaiterMobileView() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
     } catch {
+      localUpdateOrdiniRef.current = false;
+      localUpdateTavoliRef.current = false;
       toast.addToast({ type: 'error', title: 'Errore', message: 'Salvataggio comanda fallito' });
     } finally {
       setOrderActionBusy(false);
@@ -831,7 +848,7 @@ export default function WaiterMobileView() {
                 <div>
                   <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
                   {currentUser && (
-                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.name} � {currentUser.role}</p>
+                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.name} · {currentUser.role}</p>
                   )}
                 </div>
                  <div className="flex items-center gap-2">
@@ -928,7 +945,7 @@ export default function WaiterMobileView() {
               </div>
             </div>
             <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-black font-black shadow-lg">
-                 �{total.toFixed(0)}
+                 €{total.toFixed(0)}
               </div>
             </div>
 
@@ -970,7 +987,7 @@ export default function WaiterMobileView() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Totale</p>
-                    <p className="text-4xl font-black text-gold italic">�{total.toFixed(2)}</p>
+                    <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setBillsDayOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[9px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
@@ -985,7 +1002,7 @@ export default function WaiterMobileView() {
                 </div>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-sm font-bold text-white">{selectedTable?.nome} � {selectedTable?.clienti} coperti</span>
+                  <span className="text-sm font-bold text-white">{selectedTable?.nome} · {selectedTable?.clienti} coperti</span>
                   <span className="text-[10px] font-black text-gray-500 uppercase">{activeOrderId ? 'Servizio in corso' : 'Occupato'}</span>
                 </div>
               </div>
@@ -1015,7 +1032,7 @@ export default function WaiterMobileView() {
                         <div key={portataKey}>
                           <div className={`flex items-center justify-between mb-3 px-3 py-2 rounded-2xl border ${portataInfo?.color || 'border-surface-light bg-charcoal'}`}>
                             <span className="font-black text-sm uppercase tracking-wider">{portataInfo?.label || 'SENZA USCITA'}</span>
-                            <span className="font-black text-sm opacity-80">�{groupTotal.toFixed(2)}</span>
+                            <span className="font-black text-sm opacity-80">€{groupTotal.toFixed(2)}</span>
                           </div>
                           <div className="space-y-2 pl-2">
                             {items.map(item => (
@@ -1057,7 +1074,7 @@ export default function WaiterMobileView() {
                     : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
                 } disabled:opacity-30`}
               >
-                {orderActionBusy ? '�' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
+                {orderActionBusy ? 'INVIO...' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
               </button>
             </div>
             {IS_DEMO_MODE && (
@@ -1125,7 +1142,7 @@ export default function WaiterMobileView() {
                 </button>
               </div>
               <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">
-                Da {transferSource.nome} � {transferSource.clienti || 0} coperti
+                Da {transferSource.nome} · {transferSource.clienti || 0} coperti
               </p>
               <p className="text-[10px] text-gray-500 font-bold mt-1">
                 Ordini aperti, bozza e orario di apertura verranno spostati sul tavolo selezionato.
@@ -1358,7 +1375,7 @@ export default function WaiterMobileView() {
                                <p className="text-base font-black text-white truncate">{res.nome}</p>
                                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-0.5">
                                  {res.persone} {res.persone === 1 ? 'Persona' : 'Persone'}
-                                 {res.tavolo_id && tables.find(t => t.id === res.tavolo_id) && ` � ${tables.find(t => t.id === res.tavolo_id)!.nome}`}
+                                 {res.tavolo_id && tables.find(t => t.id === res.tavolo_id) && ` · ${tables.find(t => t.id === res.tavolo_id)!.nome}`}
                                </p>
                                {res.note && <p className="text-[10px] text-gray-500 italic mt-1 truncate">"{res.note}"</p>}
                             </div>
@@ -1449,7 +1466,7 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
             <h5 className="font-bold text-white text-sm truncate">{item.nome}</h5>
             {item.portata && (
               <span className={`shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
-                {item.portata}�
+                {item.portata}ª
               </span>
             )}
           </div>

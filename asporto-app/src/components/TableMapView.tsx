@@ -7,6 +7,7 @@ import { Map as MapIcon, List, Edit2, Users, Save, X, Plus, Trash2, ShoppingCart
 import { useConfirm } from './ConfirmModal';
 import { usePrompt } from './PromptModal';
 import { useToast } from './Toast';
+import { toLocalISODate } from '../lib/dateUtils';
 
 import { SALE } from '../lib/salas';
 
@@ -25,7 +26,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
   const [transferTable, setTransferTable] = useState<Tavolo | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationModal, setReservationModal] = useState<{ table?: Tavolo; reservation?: Reservation; open: boolean }>({ open: false });
-  const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
+  const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: toLocalISODate(), ora: '20:00', persone: 2, note: '' });
   const [now, setNow] = useState(Date.now());
   const [tableApertura, setTableApertura] = useState<Record<string, string>>({});
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
         return;
       }
       if (data) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = toLocalISODate();
         const toFree: string[] = [];
         await Promise.all(data.map(async (t) => {
           if (t.status === 'PRENOTATO') {
@@ -160,7 +161,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
 
   async function fetchReservationsForDate() {
     if (IS_DEMO_MODE || !supabase) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate();
     const { data } = await supabase
       .from('prenotazioni')
       .select('*')
@@ -188,13 +189,13 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
       setResForm({ ...existing });
       setReservationModal({ open: true, table, reservation: existing });
     } else {
-      setResForm({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '', tavolo_id: table.id });
+      setResForm({ nome: '', data: toLocalISODate(), ora: '20:00', persone: 2, note: '', tavolo_id: table.id });
       setReservationModal({ open: true, table, reservation: undefined });
     }
   }
 
   function openNewReservationModal() {
-    setResForm({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
+    setResForm({ nome: '', data: toLocalISODate(), ora: '20:00', persone: 2, note: '' });
     setReservationModal({ open: true, reservation: undefined });
   }
 
@@ -202,7 +203,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     if (!supabase || !resForm.nome || !resForm.data || !resForm.ora) return;
     const payload = { ...resForm };
     if (!payload.tavolo_id) delete payload.tavolo_id;
-    const isToday = payload.data === new Date().toISOString().split('T')[0];
+    const isToday = payload.data === toLocalISODate();
     if (reservationModal.reservation) {
       const oldRes = reservationModal.reservation;
       await supabase.from('prenotazioni').update(payload).eq('id', oldRes.id);
@@ -758,9 +759,9 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
                   <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-xl p-1.5 px-3">
-                    <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-9 h-9 bg-surface rounded-xl text-gold active:scale-90">-</button>
+                    <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-11 h-11 bg-surface rounded-xl text-gold active:scale-90">-</button>
                     <span className="text-xl font-black text-white">{resForm.persone}</span>
-                    <button onClick={() => setResForm({...resForm, persone: (resForm.persone || 2) + 1})} className="w-9 h-9 bg-surface rounded-xl text-gold active:scale-90">+</button>
+                    <button onClick={() => setResForm({...resForm, persone: (resForm.persone || 2) + 1})} className="w-11 h-11 bg-surface rounded-xl text-gold active:scale-90">+</button>
                   </div>
                 </div>
 

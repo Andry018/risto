@@ -14,6 +14,7 @@ import ReservationsView from './components/ReservationsView';
 import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
 import ExitGuard from './components/ExitGuard';
+import StaffPinGuard from './components/StaffPinGuard';
 import { isTablet } from './lib/DeviceUtils';
 import { initTheme } from './lib/theme';
 import DatabaseStatusGuard from './components/DatabaseStatusGuard';
@@ -27,7 +28,7 @@ import { WakeLockManager } from './components/WakeLockManager';
 initTheme();
 
 function RootRoute() {
-  return isTablet() ? <StaffDashboard /> : <WaiterMobileView />;
+  return isTablet() ? <StaffDashboard /> : <StaffPinGuard><WaiterMobileView /></StaffPinGuard>;
 }
 
 export default function App() {
@@ -48,7 +49,7 @@ export default function App() {
           <Route path="/qr-print" element={<MenuQRPrint />} />
           <Route path="/" element={<RootRoute />} />
           <Route path="/takeaway" element={<TakeawayTabletView />} />
-          <Route path="/waiter" element={<WaiterMobileView />} />
+          <Route path="/waiter" element={<StaffPinGuard><WaiterMobileView /></StaffPinGuard>} />
           <Route path="/map" element={<TableMapView />} />
           <Route path="/kitchen" element={<AdminView />} />
           <Route path="/pos" element={<POSView />} />

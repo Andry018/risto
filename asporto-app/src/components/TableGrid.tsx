@@ -138,7 +138,7 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }
 
 export default function TableGrid({ tables, activeRoom, now, tableApertura, onSelectTable, onTransferTable }: Props) {
   return (
-    <div className="flex-1 overflow-y-auto p-6 pt-2 grid grid-cols-2 gap-4">
+    <div className="flex-1 overflow-y-auto p-6 pt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {tables
         .filter(t => {
           const sala = (t.sala || 'Principale').toUpperCase();
