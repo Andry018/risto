@@ -2,24 +2,27 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Tavolo, Reservation } from '../types/entities';
-import { 
+import {
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
-  BellRing, Utensils, Tags, FilePlus, Zap, History, PauseCircle,
-  Settings, ChevronRight, ArrowRight, UserPlus, Table2, X, Clock
+  FilePlus, Zap, History, PauseCircle, Package, Users,
+  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
 
+type Section = 'hub' | 'sala';
+
 export default function StaffDashboard() {
   const navigate = useNavigate();
+  const [section, setSection] = useState<Section>('hub');
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [restaurantName] = useSetting(SETTINGS_KEYS.restaurantName, 'IL GIRASOLE');
   const [restaurantTagline] = useSetting(SETTINGS_KEYS.restaurantTagline, 'Ristorante Italiano');
   const [now, setNow] = useState(() => new Date());
-  
+
   // Settings State
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [newOrderName, setNewOrderName] = useState('');
@@ -43,7 +46,7 @@ export default function StaffDashboard() {
       if (reservationsRes.data) setReservations(reservationsRes.data);
       setLoading(false);
     }
-    
+
     fetchData();
 
     const sb = supabase;
@@ -89,12 +92,23 @@ export default function StaffDashboard() {
       {/* Header */}
       <div className="flex justify-between items-center py-5 px-5 md:px-8 shrink-0">
         <div className="flex items-center gap-3">
+          {section !== 'hub' && (
+            <button
+              onClick={() => setSection('hub')}
+              className="p-2 -ml-1 mr-1 bg-surface border border-surface-light rounded-xl text-gray-400 hover:text-white transition-colors cursor-pointer"
+              title="Torna alle sezioni"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          )}
           <div className="text-gold">
              <Sun size={38} strokeWidth={1.5} />
           </div>
           <div>
              <h1 className="text-[26px] md:text-[28px] font-serif tracking-widest text-[#f5f5f5] leading-tight">{restaurantName}</h1>
-             <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">{restaurantTagline}</p>
+             <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">
+               {section === 'hub' ? restaurantTagline : 'Sala'}
+             </p>
           </div>
         </div>
         <div className="flex items-center gap-5">
@@ -106,7 +120,7 @@ export default function StaffDashboard() {
             <Clock size={22} className="text-gold" />
           </div>
           <PrinterStatusBadge />
-          <button 
+          <button
             onClick={() => navigate('/settings')}
             className="text-white hover:text-gold transition-colors cursor-pointer"
             title="Impostazioni"
@@ -116,154 +130,141 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      {/* KPI Row */}
-      <div className="px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
-        {statCard('Tavoli occupati', occupiedCount, 'gold', <Table2 size={20} />)}
-        {statCard('Tavoli liberi', availableCount, 'green', <MapIcon size={20} />)}
-        {statCard('Tavoli prenotati', reservedCount, 'blue', <CalendarDays size={20} />)}
-        {statCard('Persone attese', expectedPeople, 'gray', <UserPlus size={20} />)}
-      </div>
-
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-5 md:px-8 flex-1 min-h-0 py-5">
-        
-        {/* MAPS */}
-        <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-5 shrink-0">
-             <div>
-                <h2 className="text-xl font-bold text-white mb-1">MAPPA</h2>
-                <p className="text-[11px] text-gold">Visualizza & gestisci tavoli</p>
-             </div>
-             <div className="text-gold">
-                <MapIcon size={30} strokeWidth={1.5} />
-             </div>
+      {section === 'hub' && (
+        <>
+          {/* KPI Row */}
+          <div className="px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+            {statCard('Tavoli occupati', occupiedCount, 'gold', <Table2 size={20} />)}
+            {statCard('Tavoli liberi', availableCount, 'green', <MapIcon size={20} />)}
+            {statCard('Tavoli prenotati', reservedCount, 'blue', <CalendarDays size={20} />)}
+            {statCard('Persone attese', expectedPeople, 'gray', <UserPlus size={20} />)}
           </div>
-          
-          <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center">
-            {/* Visual Map Representation */}
-            <div className="w-full border border-surface-light rounded-xl p-3 mb-5">
-              <div className={`grid gap-2 w-full ${tables.length > 12 ? 'grid-cols-4' : 'grid-cols-3'}`}>
-                {tables.map(t => (
-                  <div key={t.id} className={`rounded-lg border py-2.5 flex items-center justify-center text-xs font-bold transition ${
-                     t.status === 'OCCUPATO' ? 'border-gold bg-gold/10 text-gold' :
-                     t.status === 'LIBERO' ? 'border-emerald-400/40 bg-emerald-400/5 text-emerald-400' :
-                     'border-gray-500/40 bg-gray-500/5 text-gray-400'
-                  }`}>
-                    {t.nome}
-                  </div>
-                ))}
-                {tables.length === 0 && !loading && (
-                  <div className="col-span-full text-center text-[11px] text-gray-500 py-4">Nessun tavolo</div>
-                )}
+
+          {/* Sezioni macro */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-5 md:px-8 py-6">
+            <SectionBox title="Sala" icon={<MapIcon size={26} strokeWidth={1.5} />} onClick={() => setSection('sala')} />
+            <SectionBox title="Cucina" icon={<ChefHat size={26} strokeWidth={1.5} />} onClick={() => navigate('/kitchen?tab=menu')} />
+            <SectionBox title="Magazzino" icon={<Package size={26} strokeWidth={1.5} />} onClick={() => navigate('/magazzino')} />
+            <SectionBox title="Personale" icon={<Users size={26} strokeWidth={1.5} />} onClick={() => navigate('/settings?section=personale')} />
+          </div>
+        </>
+      )}
+
+      {section === 'sala' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-5 md:px-8 flex-1 min-h-0 py-5 overflow-y-auto custom-scrollbar">
+
+          {/* MAPPA */}
+          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
+            <div className="flex justify-between items-start mb-5 shrink-0">
+               <div>
+                  <h2 className="text-xl font-bold text-white mb-1">MAPPA</h2>
+                  <p className="text-[11px] text-gold">Visualizza & gestisci tavoli</p>
+               </div>
+               <div className="text-gold">
+                  <MapIcon size={30} strokeWidth={1.5} />
+               </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center">
+              <div className="w-full border border-surface-light rounded-xl p-3 mb-5">
+                <div className={`grid gap-2 w-full ${tables.length > 12 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                  {tables.map(t => (
+                    <div key={t.id} className={`rounded-lg border py-2.5 flex items-center justify-center text-xs font-bold transition ${
+                       t.status === 'OCCUPATO' ? 'border-gold bg-gold/10 text-gold' :
+                       t.status === 'LIBERO' ? 'border-emerald-400/40 bg-emerald-400/5 text-emerald-400' :
+                       'border-gray-500/40 bg-gray-500/5 text-gray-400'
+                    }`}>
+                      {t.nome}
+                    </div>
+                  ))}
+                  {tables.length === 0 && !loading && (
+                    <div className="col-span-full text-center text-[11px] text-gray-500 py-4">Nessun tavolo</div>
+                  )}
+                </div>
               </div>
+            </div>
+
+            <div className="pt-5 shrink-0">
+               <button onClick={() => navigate('/map')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+                  Apri Mappa <ArrowRight size={18} />
+               </button>
             </div>
           </div>
 
-          <div className="pt-5 shrink-0">
-             <button onClick={() => navigate('/map')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
-                Apri Mappa <ArrowRight size={18} />
-             </button>
-          </div>
-        </div>
+          {/* POS */}
+          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
+            <div className="flex justify-between items-start mb-5 shrink-0">
+               <div>
+                  <h2 className="text-xl font-bold text-white mb-1">POS</h2>
+                  <p className="text-[11px] text-gold">Crea conto (senza tavolo)</p>
+               </div>
+               <div className="text-gold">
+                  <Calculator size={30} strokeWidth={1.5} />
+               </div>
+            </div>
 
-        {/* KITCHEN */}
-        <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-5 shrink-0">
-             <div>
-                <h2 className="text-xl font-bold text-white mb-1">CUCINA</h2>
-                <p className="text-[11px] text-gold">Gestione menu e piatti</p>
-             </div>
-             <div className="text-gold">
-                <ChefHat size={30} strokeWidth={1.5} />
-             </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-             <KitchenItem icon={<BellRing size={20} />} title="Disponibilità Menu" desc="Attiva/disattiva piatti" onClick={() => navigate('/kitchen?tab=menu')} />
-             <KitchenItem icon={<Utensils size={20} />} title="Gestisci Piatti" desc="Aggiungi, modifica o rimuovi piatti" onClick={() => navigate('/kitchen?tab=menu')} />
-             <KitchenItem icon={<Tags size={20} />} title="Modificatori" desc="Gestisci modifiche e opzioni" onClick={() => navigate('/kitchen?tab=variants')} />
-          </div>
+            <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
+                <PosBox icon={<FilePlus size={24} />} title="Nuovo Conto" desc="Apri un nuovo conto" onClick={() => { setShowNewOrderModal(true); setNewOrderName(''); }} />
+               <PosBox icon={<Zap size={24} />} title="Vendita Rapida" desc="Piatti veloci, asporto" onClick={() => navigate('/pos')} />
+               <PosBox icon={<History size={24} />} title="Conti Recenti" desc="Visualizza transazioni" onClick={() => navigate('/pos')} />
+               <PosBox icon={<PauseCircle size={24} />} title="Conti in Sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
+            </div>
 
-          <div className="pt-5 shrink-0">
-             <button onClick={() => navigate('/kitchen?tab=menu')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
-                Apri Cucina <ArrowRight size={18} />
-             </button>
-          </div>
-        </div>
-
-        {/* POS */}
-        <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-5 shrink-0">
-             <div>
-                <h2 className="text-xl font-bold text-white mb-1">POS</h2>
-                <p className="text-[11px] text-gold">Crea conto (senza tavolo)</p>
-             </div>
-             <div className="text-gold">
-                <Calculator size={30} strokeWidth={1.5} />
-             </div>
-          </div>
-          
-          <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
-              <PosBox icon={<FilePlus size={24} />} title="Nuovo Conto" desc="Apri un nuovo conto" onClick={() => { setShowNewOrderModal(true); setNewOrderName(''); }} />
-             <PosBox icon={<Zap size={24} />} title="Vendita Rapida" desc="Piatti veloci, asporto" onClick={() => navigate('/pos')} />
-             <PosBox icon={<History size={24} />} title="Conti Recenti" desc="Visualizza transazioni" onClick={() => navigate('/pos')} />
-             <PosBox icon={<PauseCircle size={24} />} title="Conti in Sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
+            <div className="pt-5 shrink-0">
+               <button onClick={() => navigate('/pos')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+                  Apri POS <ArrowRight size={18} />
+               </button>
+            </div>
           </div>
 
-          <div className="pt-5 shrink-0">
-             <button onClick={() => navigate('/pos')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
-                Apri POS <ArrowRight size={18} />
-             </button>
-          </div>
-        </div>
+          {/* PRENOTAZIONI */}
+          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
+            <div className="flex justify-between items-start mb-5 shrink-0">
+               <div>
+                  <h2 className="text-xl font-bold text-white mb-1">PRENOTAZIONI</h2>
+                  <p className="text-[11px] text-gold">Visualizza & gestisci prenotazioni</p>
+               </div>
+               <div className="text-gold">
+                  <CalendarDays size={30} strokeWidth={1.5} />
+               </div>
+            </div>
 
-        {/* RESERVATIONS */}
-        <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
-          <div className="flex justify-between items-start mb-5 shrink-0">
-             <div>
-                <h2 className="text-xl font-bold text-white mb-1">PRENOTAZIONI</h2>
-                <p className="text-[11px] text-gold">Visualizza & gestisci prenotazioni</p>
-             </div>
-             <div className="text-gold">
-                <CalendarDays size={30} strokeWidth={1.5} />
-             </div>
-          </div>
+            <div className="flex justify-between items-center mb-4 shrink-0">
+                <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">OGGI</span>
+                <span className="text-[11px] text-gray-500 capitalize">{dateStr}</span>
+            </div>
 
-          <div className="flex justify-between items-center mb-4 shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">OGGI</span>
-              <span className="text-[11px] text-gray-500 capitalize">{dateStr}</span>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
-              {reservations.map(r => (
-                <div key={r.id} className="flex justify-between items-center border-b border-surface-light pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <h4 className="text-[13px] font-bold text-white mb-1">{r.ora?.split(':').slice(0, 2).join(':')}</h4>
-                    <p className="text-[11px] text-gray-500">{r.persone} Persone</p>
-                    <p className="text-[11px] text-gray-500">{r.nome}</p>
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                {reservations.map(r => (
+                  <div key={r.id} className="flex justify-between items-center border-b border-surface-light pb-4 last:border-0 last:pb-0">
+                    <div>
+                      <h4 className="text-[13px] font-bold text-white mb-1">{r.ora?.split(':').slice(0, 2).join(':')}</h4>
+                      <p className="text-[11px] text-gray-500">{r.persone} Persone</p>
+                      <p className="text-[11px] text-gray-500">{r.nome}</p>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded border text-[9px] uppercase tracking-wider font-semibold ${
+                       r.status === 'CONFERMATA' ? 'border-gold text-gold' :
+                       r.status === 'ARRIVATA' ? 'border-emerald-400/40 text-emerald-400' :
+                       'border-gray-500/40 text-gray-400'
+                    }`}>
+                       {r.status}
+                    </span>
                   </div>
-                  <span className={`px-2.5 py-1 rounded border text-[9px] uppercase tracking-wider font-semibold ${
-                     r.status === 'CONFERMATA' ? 'border-gold text-gold' :
-                     r.status === 'ARRIVATA' ? 'border-emerald-400/40 text-emerald-400' :
-                     'border-gray-500/40 text-gray-400'
-                  }`}>
-                     {r.status}
-                  </span>
-                </div>
-              ))}
-              {reservations.length === 0 && !loading && (
-                 <div className="h-full flex items-center justify-center text-gray-500 text-[11px]">Nessuna prenotazione oggi</div>
-              )}
+                ))}
+                {reservations.length === 0 && !loading && (
+                   <div className="h-full flex items-center justify-center text-gray-500 text-[11px]">Nessuna prenotazione oggi</div>
+                )}
+            </div>
+
+            <div className="pt-5 shrink-0">
+                <button onClick={() => navigate('/reservations')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
+                   Apri Prenotazioni <ArrowRight size={18} />
+                </button>
+            </div>
           </div>
 
-          <div className="pt-5 shrink-0">
-              <button onClick={() => navigate('/reservations')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
-                 Apri Prenotazioni <ArrowRight size={18} />
-              </button>
-          </div>
         </div>
-
-      </div>
+      )}
 
       {/* New Order Modal */}
       {showNewOrderModal && (
@@ -323,15 +324,14 @@ export default function StaffDashboard() {
   );
 }
 
-function KitchenItem({ icon, title, desc, onClick }: { icon: React.ReactNode, title: string, desc: string, onClick?: () => void }) {
+function SectionBox({ title, icon, onClick }: { title: string; icon: React.ReactNode; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="w-full bg-transparent border border-surface-light rounded-2xl p-4 flex items-center gap-4 text-left group hover:border-gold/50 transition cursor-pointer">
-       <div className="text-gold">{icon}</div>
-       <div className="flex-1">
-         <h3 className="text-[13px] font-semibold text-[#f5f5f5] group-hover:text-gold transition">{title}</h3>
-         <p className="text-[11px] text-gray-500">{desc}</p>
-       </div>
-       <ChevronRight size={16} className="text-gray-500 group-hover:text-gold" />
+    <button
+      onClick={onClick}
+      className="aspect-square md:aspect-auto md:h-36 bg-surface border border-surface-light rounded-2xl p-5 flex flex-col items-start justify-between hover:border-gold/40 hover:bg-surface-light/40 transition-all active:scale-[0.98] cursor-pointer"
+    >
+      <div className="text-gold">{icon}</div>
+      <span className="text-base font-bold text-white">{title}</span>
     </button>
   );
 }

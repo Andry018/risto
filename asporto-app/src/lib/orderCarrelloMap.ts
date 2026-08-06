@@ -52,11 +52,14 @@ export function addedIngredientsFromStoredOrderLine(
   const sum = rows.reduce((s, r) => s + r.prezzo, 0);
   if (Math.abs(sum - extrasTarget) < 0.02) return rows;
 
-  if (sum < 0.02) {
-    const each = extrasTarget / rows.length;
-    return rows.map((r) => ({ ...r, prezzo: each }));
-  }
+  // Con un solo ingrediente aggiunto non c'è ambiguità su come ripartire lo scarto:
+  // meglio mantenere il prezzo noto dal catalogo piuttosto che alterarlo per far
+  // tornare un totale salvato che può essere impreciso per altri motivi (es. sconto).
+  if (rows.length === 1) return rows;
 
-  const scale = extrasTarget / sum;
-  return rows.map((r) => ({ ...r, prezzo: r.prezzo * scale }));
+  // Con più ingredienti, non c'è modo di sapere a quale attribuire lo scarto:
+  // lo ripartiamo in parti uguali invece che in proporzione al prezzo di catalogo
+  // (la proporzione amplificherebbe l'errore sull'ingrediente più caro).
+  const each = extrasTarget / rows.length;
+  return rows.map((r) => ({ ...r, prezzo: each }));
 }

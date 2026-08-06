@@ -97,6 +97,30 @@ export type DocumentoEmesso = {
   created_at: string;
 };
 
+export type MagazzinoArticolo = {
+  id: string;
+  nome: string;
+  categoria: string;
+  unita_misura: string;
+  quantita: number;
+  soglia_minima: number;
+  costo_unitario: number;
+  fornitore_id?: string | null;
+  note: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MagazzinoMovimento = {
+  id: string;
+  articolo_id: string;
+  tipo: 'carico' | 'scarico';
+  quantita: number;
+  nota: string;
+  operatore: string;
+  created_at: string;
+};
+
 export type CustomizedItem = Product & {
   quantity: number;
   addedIngredients: { nome: string; prezzo: number }[];

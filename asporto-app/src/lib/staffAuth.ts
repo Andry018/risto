@@ -96,9 +96,11 @@ export function staffLogout(): void {
   window.location.href = '/';
 }
 
-/** Placeholder per una futura granularità di permessi: oggi tutti gli operatori loggati possono tutto. */
-export function hasPermission(_requiredRole: StaffRole): boolean {
-  return true;
+/** L'amministratore può sempre tutto; gli altri ruoli solo se compresi in `requiredRoles`. */
+export function hasPermission(userRole: StaffRole, requiredRoles: StaffRole | StaffRole[]): boolean {
+  if (userRole === 'admin') return true;
+  const required = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
+  return required.includes(userRole);
 }
 
 export function getDefaultRouteForRole(_role: StaffRole): string {

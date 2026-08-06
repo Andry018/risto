@@ -896,10 +896,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
       {/* Lato sinistro: Categorie Menu (stile URY) */}
       <aside className="w-[88px] shrink-0 bg-surface/80 border-r border-surface-light flex flex-col items-center py-4 gap-1 overflow-y-auto">
-        <div className="text-[7px] font-black uppercase tracking-[0.3em] text-gray-500 mb-1 pb-2 border-b border-surface-light w-full text-center">CATEGORIE</div>
+        <div className="text-[8px] font-black uppercase tracking-[0.3em] text-gray-500 mb-1 pb-2 border-b border-surface-light w-full text-center">CATEGORIE</div>
         <button
           onClick={() => setActiveCategory(null)}
-          className={`w-[72px] h-[52px] rounded-2xl border flex items-center justify-center transition-all active:scale-90 text-[9px] font-black uppercase tracking-wider ${
+          className={`w-[72px] h-[52px] rounded-2xl border flex items-center justify-center transition-all active:scale-90 text-[10px] font-black uppercase tracking-wider ${
             activeCategory === null
               ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20'
               : 'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-gray-500'
@@ -932,7 +932,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               }`}
             >
               <span className="text-base leading-none">{icons[def.label] || '📋'}</span>
-              <span className="text-[6px] font-black uppercase tracking-wider leading-tight">{def.label}</span>
+              <span className="text-[8px] font-black uppercase tracking-wider leading-tight text-center px-0.5">{def.label}</span>
             </button>
           );
         })}

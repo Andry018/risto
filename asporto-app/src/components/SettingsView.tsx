@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Palette, Printer, KeyRound,
   BarChart3, Trash2, RotateCcw, Sun, Store, UtensilsCrossed,
   Smartphone, MonitorCog, Info, Save, Check, Wifi, Database, FileText,
-  Users, Plus, Edit3, X,
+  Users, Plus, Edit3, X, CalendarClock, ChevronLeft,
 } from 'lucide-react';
 import {
   requireManagerPin, setManagerPin,
   getStaffUsers, addStaffUser, updateStaffUser, removeStaffUser,
   type StaffUser, type StaffRole,
 } from '../lib/staffAuth';
+import { hasTurno, toggleTurno, type TurnoTipo } from '../lib/turni';
 import { dbUtils } from '../lib/DatabaseUtils';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -18,6 +19,7 @@ import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConf
 import { setWakeLockEnabled } from '../hooks/useWakeLock';
 import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 import { SETTINGS_KEYS, useSetting, useBooleanSetting } from '../lib/appSettings';
+import { toLocalISODate } from '../lib/dateUtils';
 
 const SECTIONS = [
   { id: 'ristorante', label: 'Ristorante', icon: Store, desc: 'Nome e identità' },
@@ -26,6 +28,7 @@ const SECTIONS = [
   { id: 'comande', label: 'Comande', icon: UtensilsCrossed, desc: 'Ordini in cucina' },
   { id: 'schermo', label: 'Schermo', icon: Smartphone, desc: 'Display e sospensione' },
   { id: 'sicurezza', label: 'Sicurezza', icon: KeyRound, desc: 'PIN responsabile' },
+  { id: 'personale', label: 'Personale', icon: CalendarClock, desc: 'Turni pranzo/sera' },
   { id: 'sistema', label: 'Sistema', icon: MonitorCog, desc: 'Database e manutenzione' },
 ] as const;
 
@@ -64,12 +67,18 @@ function Field({ label, value, onChange, placeholder, type = 'text', suffix }: {
   );
 }
 
+const SECTION_IDS = SECTIONS.map(s => s.id);
+
 export default function SettingsView() {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { addToast } = useToast();
+  const [searchParams] = useSearchParams();
 
-  const [section, setSection] = useState<SectionId>('ristorante');
+  const sectionFromUrl = searchParams.get('section');
+  const [section, setSection] = useState<SectionId>(
+    sectionFromUrl && (SECTION_IDS as string[]).includes(sectionFromUrl) ? (sectionFromUrl as SectionId) : 'ristorante'
+  );
 
   const [restaurantName, setRestaurantName] = useSetting(SETTINGS_KEYS.restaurantName, 'IL GIRASOLE');
   const [restaurantTagline, setRestaurantTagline] = useSetting(SETTINGS_KEYS.restaurantTagline, 'Ristorante Italiano');
@@ -88,6 +97,19 @@ export default function SettingsView() {
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const [turniDate, setTurniDate] = useState(() => toLocalISODate());
+  const [turniTick, setTurniTick] = useState(0);
+  const handleToggleTurno = (userId: string, turno: TurnoTipo) => {
+    toggleTurno(userId, turniDate, turno);
+    setTurniTick(t => t + 1);
+  };
+  const shiftTurniDate = (days: number) => {
+    const [y, m, d] = turniDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    setTurniDate(toLocalISODate(dt));
+  };
 
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>(() => getStaffUsers());
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -546,6 +568,60 @@ export default function SettingsView() {
                 <p className="text-[10px] text-gray-500 font-bold mt-4 flex items-center gap-1.5">
                   <Users size={12} /> Il cameriere sceglie il proprio nome e inserisce il PIN una volta sola per dispositivo: resta collegato finché non fa logout.
                 </p>
+              </Card>
+            )}
+
+            {/* ===== PERSONALE (TURNI) ===== */}
+            {section === 'personale' && (
+              <Card title="Turni" subtitle="Segna se un operatore ha lavorato a pranzo e/o a sera. Marcatura manuale, senza orari.">
+                <div className="flex items-center justify-between mb-5 bg-charcoal border border-surface-light rounded-2xl p-2">
+                  <button onClick={() => shiftTurniDate(-1)} className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-surface-light transition-all">
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div className="text-center">
+                    <p className="text-sm font-black text-white">
+                      {new Date(turniDate + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </p>
+                    {turniDate !== toLocalISODate() && (
+                      <button onClick={() => setTurniDate(toLocalISODate())} className="text-[9px] font-black text-gold uppercase tracking-widest mt-0.5">Torna a oggi</button>
+                    )}
+                  </div>
+                  <button onClick={() => shiftTurniDate(1)} className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-surface-light transition-all">
+                    <ArrowRight size={18} />
+                  </button>
+                </div>
+
+                <div key={turniTick} className="space-y-2">
+                  {staffUsers.length === 0 && (
+                    <p className="text-xs text-gray-500 font-bold py-6 text-center">Nessun operatore configurato (vedi sopra in Sicurezza).</p>
+                  )}
+                  {staffUsers.map(user => (
+                    <div key={user.id} className="bg-charcoal border border-surface-light rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 bg-surface rounded-xl flex items-center justify-center text-gold font-black shrink-0 text-xs">{user.name.charAt(0).toUpperCase()}</div>
+                        <p className="font-bold text-white text-sm truncate">{user.name}</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => handleToggleTurno(user.id, 'pranzo')}
+                          className={`px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-90 ${
+                            hasTurno(user.id, turniDate, 'pranzo') ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-500 hover:text-white'
+                          }`}
+                        >
+                          Pranzo
+                        </button>
+                        <button
+                          onClick={() => handleToggleTurno(user.id, 'sera')}
+                          className={`px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all active:scale-90 ${
+                            hasTurno(user.id, turniDate, 'sera') ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-500 hover:text-white'
+                          }`}
+                        >
+                          Sera
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </Card>
             )}
 

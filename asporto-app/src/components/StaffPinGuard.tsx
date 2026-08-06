@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, type ReactNode } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowRight, Users, ChevronRight } from 'lucide-react';
+import { ArrowRight, Users, ChevronRight, ShieldAlert } from 'lucide-react';
 import {
   isStaffSessionValid,
   setStaffSessionValid,
@@ -10,11 +10,20 @@ import {
   getDefaultStaffPin,
   getDefaultRouteForRole,
   getCurrentUser,
+  hasPermission,
+  clearStaffSession,
   type StaffUser,
+  type StaffRole,
 } from '../lib/staffAuth';
 
+interface StaffPinGuardProps {
+  children?: ReactNode;
+  /** Se presente, oltre al login viene richiesto che l'operatore abbia uno di questi ruoli (admin passa sempre). */
+  requiredRoles?: StaffRole[];
+}
+
 /** Usabile sia come layout route (con <Outlet/>) sia wrappando direttamente un componente con `children`. */
-export default function StaffPinGuard({ children }: { children?: ReactNode } = {}) {
+export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuardProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const [pin, setPin] = useState('');
@@ -162,6 +171,31 @@ export default function StaffPinGuard({ children }: { children?: ReactNode } = {
         </div>
       </div>
     );
+  }
+
+  if (requiredRoles && requiredRoles.length > 0) {
+    const current = getCurrentUser();
+    if (current && !hasPermission(current.role, requiredRoles)) {
+      return (
+        <div className="min-h-screen bg-charcoal flex flex-col items-center justify-center p-6 text-center">
+          <div className="p-4 bg-red-500/10 rounded-3xl text-red-400 border border-red-500/20 mb-6">
+            <ShieldAlert size={36} strokeWidth={2.5} />
+          </div>
+          <h1 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">
+            Accesso <span className="text-red-400">non autorizzato</span>
+          </h1>
+          <p className="text-gray-500 text-sm font-bold mb-8 max-w-xs">
+            {current.name}, il tuo ruolo ({current.role}) non ha accesso a questa sezione.
+          </p>
+          <button
+            onClick={() => { clearStaffSession(); setSelectedUserId(null); setPin(''); setAuthed(false); }}
+            className="bg-gold hover:bg-gold-hover text-black font-black py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+          >
+            Cambia operatore <ArrowRight size={18} />
+          </button>
+        </div>
+      );
+    }
   }
 
   return children ? <>{children}</> : <Outlet />;

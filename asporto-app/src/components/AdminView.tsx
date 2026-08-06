@@ -489,7 +489,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                           {product.disponibile ? 'Disponibile' : 'Esaurito'}
                                         </span>
                                         <button onClick={() => toggleAvailability(product.id, product.disponibile)}
-                                          className={`p-1 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}>
+                                          className={`p-2.5 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}>
                                           {product.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
                                         </button>
                                       </div>
@@ -524,7 +524,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                                 </span>
                                 <button 
                                     onClick={() => toggleAvailability(product.id, product.disponibile)}
-                                    className={`p-1 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
+                                    className={`p-2.5 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
                                 >
                                     {product.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
                                 </button>
@@ -619,7 +619,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                             </span>
                             <button 
                                 onClick={() => toggleIngredientAvailability(ing.id, ing.disponibile)}
-                                className={`p-1 rounded-md transition-colors ${ing.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
+                                className={`p-2.5 rounded-md transition-colors ${ing.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
                             >
                                 {ing.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
                             </button>

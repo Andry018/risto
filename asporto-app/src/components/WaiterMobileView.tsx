@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Portata, Reservation } from '../types/entities';
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, LayoutDashboard, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
@@ -30,8 +30,11 @@ import WaiterMenuTab from './WaiterMenuTab';
 import PaninoBuilderModal from './PaninoBuilderModal';
 import CustomItemModal from './CustomItemModal';
 import { SALE } from '../lib/salas';
+import { hasTurno, toggleTurno } from '../lib/turni';
+import { toLocalISODate } from '../lib/dateUtils';
 
 export default function WaiterMobileView() {
+  const navigate = useNavigate();
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -45,6 +48,7 @@ export default function WaiterMobileView() {
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'MENU' | 'RIEPILOGO'>('MENU');
+  const [activeSection, setActiveSection] = useState<'hub' | 'sala'>('hub');
 
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
@@ -65,6 +69,8 @@ export default function WaiterMobileView() {
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
   const [customItemModalOpen, setCustomItemModalOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
+  const [turnoModalOpen, setTurnoModalOpen] = useState(false);
+  const [turnoTick, setTurnoTick] = useState(0);
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
@@ -74,7 +80,7 @@ export default function WaiterMobileView() {
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationModal, setReservationModal] = useState<{ table?: Tavolo; reservation?: Reservation; open: boolean }>({ open: false });
-  const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
+  const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: toLocalISODate(), ora: '20:00', persone: 2, note: '' });
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
@@ -724,7 +730,7 @@ export default function WaiterMobileView() {
 
   async function fetchReservationsForDate() {
     if (IS_DEMO_MODE || !supabase) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate();
     const { data } = await supabase
       .from('prenotazioni')
       .select('*')
@@ -745,7 +751,7 @@ export default function WaiterMobileView() {
   }
 
   function openNewReservationModal() {
-    setResForm({ nome: '', data: new Date().toISOString().split('T')[0], ora: '20:00', persone: 2, note: '' });
+    setResForm({ nome: '', data: toLocalISODate(), ora: '20:00', persone: 2, note: '' });
     setReservationModal({ open: true, reservation: undefined });
   }
 
@@ -842,85 +848,145 @@ export default function WaiterMobileView() {
       )}
       
       {!selectedTable ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-6 pb-2 space-y-4">
-              <div className="flex justify-between items-center">
+        activeSection === 'hub' ? (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-6 pb-4 shrink-0">
+              <div className="flex justify-between items-start">
                 <div>
-                  <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">Sala & Tavoli</h1>
+                  <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">
+                    {currentUser ? `Ciao, ${currentUser.name}` : 'Il Girasole'}
+                  </h1>
                   {currentUser && (
-                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.name} · {currentUser.role}</p>
+                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.role}</p>
                   )}
                 </div>
-                 <div className="flex items-center gap-2">
-                   <PrinterStatusBadge />
-                    <button
-                      onClick={() => setIsReservationsOpen(true)}
-                      className="p-2 bg-surface rounded-xl text-gray-500 hover:text-amber-400 transition-colors"
-                      title="Prenotazioni"
-                    >
-                      <BookOpen size={20} />
-                    </button>
-                    <Link
-                      to="/kitchen"
-                      className="p-2 bg-surface rounded-xl text-gray-500 hover:text-gold transition-colors"
-                      title="Gestione Menu"
-                    >
-                      <ChefHat size={20} />
-                    </Link>
-                   {pendingSyncCount > 0 && (
-                     <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
-                       <WifiOff size={10} /> {pendingSyncCount}
-                     </div>
-                   )}
-                   <button
-                     type="button"
-                     onClick={async () => {
-                       const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
-                       if (ok) staffLogout();
-                     }}
-                     className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
-                     title="Esci staff"
-                   >
-                     <LogOut size={20} />
-                   </button>
-                   <Link to="/" className="p-2 bg-surface rounded-xl text-gray-500 hover:text-white transition-colors">
-                     <LayoutDashboard size={20} />
-                   </Link>
-                 </div>
+                <div className="flex items-center gap-2">
+                  <PrinterStatusBadge />
+                  {pendingSyncCount > 0 && (
+                    <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
+                      <WifiOff size={10} /> {pendingSyncCount}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
+                      if (ok) staffLogout();
+                    }}
+                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
+                    title="Esci staff"
+                  >
+                    <LogOut size={20} />
+                  </button>
+                </div>
               </div>
-            
-            {/* Room Slider */}
-            <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-              {SALE.map(room => (
-                <button
-                  key={room}
-                  onClick={() => setActiveRoom(room)}
-                  className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all whitespace-nowrap ${
-                    activeRoom === room ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-500'
-                  }`}
-                >
-                  {room}
-                </button>
-              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3 custom-scrollbar">
+              <HubCard
+                icon={<LayoutGrid size={24} />}
+                title="Sala & Tavoli"
+                desc="Gestisci i tavoli e prendi le comande"
+                accent="bg-gold/10 text-gold"
+                onClick={() => setActiveSection('sala')}
+              />
+              <HubCard
+                icon={<BookOpen size={24} />}
+                title="Prenotazioni"
+                desc="Libro prenotazioni di oggi"
+                accent="bg-amber-500/10 text-amber-400"
+                onClick={() => setIsReservationsOpen(true)}
+              />
+              {currentUser && (
+                <HubCard
+                  icon={<CalendarClock size={24} />}
+                  title="Il mio turno"
+                  desc="Segna pranzo e/o sera"
+                  accent="bg-emerald-500/10 text-emerald-400"
+                  onClick={() => setTurnoModalOpen(true)}
+                />
+              )}
+              {(!currentUser || currentUser.role === 'admin' || currentUser.role === 'kitchen') && (
+                <>
+                  <HubCard
+                    icon={<ChefHat size={24} />}
+                    title="Cucina"
+                    desc="Disponibilità piatti e menu"
+                    accent="bg-sky-500/10 text-sky-400"
+                    onClick={() => navigate('/kitchen')}
+                  />
+                  <HubCard
+                    icon={<Package size={24} />}
+                    title="Magazzino"
+                    desc="Scorte e carico/scarico"
+                    accent="bg-orange-500/10 text-orange-400"
+                    onClick={() => navigate('/magazzino')}
+                  />
+                </>
+              )}
+              {(!currentUser || currentUser.role === 'admin') && (
+                <>
+                  <HubCard
+                    icon={<BarChart3 size={24} />}
+                    title="Report"
+                    desc="Incassi e statistiche"
+                    accent="bg-fuchsia-500/10 text-fuchsia-400"
+                    onClick={() => navigate('/reports')}
+                  />
+                  <HubCard
+                    icon={<Settings size={24} />}
+                    title="Impostazioni"
+                    desc="Configurazione del locale"
+                    accent="bg-gray-500/10 text-gray-400"
+                    onClick={() => navigate('/settings')}
+                  />
+                </>
+              )}
             </div>
           </div>
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-6 pb-2 space-y-4">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setActiveSection('hub')} className="p-2 bg-surface rounded-xl text-gray-400 active:scale-90 shrink-0">
+                  <ChevronLeft size={20} />
+                </button>
+                <h1 className="text-2xl font-black italic text-gold uppercase tracking-tighter leading-none">Sala & Tavoli</h1>
+              </div>
 
-          <TableGrid
-            tables={tables}
-            activeRoom={activeRoom}
-            selectedTable={selectedTable}
-            now={now}
-            tableApertura={tableApertura}
-            onSelectTable={selectTable}
-            onTransferTable={(table) => {
-              if (table.status === 'OCCUPATO' || table.status === 'PRENOTATO') {
-                setTransferSource(table);
-              } else {
-                toast.addToast({ type: 'info', title: 'Trasferimento Tavolo', message: `${table.nome} non ha un conto aperto`, duration: 3000 });
-              }
-            }}
-          />
-        </div>
+              {/* Room Slider */}
+              <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                {SALE.map(room => (
+                  <button
+                    key={room}
+                    onClick={() => setActiveRoom(room)}
+                    className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all whitespace-nowrap ${
+                      activeRoom === room ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-500'
+                    }`}
+                  >
+                    {room}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <TableGrid
+              tables={tables}
+              activeRoom={activeRoom}
+              selectedTable={selectedTable}
+              now={now}
+              tableApertura={tableApertura}
+              onSelectTable={selectTable}
+              onTransferTable={(table) => {
+                if (table.status === 'OCCUPATO' || table.status === 'PRENOTATO') {
+                  setTransferSource(table);
+                } else {
+                  toast.addToast({ type: 'info', title: 'Trasferimento Tavolo', message: `${table.nome} non ha un conto aperto`, duration: 3000 });
+                }
+              }}
+            />
+          </div>
+        )
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Mobile */}
@@ -1265,6 +1331,41 @@ export default function WaiterMobileView() {
         onSave={addPaninoToCart}
       />
 
+      {/* Turno Modal (marcatura pranzo/sera propria) */}
+      {turnoModalOpen && currentUser && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black italic uppercase text-white">Il tuo <span className="text-gold">Turno</span></h2>
+              <button onClick={() => setTurnoModalOpen(false)} className="p-2 bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-5">
+              {currentUser.name} · {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+            <div key={turnoTick} className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => { toggleTurno(currentUser.id, toLocalISODate(), 'pranzo'); setTurnoTick(t => t + 1); }}
+                className={`py-6 rounded-2xl border-2 font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
+                  hasTurno(currentUser.id, toLocalISODate(), 'pranzo') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
+                }`}
+              >
+                Pranzo
+              </button>
+              <button
+                onClick={() => { toggleTurno(currentUser.id, toLocalISODate(), 'sera'); setTurnoTick(t => t + 1); }}
+                className={`py-6 rounded-2xl border-2 font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
+                  hasTurno(currentUser.id, toLocalISODate(), 'sera') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
+                }`}
+              >
+                Sera
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Reservation Create/Edit Modal */}
       {reservationModal.open && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
@@ -1408,6 +1509,26 @@ export default function WaiterMobileView() {
         </div>
       )}
     </div>
+  );
+}
+
+function HubCard({ icon, title, desc, accent, onClick }: {
+  icon: React.ReactNode; title: string; desc: string; accent: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full bg-surface border border-surface-light rounded-3xl p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all hover:border-gold/30"
+    >
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${accent}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="font-black text-white text-base uppercase tracking-tight">{title}</h3>
+        <p className="text-xs text-gray-500 font-bold mt-0.5">{desc}</p>
+      </div>
+      <ChevronRight size={20} className="text-gray-600 shrink-0" />
+    </button>
   );
 }
 

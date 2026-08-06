@@ -104,10 +104,17 @@ describe('staffAuth', () => {
   });
 
   describe('hasPermission', () => {
-    it('ritorna sempre true (attribuzione, non controllo accessi)', () => {
-      expect(hasPermission('admin')).toBe(true);
-      expect(hasPermission('waiter')).toBe(true);
-      expect(hasPermission('kitchen')).toBe(true);
+    it('admin può sempre tutto', () => {
+      expect(hasPermission('admin', 'admin')).toBe(true);
+      expect(hasPermission('admin', 'waiter')).toBe(true);
+      expect(hasPermission('admin', ['kitchen'])).toBe(true);
+    });
+
+    it('un ruolo non-admin è ammesso solo se incluso nei ruoli richiesti', () => {
+      expect(hasPermission('waiter', 'waiter')).toBe(true);
+      expect(hasPermission('waiter', ['admin', 'waiter'])).toBe(true);
+      expect(hasPermission('waiter', 'admin')).toBe(false);
+      expect(hasPermission('kitchen', ['admin', 'waiter'])).toBe(false);
     });
   });
 

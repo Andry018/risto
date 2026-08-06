@@ -13,6 +13,7 @@ import ReportsView from './components/ReportsView';
 import ReservationsView from './components/ReservationsView';
 import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
+import MagazzinoView from './components/MagazzinoView';
 import ExitGuard from './components/ExitGuard';
 import StaffPinGuard from './components/StaffPinGuard';
 import { isTablet } from './lib/DeviceUtils';
@@ -51,11 +52,12 @@ export default function App() {
           <Route path="/takeaway" element={<TakeawayTabletView />} />
           <Route path="/waiter" element={<StaffPinGuard><WaiterMobileView /></StaffPinGuard>} />
           <Route path="/map" element={<TableMapView />} />
-          <Route path="/kitchen" element={<AdminView />} />
+          <Route path="/kitchen" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><AdminView /></StaffPinGuard>} />
           <Route path="/pos" element={<POSView />} />
-          <Route path="/reports" element={<ReportsView />} />
+          <Route path="/reports" element={<StaffPinGuard requiredRoles={['admin']}><ReportsView /></StaffPinGuard>} />
           <Route path="/reservations" element={<ReservationsView />} />
-          <Route path="/settings" element={<SettingsView />} />
+          <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
+          <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
         </Routes>
         </ExitGuard>

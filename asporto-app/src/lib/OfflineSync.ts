@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Order, Tavolo } from '../types/entities';
+import { newUniqueId } from './id';
 
 const QUEUE_KEY = 'risto_pending_sync';
 
@@ -61,9 +62,10 @@ class OfflineSync {
         let success = false;
         try {
           if (item.type === 'INSERT') {
-            const payload = { ...item.data };
-            delete payload.id;
-            const { error } = await supabase.from('ordini').insert([payload]);
+            // upsert (non insert) sull'id generato client-side: se un retry ripete questo insert
+            // dopo un timeout la cui risposta si era persa (ma la insert originale era in realtà
+            // andata a buon fine), riscrive la stessa riga invece di crearne una duplicata.
+            const { error } = await supabase.from('ordini').upsert([item.data], { onConflict: 'id' });
             if (!error) success = true;
             else console.error('Supabase Sync Error (insert ordine):', error);
           } else if (item.type === 'UPDATE_ORDER' && item.data.id) {
@@ -103,10 +105,13 @@ class OfflineSync {
   }
 
   public async pushOrder(orderData: Partial<Order>) {
+    // Un ordine nuovo riceve subito un id stabile: se il push va in retry (timeout di rete con
+    // esito reale ambiguo), l'upsert in drainQueue userà lo stesso id invece di creare un duplicato.
+    const isInsert = !orderData.id;
     const pending: PendingOrder = {
       id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11),
-      data: orderData,
-      type: orderData.id ? 'UPDATE_ORDER' : 'INSERT',
+      data: isInsert ? { ...orderData, id: newUniqueId() } : orderData,
+      type: isInsert ? 'INSERT' : 'UPDATE_ORDER',
     };
     this.queue.push(pending);
     this.saveQueue();
