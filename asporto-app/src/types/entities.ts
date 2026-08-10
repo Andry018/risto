@@ -106,6 +106,7 @@ export type MagazzinoArticolo = {
   soglia_minima: number;
   costo_unitario: number;
   fornitore_id?: string | null;
+  codice_a_barre?: string | null;
   note: string;
   created_at: string;
   updated_at: string;

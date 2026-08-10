@@ -2,18 +2,20 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package, Plus, Minus, ArrowLeft, Edit2, Trash2, X, Save,
-  AlertTriangle, Clock, Truck,
+  AlertTriangle, Clock, Truck, ScanBarcode,
 } from 'lucide-react';
 import type { MagazzinoArticolo, MagazzinoMovimento } from '../types/entities';
 import {
   fetchArticoli, fetchFornitoriOptions, addArticolo, updateArticolo, deleteArticolo,
   registraMovimento, fetchMovimentiRecenti, type FornitoreOption,
 } from '../lib/magazzino';
+import { lookupBarcodeProduct } from '../lib/barcodeLookup';
 import { IS_DEMO_MODE } from '../lib/supabase';
 import { getCurrentUser, requireManagerPin } from '../lib/staffAuth';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import NumericKeypad from './NumericKeypad';
+import BarcodeScanner from './BarcodeScanner';
 
 const UNITA_OPTIONS = ['kg', 'g', 'L', 'ml', 'pz', 'confezioni', 'casse'];
 
@@ -25,6 +27,7 @@ const emptyForm = {
   soglia_minima: '',
   costo_unitario: '',
   fornitore_id: '',
+  codice_a_barre: '',
   note: '',
 };
 
@@ -42,6 +45,8 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
 
   const [movimentoTarget, setMovimentoTarget] = useState<MagazzinoArticolo | null>(null);
   const [movimentoTipo, setMovimentoTipo] = useState<'carico' | 'scarico'>('carico');
@@ -85,9 +90,42 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
       soglia_minima: String(a.soglia_minima),
       costo_unitario: String(a.costo_unitario || ''),
       fornitore_id: a.fornitore_id || '',
+      codice_a_barre: a.codice_a_barre || '',
       note: a.note,
     });
     setIsFormOpen(true);
+  }
+
+  async function handleBarcodeScanned(code: string) {
+    setScannerOpen(false);
+
+    const existing = articoli.find(a => a.codice_a_barre === code);
+    if (existing) {
+      setIsFormOpen(false);
+      addToast({ type: 'info', title: 'Articolo trovato', message: `${existing.nome} è già censito: registra un carico.` });
+      openMovimento(existing, 'carico');
+      return;
+    }
+
+    setLookingUp(true);
+    const info = await lookupBarcodeProduct(code);
+    setLookingUp(false);
+
+    setEditingId(null);
+    setForm({
+      ...emptyForm,
+      codice_a_barre: code,
+      nome: info?.nome || '',
+      categoria: info?.categoria || '',
+      unita_misura: info?.unita_misura || 'kg',
+    });
+    setIsFormOpen(true);
+
+    if (info) {
+      addToast({ type: 'success', title: 'Prodotto trovato', message: `Dati precompilati per "${info.nome}" — controlla prima di salvare.` });
+    } else {
+      addToast({ type: 'info', title: 'Prodotto non trovato', message: 'Inserisci i dati manualmente.' });
+    }
   }
 
   async function handleSaveForm() {
@@ -103,6 +141,7 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
       soglia_minima,
       costo_unitario,
       fornitore_id: form.fornitore_id || null,
+      codice_a_barre: form.codice_a_barre.trim() || null,
       note: form.note.trim(),
     };
     const ok = editingId ? await updateArticolo(editingId, payload) : await addArticolo(payload);
@@ -162,6 +201,14 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
             <Clock size={20} />
           </button>
           <button
+            onClick={() => setScannerOpen(true)}
+            disabled={lookingUp}
+            className="p-3.5 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-gold transition-all disabled:opacity-50"
+            title="Scansiona codice a barre"
+          >
+            <ScanBarcode size={20} />
+          </button>
+          <button
             onClick={openAddForm}
             className="bg-gold hover:bg-gold-hover text-black px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center gap-2 active:scale-95 transition-all"
           >
@@ -173,6 +220,13 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
       {IS_DEMO_MODE && (
         <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400 text-sm font-bold shrink-0">
           Modalità demo: il magazzino richiede un database reale (tabelle non disponibili in demo).
+        </div>
+      )}
+
+      {lookingUp && (
+        <div className="mb-6 p-4 bg-surface border border-surface-light rounded-2xl text-gray-400 text-sm font-bold shrink-0 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+          Ricerca prodotto in corso…
         </div>
       )}
 
@@ -328,6 +382,16 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
                 <input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}
                   className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white font-bold text-sm outline-none focus:border-gold/50" />
               </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[.2em] mb-2">Codice a barre</label>
+                <div className="flex gap-2">
+                  <input type="text" value={form.codice_a_barre} onChange={e => setForm({ ...form, codice_a_barre: e.target.value })}
+                    placeholder="Scansiona o inserisci a mano" className="flex-1 bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white font-bold text-sm outline-none focus:border-gold/50" />
+                  <button type="button" onClick={() => setScannerOpen(true)} className="shrink-0 px-4 bg-charcoal border border-surface-light rounded-2xl text-gray-400 hover:text-gold transition-all">
+                    <ScanBarcode size={18} />
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="p-6 border-t border-surface-light shrink-0">
               <button onClick={handleSaveForm} className="w-full bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all uppercase tracking-widest">
@@ -415,6 +479,12 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
           </div>
         </div>
       )}
+
+      <BarcodeScanner
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleBarcodeScanned}
+      />
     </div>
   );
 }

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Il Girasole · Menu</title>
+  <meta name="description" content="Menu digitale del ristorante Il Girasole" />
+  <style>
+    :root {
+      --charcoal: #121212;
+      --surface: #1e1e1e;
+      --surface-light: #2a2a2a;
+      --gold: #cfa055;
+      --text: #f5f5f5;
+      --text-dim: #9a9a9a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--charcoal);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      text-align: center;
+      padding: 40px 20px 24px;
+      border-bottom: 1px solid var(--surface-light);
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 900;
+      font-style: italic;
+      text-transform: uppercase;
+      letter-spacing: -0.02em;
+      margin: 0 0 4px;
+    }
+    header p {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--gold);
+      margin: 0;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+    .categoria {
+      margin-bottom: 32px;
+    }
+    .categoria h2 {
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.25em;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--surface-light);
+      padding-bottom: 10px;
+      margin: 0 0 14px;
+    }
+    .sottocategoria {
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--gold);
+      opacity: 0.7;
+      margin: 16px 0 8px 4px;
+    }
+    .piatto {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 12px 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .piatto-nome {
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .piatto-ingredienti {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 3px;
+    }
+    .piatto-allergeni {
+      font-size: 10px;
+      color: var(--text-dim);
+      opacity: 0.7;
+      margin-top: 3px;
+      font-style: italic;
+    }
+    .piatto-prezzo {
+      font-weight: 900;
+      font-style: italic;
+      color: var(--gold);
+      white-space: nowrap;
+      font-size: 15px;
+    }
+    .stato {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-dim);
+    }
+    .stato.errore { color: #f87171; }
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 10px;
+      color: var(--text-dim);
+      opacity: 0.5;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Il Girasole</h1>
+    <p>Ristorante Pizzeria</p>
+  </header>
+  <main id="menu">
+    <div class="stato">Caricamento menu…</div>
+  </main>
+  <footer>Menu soggetto a variazioni · Il Girasole</footer>
+
+  <script>
+    // L'anon key è pubblica per progettazione (la sicurezza è nelle policy RLS del DB,
+    // non nella segretezza di questa chiave) — è normale che sia visibile nel codice client.
+    const SUPABASE_URL = 'https://ihkdpdawyksohtggspbw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imloa2RwZGF3eWtzb2h0Z2dzcGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMTAxNTEsImV4cCI6MjEwMTg4NjE1MX0.on0iOVeXBr5qrO_z2Qg1p5wwqK30Uq1MDrDiK5P3bEs';
+
+    async function loadMenu() {
+      const el = document.getElementById('menu');
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        el.innerHTML = '<div class="stato errore">Configurazione mancante.</div>';
+        return;
+      }
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/prodotti_pubblico?select=*&order=categoria.asc,nome.asc`, {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const prodotti = await res.json();
+
+        if (!Array.isArray(prodotti) || prodotti.length === 0) {
+          el.innerHTML = '<div class="stato">Menu non ancora disponibile online.</div>';
+          return;
+        }
+
+        const gruppi = new Map();
+        for (const p of prodotti) {
+          if (!gruppi.has(p.categoria)) gruppi.set(p.categoria, new Map());
+          const sub = p.sottocategoria || '';
+          const subMap = gruppi.get(p.categoria);
+          if (!subMap.has(sub)) subMap.set(sub, []);
+          subMap.get(sub).push(p);
+        }
+
+        let html = '';
+        for (const [categoria, subMap] of gruppi) {
+          html += `<section class="categoria"><h2>${escapeHtml(categoria)}</h2>`;
+          for (const [sub, items] of subMap) {
+            if (sub) html += `<p class="sottocategoria">${escapeHtml(sub)}</p>`;
+            for (const p of items) {
+              html += `
+                <div class="piatto">
+                  <div>
+                    <div class="piatto-nome">${escapeHtml(p.nome)}</div>
+                    ${p.ingredienti && p.ingredienti.length ? `<div class="piatto-ingredienti">${escapeHtml(p.ingredienti.join(', '))}</div>` : ''}
+                    ${p.allergeni && p.allergeni.length ? `<div class="piatto-allergeni">Allergeni: ${escapeHtml(p.allergeni.join(', '))}</div>` : ''}
+                  </div>
+                  <div class="piatto-prezzo">€${Number(p.prezzo).toFixed(2)}</div>
+                </div>`;
+            }
+          }
+          html += '</section>';
+        }
+        el.innerHTML = html;
+      } catch (err) {
+        el.innerHTML = '<div class="stato errore">Impossibile caricare il menu al momento.</div>';
+        console.error(err);
+      }
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = String(str);
+      return d.innerHTML;
+    }
+
+    loadMenu();
+  </script>
+</body>
+</html>

@@ -5,6 +5,10 @@ import { Link } from 'react-router-dom';
 
 const BASE_URL = window.location.origin;
 
+const WIFI_SSID = 'IlGirasole';
+const WIFI_PASSWORD = 'ilgirasole2022';
+const WIFI_QR_VALUE = `WIFI:T:WPA;S:${WIFI_SSID};P:${WIFI_PASSWORD};;`;
+
 export default function MenuQRView() {
   const [tableName, setTableName] = useState('');
 
@@ -34,7 +38,7 @@ export default function MenuQRView() {
           />
         </div>
 
-        <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-4">
+        <div data-qr="menu" className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-4">
           <QRCodeCanvas
             value={url}
             size={200}
@@ -52,7 +56,7 @@ export default function MenuQRView() {
           <p className="text-[9px] text-gray-500 font-mono break-all">{url}</p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 mb-8">
           <Link
             to="/"
             className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors"
@@ -62,8 +66,8 @@ export default function MenuQRView() {
           {tableName.trim() && (
             <button
               onClick={() => {
-                const canvas = document.querySelector('canvas');
-                if (canvas) {
+                const canvas = document.querySelector('[data-qr="menu"] canvas');
+                if (canvas instanceof HTMLCanvasElement) {
                   const link = document.createElement('a');
                   link.download = `QR-${tableName.trim()}.png`;
                   link.href = canvas.toDataURL();
@@ -75,6 +79,23 @@ export default function MenuQRView() {
               <Printer size={16} /> Scarica QR
             </button>
           )}
+        </div>
+
+        <div className="w-full border-t border-gray-200 pt-6 flex flex-col items-center">
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-4 text-center">
+            WiFi Ospiti — inquadra per connetterti
+          </p>
+          <div data-qr="wifi" className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-3">
+            <QRCodeCanvas
+              value={WIFI_QR_VALUE}
+              size={160}
+              bgColor="#ffffff"
+              fgColor="#1a1a1a"
+              level="M"
+            />
+          </div>
+          <p className="text-sm font-black text-gray-800">{WIFI_SSID}</p>
+          <p className="text-xs text-gray-500 font-mono mt-0.5">{WIFI_PASSWORD}</p>
         </div>
       </div>
     </div>

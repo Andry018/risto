@@ -34,6 +34,7 @@ export async function addArticolo(articolo: {
   soglia_minima: number;
   costo_unitario?: number;
   fornitore_id?: string | null;
+  codice_a_barre?: string | null;
   note?: string;
 }): Promise<boolean> {
   if (!supabase) return false;

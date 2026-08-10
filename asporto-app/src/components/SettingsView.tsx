@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, Palette, Printer, KeyRound,
   BarChart3, Trash2, RotateCcw, Sun, Store, UtensilsCrossed,
   Smartphone, MonitorCog, Info, Save, Check, Wifi, Database, FileText,
-  Users, Plus, Edit3, X, CalendarClock, ChevronLeft,
+  Users, Plus, Edit3, X, CalendarClock, ChevronLeft, Globe, UploadCloud,
 } from 'lucide-react';
 import {
   requireManagerPin, setManagerPin,
@@ -20,6 +20,7 @@ import { setWakeLockEnabled } from '../hooks/useWakeLock';
 import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 import { SETTINGS_KEYS, useSetting, useBooleanSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
+import { publishMenu } from '../lib/publicMenuSync';
 
 const SECTIONS = [
   { id: 'ristorante', label: 'Ristorante', icon: Store, desc: 'Nome e identità' },
@@ -29,6 +30,7 @@ const SECTIONS = [
   { id: 'schermo', label: 'Schermo', icon: Smartphone, desc: 'Display e sospensione' },
   { id: 'sicurezza', label: 'Sicurezza', icon: KeyRound, desc: 'PIN responsabile' },
   { id: 'personale', label: 'Personale', icon: CalendarClock, desc: 'Turni pranzo/sera' },
+  { id: 'menu-online', label: 'Menu Online', icon: Globe, desc: 'Pubblica il menu su internet' },
   { id: 'sistema', label: 'Sistema', icon: MonitorCog, desc: 'Database e manutenzione' },
 ] as const;
 
@@ -109,6 +111,16 @@ export default function SettingsView() {
     const dt = new Date(y, m - 1, d);
     dt.setDate(dt.getDate() + days);
     setTurniDate(toLocalISODate(dt));
+  };
+
+  const [publishUrl, setPublishUrl] = useSetting(SETTINGS_KEYS.publishMenuUrl, '');
+  const [publishSecret, setPublishSecret] = useSetting(SETTINGS_KEYS.publishMenuSecret, '');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const handlePublishMenu = async () => {
+    setIsPublishing(true);
+    const result = await publishMenu(publishUrl, publishSecret);
+    setIsPublishing(false);
+    addToast({ type: result.ok ? 'success' : 'error', title: result.ok ? 'Menu pubblicato' : 'Errore', message: result.message });
   };
 
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>(() => getStaffUsers());
@@ -621,6 +633,38 @@ export default function SettingsView() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </Card>
+            )}
+
+            {/* ===== MENU ONLINE ===== */}
+            {section === 'menu-online' && (
+              <Card title="Menu Online" subtitle="Pubblica il menu su internet (raggiungibile senza WiFi del locale).">
+                <div className="space-y-4">
+                  <p className="text-xs text-gray-500 font-bold leading-relaxed">
+                    Il menu online non è in tempo reale: mostra l'ultimo snapshot pubblicato.
+                    Premi "Pubblica" ogni volta che vuoi aggiornare quello che vedono i clienti online.
+                  </p>
+                  <Field
+                    label="URL di pubblicazione"
+                    value={publishUrl}
+                    onChange={setPublishUrl}
+                    placeholder="https://tuo-menu.vercel.app/api/publish-menu"
+                  />
+                  <Field
+                    label="Chiave di pubblicazione"
+                    value={publishSecret}
+                    onChange={setPublishSecret}
+                    type="password"
+                    placeholder="La stessa impostata su Vercel come PUBLISH_SECRET"
+                  />
+                  <button
+                    onClick={handlePublishMenu}
+                    disabled={isPublishing || !publishUrl.trim() || !publishSecret.trim()}
+                    className="w-full bg-gold hover:bg-gold-hover text-black font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-30"
+                  >
+                    <UploadCloud size={18} /> {isPublishing ? 'Pubblicazione in corso…' : 'Pubblica Menu Online'}
+                  </button>
                 </div>
               </Card>
             )}

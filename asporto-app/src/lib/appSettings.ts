@@ -41,6 +41,8 @@ export const SETTINGS_KEYS = {
   printDeltaQty: 'risto_print_delta_qty',
   wakeLock: 'risto_wake_lock',
   theme: 'app_theme',
+  publishMenuUrl: 'risto_setting_publish_menu_url',
+  publishMenuSecret: 'risto_setting_publish_menu_secret',
 } as const;
 
 export function getSetting(key: string, fallback: string): string {
