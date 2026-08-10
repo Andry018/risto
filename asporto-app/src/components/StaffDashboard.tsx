@@ -242,7 +242,7 @@ export default function StaffDashboard() {
                       <p className="text-[11px] text-gray-500">{r.persone} Persone</p>
                       <p className="text-[11px] text-gray-500">{r.nome}</p>
                     </div>
-                    <span className={`px-2.5 py-1 rounded border text-[9px] uppercase tracking-wider font-semibold ${
+                    <span className={`px-2.5 py-1 rounded border text-[10px] uppercase tracking-wider font-semibold ${
                        r.status === 'CONFERMATA' ? 'border-gold text-gold' :
                        r.status === 'ARRIVATA' ? 'border-emerald-400/40 text-emerald-400' :
                        'border-gray-500/40 text-gray-400'

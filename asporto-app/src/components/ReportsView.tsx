@@ -343,7 +343,7 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-black text-white text-sm">{doc.doc_number}</span>
-                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
                             doc.mode === 'linked' ? 'text-sky-400 border-sky-500/30 bg-sky-500/10' : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
                           }`}>
                             {doc.mode === 'linked' ? 'DA ORDINE' : 'MANUALE'}
@@ -358,7 +358,7 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
                     <div className="flex items-center gap-2 shrink-0 ml-4">
                       <div className="text-right mr-2">
                         <p className="font-black text-gold">€{doc.total.toFixed(2)}</p>
-                        <p className="text-[9px] text-gray-600 font-black">{new Date(doc.doc_date || doc.created_at).toLocaleDateString('it-IT')} · {doc.payment_method === 'carta' ? 'CARTA' : 'CONTANTI'}</p>
+                        <p className="text-[10px] text-gray-600 font-black">{new Date(doc.doc_date || doc.created_at).toLocaleDateString('it-IT')} · {doc.payment_method === 'carta' ? 'CARTA' : 'CONTANTI'}</p>
                       </div>
                       {doc.file_url && (
                         <>

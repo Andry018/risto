@@ -47,7 +47,7 @@ export default function CustomItemModal({ isOpen, currentPortata, onClose, onSav
           <div className="flex justify-between items-center mb-5">
             <div>
               <h2 className="text-lg font-black italic uppercase tracking-tighter text-white">Item <span className="text-gold">Personalizzato</span></h2>
-              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-0.5">
+              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-0.5">
                 Portata {currentPortata}ª attiva
               </p>
             </div>
@@ -58,7 +58,7 @@ export default function CustomItemModal({ isOpen, currentPortata, onClose, onSav
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome</label>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome</label>
               <input
                 type="text"
                 autoFocus
@@ -70,7 +70,7 @@ export default function CustomItemModal({ isOpen, currentPortata, onClose, onSav
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Prezzo (€)</label>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Prezzo (€)</label>
               <div className="w-full bg-charcoal border border-surface-light rounded-xl p-3.5 text-2xl text-white font-black text-right tabular-nums">
                 {prezzo || '0'}
               </div>

@@ -300,7 +300,7 @@ export default function TabletDashboardView() {
                                 <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gold font-black">{user.name.charAt(0).toUpperCase()}</div>
                                 <div>
                                   <p className="font-bold text-white text-sm">{user.name}</p>
-                                  <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{user.role}</p>
+                                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{user.role}</p>
                                 </div>
                               </div>
                               <div className="flex gap-2">

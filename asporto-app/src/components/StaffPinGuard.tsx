@@ -112,7 +112,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
                     </div>
                     <div>
                       <p className="font-bold text-white text-sm">{user.name}</p>
-                      <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{user.role}</p>
+                      <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{user.role}</p>
                     </div>
                   </div>
                   <ChevronRight size={18} className="text-gray-600" />
@@ -126,7 +126,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
                     <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gray-500 font-black">?</div>
                     <div>
                       <p className="font-bold text-gray-400 text-sm">PIN predefinito</p>
-                      <p className="text-[8px] font-black text-gray-600 uppercase">Login legacy</p>
+                      <p className="text-[9px] font-black text-gray-600 uppercase">Login legacy</p>
                     </div>
                   </div>
                   <ChevronRight size={18} className="text-gray-600" />

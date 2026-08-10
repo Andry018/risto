@@ -251,7 +251,7 @@ export default function PublicMenuView() {
         {!searchQuery && sortedCategories.length > 0 && (
           <div className="flex items-center gap-3 px-6 mt-6 mb-2">
             <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Menu</span>
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Menu</span>
             <div className="h-px flex-1 bg-gray-200" />
           </div>
         )}
@@ -300,7 +300,7 @@ export default function PublicMenuView() {
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 px-5 py-3 text-center z-10">
-        <p className="text-[8px] text-gray-400 font-black uppercase tracking-[0.3em]">
+        <p className="text-[9px] text-gray-400 font-black uppercase tracking-[0.3em]">
           Il Girasole {tableName ? `— Tavolo ${tableName}` : '— Menu Digitale'}
         </p>
       </footer>
@@ -335,7 +335,7 @@ export default function PublicMenuView() {
               </div>
               {selectedProduct.ingredienti.length > 0 && (
                 <div className="mt-5">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2">
                     {currentLang === 'it' ? 'Ingredienti' : 'Ingredients'}
                   </p>
                   <p className="text-sm text-gray-600 leading-relaxed">{selectedProduct.ingredienti.join(', ')}</p>
@@ -343,14 +343,14 @@ export default function PublicMenuView() {
               )}
               {selectedProduct.allergeni && selectedProduct.allergeni.length > 0 && (
                 <div className="mt-5">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2.5">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2.5">
                     {currentLang === 'it' ? 'Allergeni' : 'Allergens'}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {selectedProduct.allergeni.map(a => {
                       const meta = getA(a);
                       return (
-                        <span key={a} className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg border" style={{ color: meta?.color || '#92400e', backgroundColor: meta?.bg || '#fef3c7', borderColor: meta?.color || '#92400e' }}>
+                        <span key={a} className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg border" style={{ color: meta?.color || '#92400e', backgroundColor: meta?.bg || '#fef3c7', borderColor: meta?.color || '#92400e' }}>
                           {meta?.icon && <span>{meta.icon}</span>}
                           {a}
                         </span>
@@ -380,7 +380,7 @@ export default function PublicMenuView() {
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-1 h-5 rounded-full bg-[#ebc22d]" />
                 <h2 className="text-base font-black uppercase tracking-tight text-gray-800">{categoria}</h2>
-                <span className="text-[9px] font-black text-gray-400 ml-auto">{items.length}</span>
+                <span className="text-[10px] font-black text-gray-400 ml-auto">{items.length}</span>
               </div>
 
               {hasSubcategories ? (
@@ -389,7 +389,7 @@ export default function PublicMenuView() {
                     const subcats = [...new Set(items.map(p => p.sottocategoria || 'Altro'))];
                     return subcats.map(sub => (
                       <div key={sub}>
-                        <h3 className="text-[8px] font-black text-[#ebc22d] uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                        <h3 className="text-[9px] font-black text-[#ebc22d] uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
                           <div className="w-2.5 h-px bg-[#ebc22d]/30" />
                           {sub}
                         </h3>
@@ -454,7 +454,7 @@ export default function PublicMenuView() {
             <div>
               <p className="text-sm font-bold text-gray-800">{p.nome}</p>
               {p.ingredienti.length > 0 && (
-                <p className="text-[9px] text-gray-500 mt-0.5">{p.ingredienti.join(', ')}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{p.ingredienti.join(', ')}</p>
               )}
               {renderAllergeni(p.allergeni)}
             </div>

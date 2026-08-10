@@ -392,7 +392,7 @@ export default function TakeawayTabletView() {
                         <div className="flex items-center gap-1">
                            {status === 'WARNING' && <AlertTriangle size={10} className="text-amber-500" />}
                            {status === 'FULL' && <AlertTriangle size={10} className="text-red-500" />}
-                           <span className={`text-[8px] font-bold ${isSelected ? 'text-black' : 'text-gray-600'}`}>
+                           <span className={`text-[9px] font-bold ${isSelected ? 'text-black' : 'text-gray-600'}`}>
                              {loadMap[slot] || 0}/{CAPACITY_CONFIG.MAX_PIZZAS_PER_SLOT}
                            </span>
                         </div>

@@ -1,6 +1,6 @@
 # To-Do — Risto (Il Girasole)
 
-_Ultimo aggiornamento: 2026-08-09_
+_Ultimo aggiornamento: 2026-08-10_
 
 ## 🔴 Da fare subito (bloccato su azioni tue)
 
@@ -12,20 +12,17 @@ _Ultimo aggiornamento: 2026-08-09_
   - [ ] Collegare il dominio in Vercel → Settings → Domains
   - [ ] Nell'app locale, Impostazioni → Menu Online: inserire URL + `PUBLISH_SECRET`, poi premere "Pubblica Menu Online"
 - [ ] **Magazzino — primo utilizzo reale**: aggiungere i primi articoli e verificare che carico/scarico funzionino nel servizio vero (schema già confermato funzionante via query diretta).
-- [ ] **Eseguire la nuova migrazione** `supabase/migrations/20260809000000_magazzino_barcode.sql` (aggiunge la colonna `codice_a_barre`) — stesso procedimento delle altre: SQL Editor del locale, o `npx supabase migration up`.
+- [x] **Eseguire la nuova migrazione** `supabase/migrations/20260809000000_magazzino_barcode.sql` (aggiunge la colonna `codice_a_barre`) — applicata dall'utente.
 
 ## 🟡 In sospeso (serve una decisione)
 
 - [ ] **Food cost**: richiede un sistema di ricette (piatto → ingredienti di magazzino con quantità consumate). Non è un'estensione veloce di Magazzino, è una feature a sé — da avviare quando si decide di investirci.
-- [ ] **Split di `AdminView.tsx`** (1025 righe): rimandato per rischio — è la pagina di gestione menu usata anche da telefono durante il servizio. Da fare con calma, non a ridosso di un servizio, con possibilità di testare bene prima di mergiare.
 - [ ] **WhatsApp per l'invio fatture**: serve un account WhatsApp Business API (Meta Cloud o Twilio) prima di poter partire.
 
 ## 🟢 Idee future (non prioritarie)
 
 - [ ] **Dashboard a sezioni per il telefono**: fatta la versione base (hub con Sala/Prenotazioni/Turno/Cucina/Magazzino/Report/Impostazioni in base al ruolo) — eventuali rifiniture visive quando serve.
 - [ ] **OCR lavagna cucina**: fotografare la lavagna del menu del giorno e aggiornare automaticamente la disponibilità in `/kitchen`. Servirebbe un vision model (non OCR classico, va anche capito cosa è barrato) — consigliato **con conferma umana**, non automazione cieca. Da riprendere solo se il toggle disponibilità manuale risulta davvero troppo lento in pratica.
-- [ ] **Audit completo testo piccolo**: sistemato solo il caso peggiore (sidebar categorie POS, era a 6px). Altri `text-[8-9px]` sparsi in ~12 file, per lo più etichette decorative — bassa priorità.
-- [ ] **Permessi più granulari dentro `/kitchen`**: oggi chi accede a Cucina (admin/kitchen) può fare tutto (aggiungere, modificare, eliminare piatti). Se un domani serve che il ruolo "kitchen" possa solo togliere disponibilità senza editare/eliminare, va costruito un livello di permessi più fine dentro AdminView stesso.
 
 ## ✅ Completato in questa fase di lavoro
 
@@ -40,6 +37,9 @@ _Ultimo aggiornamento: 2026-08-09_
 - **Scanner codici a barre nel Magazzino**: scansione da fotocamera (`html5-qrcode`), riconosce articoli già censiti (salta al carico) o cerca il prodotto su Open Food Facts per pre-compilare nome/categoria/unità — richiede la migrazione `20260809000000_magazzino_barcode.sql` (vedi sopra)
 - WiFi QR code accanto al QR del menu (`/qr-menu`)
 - Base per Menu Pubblico online (sito statico + endpoint di pubblicazione sicuro) — da completare il deploy (vedi sopra)
+- **Permessi granulari dentro `/kitchen`**: il ruolo kitchen ora vede solo il toggle disponibilità (piatti, aggiunte, rimozioni, varianti) — niente più aggiunta/modifica/eliminazione né gestione categorie. Verificato in browser per entrambi i ruoli (admin invariato, kitchen ristretto).
+- **Audit testo piccolo**: tutte le occorrenze `text-[8px]`/`text-[9px]` rimaste (escluse le etichette HACCP e i QR da stampa, vincolate a dimensioni fisiche) alzate di uno step (8→9, 9→10px). Verificato senza overflow su POS e altre viste.
+- **Split di `AdminView.tsx`**: da 1025 a ~410 righe. Estratti `components/admin/{MenuTab,IngredientsTab,RemovalsTab,VariantsTab,IngredientFormModal}.tsx`; logica/stato di alto livello rimasti in AdminView, VariantsTab gestisce il proprio stato in autonomia. Type-check, 65 test e verifica manuale di tutti i tab (menu/aggiunte/rimozioni/varianti/haccp) per admin e kitchen: tutto invariato.
 
 ## 📝 Note operative
 

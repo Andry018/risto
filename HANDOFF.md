@@ -40,25 +40,26 @@ Sessione lunga di audit + fix + nuove feature su un gestionale ristorante (React
 - **Verifica DB da remoto**: Tailscale installato su questo PC e sul PC del locale (IP `100.87.32.16`), permette query dirette via REST API (`curl` con anon key) per confermare che le migrazioni siano state applicate, senza bisogno di accesso interattivo al PC del locale.
 - **Menu Pubblico**: deliberatamente un progetto Supabase Cloud **separato** da quello del locale (nessun dato sensibile condiviso). Pubblicazione "a snapshot" (pulsante manuale), non sync in tempo reale — scelta esplicita per semplicità/robustezza. La `service_role` key vive solo come env var server-side in una funzione serverless Vercel (`menu-pubblico/api/publish-menu.js`), mai nel bundle client. L'anon key invece è imbustata direttamente nell'HTML statico: è previsto che sia pubblica (la sicurezza è nelle policy RLS, non nella segretezza della chiave).
 - **Componenti riutilizzabili chiave**: `NumericKeypad.tsx` (tastierino touch, usato in POS/sconto/Magazzino), `StaffPinGuard.tsx` (ora accetta sia `children` che `<Outlet/>`, più `requiredRoles` per il controllo permessi).
-- **WaiterMobileView.tsx** e **AdminView.tsx** sono i due componenti più grandi e delicati (rispettivamente vista cameriere da telefono e gestione menu, entrambi usati in produzione durante il servizio) — modifiche lì vanno sempre verificate con cura.
+- **WaiterMobileView.tsx** resta il componente più grande e delicato (vista cameriere da telefono, usata in produzione durante il servizio) — modifiche lì vanno sempre verificate con cura. `AdminView.tsx` è stato invece splittato in `components/admin/*Tab.tsx` per ridurne la dimensione (vedi sezione 3).
 
 ## 3. Problemi Aperti
 
 - **Menu Pubblico non ancora deployato**: codice pronto (`menu-pubblico/`) ma servono azioni manuali dell'utente — eseguire `schema.sql` sul progetto Supabase Cloud, deploy su Vercel, configurare env var (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PUBLISH_SECRET`), collegare dominio, poi inserire URL+secret nell'app locale. Non testato end-to-end con dati reali (solo verificato che l'errore 404 atteso — tabella non ancora creata — si gestisce correttamente).
-- **Migrazione barcode non applicata**: `20260809000000_magazzino_barcode.sql` (colonna `codice_a_barre`) scritta ma non ancora eseguita sul DB del locale — senza, il campo salva `null` silenziosamente ma la UI dello scanner funziona comunque (fallback a "prodotto non trovato... inserisci a mano" senza barcode salvato, o errore Supabase se la colonna manca — da verificare quando applicata).
 - **Food cost**: non costruito. Richiede un sistema di ricette (piatto → ingredienti di magazzino con quantità) che non esiste — decisione di scope da prendere prima di iniziare, non è un'estensione veloce.
-- **Split di `AdminView.tsx`** (1025 righe): deliberatamente NON fatto — rischio ritenuto troppo alto per un refactor meccanico senza poter testare contro il DB reale da questo ambiente, specialmente ora che la pagina è usata anche da telefono durante il servizio live.
-- **Ruolo "kitchen" troppo permissivo dentro `/kitchen`**: chi ha ruolo kitchen può aggiungere/modificare/eliminare piatti, non solo togliere disponibilità. Nessun controllo granulare dentro `AdminView` stesso (solo a livello di route).
-- **Audit testo piccolo incompleto**: sistemato solo il caso peggiore (sidebar categorie POS, era a 6px → ora 8px). Altri `text-[8-9px]` sparsi in ~12 file (per lo più etichette decorative, bassa priorità).
 - **WhatsApp fatture** e **OCR lavagna cucina**: solo discussi concettualmente, nessun codice. Entrambi richiedono decisioni esterne (account WhatsApp Business, quale vision model) prima di poter iniziare.
 - **Strade valutate e scartate**: ripartizione proporzionale del prezzo ingredienti (sostituita con ripartizione equa — vedi bug corretti); silent auto-toggle per l'ipotetico OCR lavagna (scartato a favore di conferma umana esplicita, troppo rischioso lasciare automatico); dashboard telefono con card dettagliate stile tablet (l'utente ha chiesto box più semplici via screenshot, rifatta più minimale).
+
+### Risolti in questa sessione (dopo la stesura iniziale di questo file)
+- **Ruolo "kitchen" troppo permissivo**: ora dentro `AdminView` il ruolo kitchen vede solo il toggle disponibilità (piatti/aggiunte/rimozioni/varianti), niente aggiunta/modifica/eliminazione né gestione categorie. Flag `canEditMenu` (da `getCurrentUser().role`) passato a tutti i sotto-componenti tab.
+- **Audit testo piccolo**: tutte le occorrenze `text-[8-9px]` rimanenti alzate di uno step (8→9, 9→10px), escluse le etichette HACCP stampabili e i QR da stampa (vincolate a dimensioni fisiche di stampa, rischio overflow).
+- **Split di `AdminView.tsx`**: fatto, da 1025 a ~410 righe. Estratti `components/admin/{MenuTab,IngredientsTab,RemovalsTab,VariantsTab,IngredientFormModal}.tsx` — estrazione meccanica di JSX, stato/logica di alto livello rimasti in `AdminView` (eccetto `VariantsTab` che è completamente autonomo). Verificato con type-check, 65 test, e verifica manuale in browser di tutti i 5 tab per ruolo admin e kitchen.
 
 ## 4. TODO List
 
 Vedi [To-Do.md](To-Do.md) per la lista completa e prioritizzata. Le prime 3 cose bloccanti in ordine:
 
-1. **Push delle modifiche non ancora committate** (vedi sezione 5 — parecchi file nuovi/modificati non pushati)
-2. **Eseguire le 2 migrazioni pendenti**: `20260806000000_magazzino.sql` (se non già fatto — risulta applicata sul locale) e `20260809000000_magazzino_barcode.sql` (non ancora applicata)
+1. ~~Push delle modifiche non ancora committate~~ — fatto (commit `528ffc2`, 2026-08-10)
+2. ~~Eseguire le 2 migrazioni pendenti~~ — fatto, entrambe applicate dall'utente
 3. **Completare il deploy del Menu Pubblico** (Supabase Cloud schema + Vercel + dominio)
 
 ## 5. File Modificati

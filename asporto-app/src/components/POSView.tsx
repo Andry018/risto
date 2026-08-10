@@ -751,7 +751,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                       <button
                         type="button"
                         onClick={openDiscountModal}
-                        className="mt-3 w-full text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-gold border border-dashed border-surface-light hover:border-gold/40 rounded-xl py-2 transition-all"
+                        className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gold border border-dashed border-surface-light hover:border-gold/40 rounded-xl py-2 transition-all"
                       >
                         {scontoTipo ? 'Modifica sconto' : 'Applica sconto'}
                       </button>
@@ -774,7 +774,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-white text-sm md:text-base truncate">{item.nome.toUpperCase()}</p>
                           {item.portata && (
-                            <span className={`shrink-0 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-[0.2em] ${PORTATA_OPTIONS.find(p => p.value === item.portata)?.color ?? 'bg-charcoal border-surface-light text-gray-400'}`}>
+                            <span className={`shrink-0 px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] ${PORTATA_OPTIONS.find(p => p.value === item.portata)?.color ?? 'bg-charcoal border-surface-light text-gray-400'}`}>
                               {PORTATA_OPTIONS.find(p => p.value === item.portata)?.label ?? `Portata ${item.portata}`}
                             </span>
                           )}
@@ -896,7 +896,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
       {/* Lato sinistro: Categorie Menu (stile URY) */}
       <aside className="w-[88px] shrink-0 bg-surface/80 border-r border-surface-light flex flex-col items-center py-4 gap-1 overflow-y-auto">
-        <div className="text-[8px] font-black uppercase tracking-[0.3em] text-gray-500 mb-1 pb-2 border-b border-surface-light w-full text-center">CATEGORIE</div>
+        <div className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 mb-1 pb-2 border-b border-surface-light w-full text-center">CATEGORIE</div>
         <button
           onClick={() => setActiveCategory(null)}
           className={`w-[72px] h-[52px] rounded-2xl border flex items-center justify-center transition-all active:scale-90 text-[10px] font-black uppercase tracking-wider ${
@@ -932,20 +932,20 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               }`}
             >
               <span className="text-base leading-none">{icons[def.label] || '📋'}</span>
-              <span className="text-[8px] font-black uppercase tracking-wider leading-tight text-center px-0.5">{def.label}</span>
+              <span className="text-[9px] font-black uppercase tracking-wider leading-tight text-center px-0.5">{def.label}</span>
             </button>
           );
         })}
         <div className="mt-auto pt-2 border-t border-surface-light w-full flex flex-col items-center gap-1">
           <button
             onClick={() => setPaninoModalOpen(true)}
-            className="w-[72px] h-[40px] rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[9px] font-black uppercase tracking-wider transition-all hover:bg-gold/20 active:scale-90 flex items-center justify-center gap-1"
+            className="w-[72px] h-[40px] rounded-2xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-black uppercase tracking-wider transition-all hover:bg-gold/20 active:scale-90 flex items-center justify-center gap-1"
           >
             <Sandwich size={14} /> Panino
           </button>
           <button
             onClick={() => setCustomItemModalOpen(true)}
-            className="w-[72px] h-[40px] rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-wider transition-all hover:bg-emerald-500/20 active:scale-90 flex items-center justify-center gap-1"
+            className="w-[72px] h-[40px] rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-wider transition-all hover:bg-emerald-500/20 active:scale-90 flex items-center justify-center gap-1"
           >
             <UtensilsCrossed size={14} /> Personal.
           </button>
@@ -970,7 +970,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Comanda & Conto</h2>
                   {pendingSyncCount > 0 && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[8px] font-black rounded uppercase animate-pulse">
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[9px] font-black rounded uppercase animate-pulse">
                       <WifiOff size={8} /> Sincronizzazione in corso ({pendingSyncCount})
                     </span>
                   )}
@@ -1027,7 +1027,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
           {/* Portate (uscita) stepper */}
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Portata</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Portata</span>
             <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
               <button
                 type="button"
@@ -1217,7 +1217,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               type="button"
               onClick={openDiscountModal}
               disabled={cart.length === 0}
-              className="text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-gold disabled:opacity-30 disabled:pointer-events-none transition-all"
+              className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gold disabled:opacity-30 disabled:pointer-events-none transition-all"
             >
               {scontoTipo ? `Sconto: ${scontoTipo === 'percentuale' ? scontoValore + '%' : '€' + scontoValore.toFixed(2)} · Modifica` : '+ Applica sconto'}
             </button>

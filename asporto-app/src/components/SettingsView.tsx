@@ -276,7 +276,7 @@ export default function SettingsView() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-serif tracking-widest text-[#f5f5f5] leading-tight">IMPOSTAZIONI</h1>
-              <p className="text-[9px] tracking-[0.2em] text-gold uppercase font-semibold">Configurazione sistema</p>
+              <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">Configurazione sistema</p>
             </div>
           </div>
         </div>
@@ -346,7 +346,7 @@ export default function SettingsView() {
                     <div className="text-gold"><Sun size={30} strokeWidth={1.5} /></div>
                     <div>
                       <h1 className="text-xl font-serif tracking-widest text-[#f5f5f5] leading-tight">{restaurantName || 'IL GIRASOLE'}</h1>
-                      <p className="text-[9px] tracking-[0.2em] text-gold uppercase font-semibold">{restaurantTagline || 'Ristorante Italiano'}</p>
+                      <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">{restaurantTagline || 'Ristorante Italiano'}</p>
                     </div>
                   </div>
                 </div>
@@ -529,7 +529,7 @@ export default function SettingsView() {
                             <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gold font-black shrink-0">{user.name.charAt(0).toUpperCase()}</div>
                             <div className="min-w-0">
                               <p className="font-bold text-white text-sm truncate">{user.name}</p>
-                              <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{ROLE_LABELS[user.role]}</p>
+                              <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{ROLE_LABELS[user.role]}</p>
                             </div>
                           </div>
                           <div className="flex gap-1 shrink-0">
@@ -595,7 +595,7 @@ export default function SettingsView() {
                       {new Date(turniDate + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
                     {turniDate !== toLocalISODate() && (
-                      <button onClick={() => setTurniDate(toLocalISODate())} className="text-[9px] font-black text-gold uppercase tracking-widest mt-0.5">Torna a oggi</button>
+                      <button onClick={() => setTurniDate(toLocalISODate())} className="text-[10px] font-black text-gold uppercase tracking-widest mt-0.5">Torna a oggi</button>
                     )}
                   </div>
                   <button onClick={() => shiftTurniDate(1)} className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-surface-light transition-all">

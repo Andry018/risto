@@ -254,7 +254,7 @@ export default function ProductCustomizationModal({ isOpen, editingItem, ingredi
                 {duettoPairId ? (
                   <div className="bg-gold/10 border border-gold/30 rounded-xl px-4 py-3 flex items-center gap-3">
                     <span className="text-sm font-black text-gold">{duettoPairName}</span>
-                    <span className="text-[9px] text-gray-500">✓ selezionata</span>
+                    <span className="text-[10px] text-gray-500">✓ selezionata</span>
                   </div>
                 ) : (
                   <div className="max-h-32 overflow-y-auto space-y-1 custom-scrollbar">

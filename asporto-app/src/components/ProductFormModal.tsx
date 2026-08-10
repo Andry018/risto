@@ -189,7 +189,7 @@ export default function ProductFormModal({
                         const updated = isSelected ? currentList.filter(a => a !== label) : [...currentList, label];
                         set({ allergeni: updated });
                       }}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
                         isSelected
                           ? 'border-current shadow-sm'
                           : 'border-transparent opacity-50 hover:opacity-80'

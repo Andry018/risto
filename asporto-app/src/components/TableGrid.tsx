@@ -78,7 +78,7 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }
         }`}
       >
         <div className="w-full flex items-center justify-between">
-          <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${badge.color}`}>
+          <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${badge.color}`}>
             {badge.label}
           </span>
           {(table.status === 'OCCUPATO' || table.status === 'PRENOTATO') && (
@@ -92,7 +92,7 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }
               {menuOpen && (
                 <div className="absolute right-0 top-8 z-50 w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
                   <div className="py-1">
-                    <p className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-gray-500 border-b border-gray-800">
+                    <p className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-gray-800">
                       {table.nome} · Azioni
                     </p>
                     {onTransferTable && (
@@ -127,7 +127,7 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }
         </div>
 
         {table.status === 'LIBERO' && (
-          <div className="mt-1.5 w-full text-center py-2 rounded-xl bg-white/5 text-[9px] font-black uppercase tracking-widest text-gray-600">
+          <div className="mt-1.5 w-full text-center py-2 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-widest text-gray-600">
             TAP PER APRIRE
           </div>
         )}

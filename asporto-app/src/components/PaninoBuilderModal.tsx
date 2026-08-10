@@ -257,7 +257,7 @@ export default function PaninoBuilderModal({ isOpen, products, currentPortata, v
                                   <button
                                     key={c}
                                     onClick={() => setCottura(item.nome, c)}
-                                    className={`px-3 py-1.5 rounded-lg font-black text-[9px] uppercase tracking-wider border transition-all ${
+                                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider border transition-all ${
                                       sel?.cottura === c
                                         ? 'bg-rose-500/20 border-rose-500/40 text-rose-400'
                                         : 'bg-charcoal border-surface-light text-gray-500'
@@ -348,7 +348,7 @@ export default function PaninoBuilderModal({ isOpen, products, currentPortata, v
                                   <button
                                     key={c}
                                     onClick={() => setCottura(item.nome, c)}
-                                    className={`px-3 py-1.5 rounded-lg font-black text-[9px] uppercase tracking-wider border transition-all ${
+                                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider border transition-all ${
                                       sel?.cottura === c
                                         ? 'bg-rose-500/20 border-rose-500/40 text-rose-400'
                                         : 'bg-charcoal border-surface-light text-gray-500'

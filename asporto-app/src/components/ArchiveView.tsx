@@ -106,7 +106,7 @@ export default function ArchiveView() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-black text-white text-sm">{doc.doc_number}</h3>
-                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
                         doc.mode === 'linked' ? 'text-sky-400 border-sky-500/30 bg-sky-500/10' : 'text-amber-400 border-amber-500/30 bg-amber-500/10'
                       }`}>
                         {doc.mode === 'linked' ? 'DA ORDINE' : 'MANUALE'}

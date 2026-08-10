@@ -103,7 +103,7 @@ export default function WaiterMenuTab({
           {onOpenPaninoBuilder && (
             <button
               onClick={onOpenPaninoBuilder}
-              className="shrink-0 px-3 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest border border-dashed border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 active:scale-95 transition-all flex items-center gap-1.5 bg-gold/5"
+              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 active:scale-95 transition-all flex items-center gap-1.5 bg-gold/5"
             >
               <Sandwich size={14} /> PANINO
             </button>
@@ -111,7 +111,7 @@ export default function WaiterMenuTab({
           {onOpenCustomItem && (
             <button
               onClick={onOpenCustomItem}
-              className="shrink-0 px-3 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest border border-dashed border-emerald-400/30 text-emerald-400/90 hover:text-emerald-300 hover:border-emerald-400/60 active:scale-95 transition-all flex items-center gap-1.5 bg-emerald-500/5"
+              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-emerald-400/30 text-emerald-400/90 hover:text-emerald-300 hover:border-emerald-400/60 active:scale-95 transition-all flex items-center gap-1.5 bg-emerald-500/5"
             >
               <UtensilsCrossed size={14} /> PERSONALIZZATO
             </button>

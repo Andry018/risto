@@ -469,12 +469,12 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                            {tavolo.nome}
                          </div>
                         {tavolo.status === 'OCCUPATO' && (
-                          <div className="flex items-center justify-center gap-1 text-[8px] font-black opacity-60">
+                          <div className="flex items-center justify-center gap-1 text-[9px] font-black opacity-60">
                             <Users size={8} /> {tavolo.clienti}
                           </div>
                         )}
                         {tavolo.status === 'PRENOTATO' && tableReservation(tavolo.id) && (
-                          <div className="text-[8px] font-black text-amber-300 truncate max-w-full px-1">
+                          <div className="text-[9px] font-black text-amber-300 truncate max-w-full px-1">
                             {tableReservation(tavolo.id)!.nome}
                           </div>
                         )}
@@ -485,7 +485,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping" />
                       )}
                     {tavolo.status === 'OCCUPATO' && tableApertura[tavolo.id] && (
-                      <div className="flex items-center gap-1 mt-1 px-2 py-1 bg-amber-500/20 border border-amber-500/30 rounded-full text-[9px] font-black text-amber-400">
+                      <div className="flex items-center gap-1 mt-1 px-2 py-1 bg-amber-500/20 border border-amber-500/30 rounded-full text-[10px] font-black text-amber-400">
                         <Clock size={9} />
                         {(() => {
                           const diff = now - new Date(tableApertura[tavolo.id]).getTime();
@@ -500,14 +500,14 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                     {tavolo.status === 'PRENOTATO' || (tavolo.status !== 'OCCUPATO' && tableReservation(tavolo.id)) ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); openReservationModal(tavolo); }}
-                        className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-1 bg-amber-500 rounded-full text-[8px] font-black text-black shadow-lg hover:scale-110 transition-all active:scale-95 z-20"
+                        className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-1 bg-amber-500 rounded-full text-[9px] font-black text-black shadow-lg hover:scale-110 transition-all active:scale-95 z-20"
                       >
                         <BookOpen size={10} /> {tavolo.status === 'PRENOTATO' ? 'P' : ''}
                       </button>
                     ) : tavolo.status === 'LIBERO' && (
                       <button
                         onClick={(e) => { e.stopPropagation(); openReservationModal(tavolo); }}
-                        className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-1 bg-charcoal border border-amber-500/40 rounded-full text-[8px] font-black text-amber-500 shadow-lg hover:bg-amber-500 hover:text-black transition-all active:scale-95 z-20 opacity-0 group-hover:opacity-100"
+                        className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-1 bg-charcoal border border-amber-500/40 rounded-full text-[9px] font-black text-amber-500 shadow-lg hover:bg-amber-500 hover:text-black transition-all active:scale-95 z-20 opacity-0 group-hover:opacity-100"
                       >
                         <BookOpen size={10} /> P
                       </button>

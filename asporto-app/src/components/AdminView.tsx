@@ -1,17 +1,20 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { requireManagerPin } from '../lib/staffAuth';
+import { requireManagerPin, getCurrentUser } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
-import { getProductVariants, saveProductVariants, type ProductVariant } from '../lib/productVariants';
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
-import { List, ToggleLeft, ToggleRight, ChefHat, LayoutDashboard, Plus, Minus, Edit2, Trash2, X, Save, Search, SlidersHorizontal, ShieldCheck, Palette } from 'lucide-react';
+import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Palette } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
-import CategoryFilterBar from './CategoryFilterBar';
 import HaccpView from './HaccpView';
+import MenuTab from './admin/MenuTab';
+import IngredientsTab from './admin/IngredientsTab';
+import RemovalsTab from './admin/RemovalsTab';
+import VariantsTab from './admin/VariantsTab';
+import IngredientFormModal from './admin/IngredientFormModal';
 import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 
 interface AdminViewProps {
@@ -21,6 +24,8 @@ interface AdminViewProps {
 export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const { confirm } = useConfirm();
   const { addToast } = useToast();
+  /** Il ruolo kitchen può solo togliere/rimettere disponibilità: niente aggiunta, modifica o eliminazione di piatti/aggiunte/varianti. */
+  const canEditMenu = getCurrentUser()?.role !== 'kitchen';
   const [searchParams, setSearchParams] = useSearchParams();
   const [themeId, setThemeId] = useState<string>(getThemeId());
   const [products, setProducts] = useState<Product[]>([]);
@@ -95,10 +100,6 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   })();
   const [ingredientSearch, setIngredientSearch] = useState('');
   const [isIngredientsModalOpen, setIsIngredientsModalOpen] = useState(false);
-  const [variants, setVariants] = useState<ProductVariant[]>(() => getProductVariants());
-  const [variantEditingId, setVariantEditingId] = useState<string | null>(null);
-  const [variantEditDraft, setVariantEditDraft] = useState<Partial<ProductVariant>>({});
-  const [variantCategoryFilter, setVariantCategoryFilter] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchParams({ tab: activeTab }, { replace: true });
@@ -118,11 +119,6 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     }
   }, [isModalOpen]);
 
-  const persistVariants = (newVariants: ProductVariant[]) => {
-    setVariants(newVariants);
-    saveProductVariants(newVariants);
-  };
-
   useEffect(() => {
     if (isIngredientsModalOpen) {
       const val = editingIngredient?.prezzo ?? newIngredient.prezzo ?? 1.5;
@@ -135,7 +131,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     const { data } = await supabase.from('prodotti').select('*').order('categoria', { ascending: true }).order('nome', { ascending: true });
     if (data) setProducts(data);
   }
-  
+
   async function fetchIngredients() {
     if (!supabase) return;
     const { data } = await supabase.from('ingredienti').select('*').order('nome', { ascending: true });
@@ -191,7 +187,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   };
 
   const handleSaveProduct = async () => {
-    if (!supabase) return;
+    if (!supabase || !canEditMenu) return;
     const productData = editingProduct || newProduct;
     if (!productData.nome || productData.prezzo === undefined || productData.prezzo === null) return;
 
@@ -211,7 +207,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   };
 
   const handleSaveIngredient = async () => {
-    if (!supabase) return;
+    if (!supabase || !canEditMenu) return;
     const ingData = editingIngredient || newIngredient;
     if (!ingData.nome) return;
 
@@ -231,7 +227,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   };
 
   const deleteIngredient = async (id: string) => {
-    if (!supabase) return;
+    if (!supabase || !canEditMenu) return;
     if (!(await requireManagerPin('eliminare una aggiunta'))) return;
     const ok = await confirm({ title: 'Elimina aggiunta', message: 'Sei sicuro di voler eliminare questa aggiunta?', destructive: true });
     if (ok) {
@@ -241,7 +237,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   };
 
   const deleteProduct = async (id: string) => {
-    if (!supabase) return;
+    if (!supabase || !canEditMenu) return;
     if (!(await requireManagerPin('eliminare un prodotto'))) return;
     const ok = await confirm({ title: 'Elimina prodotto', message: 'Sei sicuro di voler eliminare questo prodotto?', destructive: true });
     if (ok) {
@@ -250,14 +246,46 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     }
   };
 
+  const handleAdditionPriceChange = (id: string, value: string) => {
+    setAdditionPriceDrafts(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleAdditionPriceBlur = (id: string, value: string) => {
+    const ing = ingredients.find(i => i.id === id);
+    const raw = value.replace(',', '.');
+    const val = parseFloat(raw);
+    if (!isNaN(val) && val >= 0) {
+      supabase?.from('ingredienti').update({ prezzo: val }).eq('id', id).then(() => fetchIngredients());
+      setAdditionPriceDrafts(prev => ({ ...prev, [id]: val.toFixed(2) }));
+    } else {
+      setAdditionPriceDrafts(prev => ({ ...prev, [id]: (ing?.prezzo ?? 0).toFixed(2) }));
+    }
+  };
+
+  const handleRemovalPriceChange = (id: string, value: string) => {
+    setRemovalPriceDrafts(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleRemovalPriceBlur = (id: string, value: string) => {
+    const ing = ingredients.find(i => i.id === id);
+    const raw = value.replace(',', '.');
+    const val = parseFloat(raw);
+    if (!isNaN(val) && val >= 0) {
+      supabase?.from('ingredienti').update({ prezzo_rimozione: val }).eq('id', id).then(() => fetchIngredients());
+      setRemovalPriceDrafts(prev => ({ ...prev, [id]: val.toFixed(2) }));
+    } else {
+      setRemovalPriceDrafts(prev => ({ ...prev, [id]: (ing?.prezzo_rimozione ?? 0).toFixed(2) }));
+    }
+  };
+
   const isEmbedded = true;
 
   return (
     <div className={`min-h-screen ${'bg-charcoal text-gray-300'} font-sans ${''}`}>
-      
+
       {/* Sidebar / Topnav layout */}
       <div className="flex flex-col md:flex-row h-dvh overflow-hidden">
-        
+
         {/* Modern Sidebar Nav */}
         <aside className={`w-full md:w-72 ${'bg-surface md:border-r md:border-surface-light'} p-3 md:p-6 flex flex-col z-20 shadow-2xl`}>
           <div className="flex items-center justify-between gap-3 mb-3 md:mb-12">
@@ -300,10 +328,10 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               </Link>
             )}
             <div className="hidden md:block h-px bg-surface-light/50 my-2" />
-            <button 
-              onClick={() => setActiveTab('menu')} 
+            <button
+              onClick={() => setActiveTab('menu')}
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'menu' 
+                activeTab === 'menu'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
                   : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
@@ -313,10 +341,10 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 <span className="whitespace-nowrap">Disponibilità Menu</span>
               </div>
             </button>
-            <button 
-              onClick={() => setActiveTab('ingredients')} 
+            <button
+              onClick={() => setActiveTab('ingredients')}
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'ingredients' 
+                activeTab === 'ingredients'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
                   : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
@@ -326,10 +354,10 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 <span className="whitespace-nowrap">Gestione Aggiunte</span>
               </div>
             </button>
-            <button 
-              onClick={() => setActiveTab('removals')} 
+            <button
+              onClick={() => setActiveTab('removals')}
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'removals' 
+                activeTab === 'removals'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
                   : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
@@ -339,10 +367,10 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 <span className="whitespace-nowrap">Gestione Rimozioni</span>
               </div>
             </button>
-            <button 
-              onClick={() => setActiveTab('variants')} 
+            <button
+              onClick={() => setActiveTab('variants')}
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'variants' 
+                activeTab === 'variants'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
                   : 'text-gray-500 hover:bg-charcoal hover:text-white'
               }`}
@@ -367,7 +395,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               </div>
             </button>
           </nav>
-          
+
           <div className={`mt-auto hidden md:flex p-4 ${'bg-gold/10 border-gold/20'} border rounded-xl items-center gap-3`}>
              <div className={`w-2 h-2 rounded-full ${'bg-gold'} animate-ping absolute`}></div>
              <div className={`w-2 h-2 rounded-full ${'bg-gold'} relative`}></div>
@@ -377,570 +405,77 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
 
         {/* Dashboard Content */}
         <main className={`flex-1 p-4 md:p-10 overflow-y-auto ${'bg-charcoal'}`}>
-          
+
           {activeTab === 'menu' && (
-            <div className={`max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500`}>
-              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Menu</h2>
-                  <p className={'text-gray-500'}>Aggiungi o modifica i piatti della giornata.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  <div className="relative w-full sm:w-64">
-                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
-                    <input 
-                      type="text" 
-                      placeholder="Cerca piatto..."
-                      value={menuSearch}
-                      onChange={e => setMenuSearch(e.target.value)}
-                      className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
-                    />
-                    {menuSearch && (
-                      <button
-                        onClick={() => setMenuSearch('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
-                        aria-label="Cancella ricerca"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <button 
-                      onClick={() => { setEditingProduct(null); setNewProduct(prev => ({ ...prev, categoria: menuCategory || prev.categoria })); setIsModalOpen(true); }}
-                      className={`${'bg-gold text-black'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
-                  >
-                      <Plus size={20} /> Nuovo Piatto
-                  </button>
-                </div>
-              </header>
-
-              <CategoryFilterBar
-                allCategories={allCategories}
-                activeCategory={menuCategory}
-                onCategoryChange={setMenuCategory}
-                onCategoryRename={(oldName, newName) => {
-                  const newOrder = categoryOrder.map(c => c === oldName ? newName : c);
-                  setCategoryOrderState(newOrder);
-                  saveCategoryOrder(newOrder);
-                  if (extraCategories.includes(oldName)) {
-                    persistExtraCat(extraCategories.map(c => c === oldName ? newName : c));
-                  }
-                }}
-                onCategoryDelete={(cat) => persistExtraCat(extraCategories.filter(c => c !== cat))}
-                onCategoryMoveUp={(cat) => {
-                  const idx = allCategories.indexOf(cat);
-                  if (idx > 0) { const newOrder = [...allCategories]; [newOrder[idx-1], newOrder[idx]] = [newOrder[idx], newOrder[idx-1]]; setCategoryOrderState(newOrder); saveCategoryOrder(newOrder); }
-                }}
-                onCategoryMoveDown={(cat) => {
-                  const idx = allCategories.indexOf(cat);
-                  if (idx < allCategories.length - 1) { const newOrder = [...allCategories]; [newOrder[idx], newOrder[idx+1]] = [newOrder[idx+1], newOrder[idx]]; setCategoryOrderState(newOrder); saveCategoryOrder(newOrder); }
-                }}
-                onCategoryAdd={(name) => {
-                  if (!allCategories.includes(name)) {
-                    persistExtraCat([...extraCategories, name]);
-                  }
-                  setNewProduct({ ...newProduct, categoria: name });
-                  setMenuCategory(name);
-                }}
-              />
-
-              <div className="space-y-12">
-                {allCategories.filter(cat => !menuCategory || cat === menuCategory).map(cat => {
-                  const filteredProducts = products.filter(p => 
-                    p.categoria === cat && 
-                    p.nome.toLowerCase().includes(menuSearch.toLowerCase())
-                  );
-                  
-                  if (filteredProducts.length === 0 && menuSearch) return null;
-
-                  return (
-                    <section key={cat}>
-                      <h3 className={`text-sm font-black ${'text-gray-500'} uppercase tracking-[0.3em] mb-6 flex items-center gap-3`}>
-                          <div className={`h-px ${'bg-surface-light'} flex-1`}></div>
-                          {cat}
-                          <div className={`h-px ${'bg-surface-light'} flex-1`}></div>
-                      </h3>
-                      {filteredProducts.some(p => p.sottocategoria) ? (
-                        (() => {
-                          const subcats = [...new Set(filteredProducts.map(p => p.sottocategoria || 'Altro'))];
-                          return subcats.map(sub => {
-                            const subProducts = filteredProducts.filter(p => (p.sottocategoria || 'Altro') === sub);
-                            return (
-                              <div key={sub} className="mb-6">
-                                <h4 className={`text-[10px] font-black ${'text-gray-500'} uppercase tracking-[0.3em] mb-4 ml-1`}>{sub}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                  {subProducts.map(product => (
-                                    <div key={product.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
-                                      <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                          <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{product.nome}</h4>
-                                          <p className={`${'text-gold'} font-black mt-1`}>€{product.prezzo.toFixed(2)}</p>
-                                          {product.ingredienti.length > 0 && (
-                                            <p className={`text-[9px] ${'text-gray-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
-                                          )}
-                                        </div>
-                                        <div className="flex gap-2">
-                                          <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                                          <button onClick={() => deleteProduct(product.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
-                                        </div>
-                                      </div>
-                                      <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
-                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${product.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                                          {product.disponibile ? 'Disponibile' : 'Esaurito'}
-                                        </span>
-                                        <button onClick={() => toggleAvailability(product.id, product.disponibile)}
-                                          className={`p-2.5 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}>
-                                          {product.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          });
-                        })()
-                      ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {filteredProducts.map(product => (
-                            <div key={product.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
-                               <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{product.nome}</h4>
-                                    <p className={`${'text-gold'} font-black mt-1`}>€{product.prezzo.toFixed(2)}</p>
-                                    {product.ingredienti.length > 0 && (
-                                      <p className={`text-[9px] ${'text-gray-500'} mt-1.5`}>{product.ingredienti.join(', ')}</p>
-                                    )}
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => { setEditingProduct(product); setIsModalOpen(true); }} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                                    <button onClick={() => deleteProduct(product.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
-                                </div>
-                             </div>
-                             
-                             <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
-                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${product.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                                    {product.disponibile ? 'Disponibile' : 'Esaurito'}
-                                </span>
-                                <button 
-                                    onClick={() => toggleAvailability(product.id, product.disponibile)}
-                                    className={`p-2.5 rounded-md transition-colors ${product.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
-                                >
-                                    {product.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                                </button>
-                             </div>
-                          </div>
-                        ))}
-                    </div>
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
-            </div>
+            <MenuTab
+              products={products}
+              allCategories={allCategories}
+              menuCategory={menuCategory}
+              onMenuCategoryChange={setMenuCategory}
+              menuSearch={menuSearch}
+              onMenuSearchChange={setMenuSearch}
+              canEditMenu={canEditMenu}
+              onNewProduct={() => { setEditingProduct(null); setNewProduct(prev => ({ ...prev, categoria: menuCategory || prev.categoria })); setIsModalOpen(true); }}
+              onEditProduct={(product) => { setEditingProduct(product); setIsModalOpen(true); }}
+              onDeleteProduct={deleteProduct}
+              onToggleAvailability={toggleAvailability}
+              onCategoryRename={(oldName, newName) => {
+                const newOrder = categoryOrder.map(c => c === oldName ? newName : c);
+                setCategoryOrderState(newOrder);
+                saveCategoryOrder(newOrder);
+                if (extraCategories.includes(oldName)) {
+                  persistExtraCat(extraCategories.map(c => c === oldName ? newName : c));
+                }
+              }}
+              onCategoryDelete={(cat) => persistExtraCat(extraCategories.filter(c => c !== cat))}
+              onCategoryMoveUp={(cat) => {
+                const idx = allCategories.indexOf(cat);
+                if (idx > 0) { const newOrder = [...allCategories]; [newOrder[idx-1], newOrder[idx]] = [newOrder[idx], newOrder[idx-1]]; setCategoryOrderState(newOrder); saveCategoryOrder(newOrder); }
+              }}
+              onCategoryMoveDown={(cat) => {
+                const idx = allCategories.indexOf(cat);
+                if (idx < allCategories.length - 1) { const newOrder = [...allCategories]; [newOrder[idx], newOrder[idx+1]] = [newOrder[idx+1], newOrder[idx]]; setCategoryOrderState(newOrder); saveCategoryOrder(newOrder); }
+              }}
+              onCategoryAdd={(name) => {
+                if (!allCategories.includes(name)) {
+                  persistExtraCat([...extraCategories, name]);
+                }
+                setNewProduct({ ...newProduct, categoria: name });
+                setMenuCategory(name);
+              }}
+            />
           )}
 
           {activeTab === 'ingredients' && (
-            <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Aggiunte</h2>
-                  <p className={'text-gray-500'}>Modifica i prezzi e la disponibilità degli ingredienti extra.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  <div className="relative w-full sm:w-64">
-                    <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
-                    <input 
-                      type="text" 
-                      placeholder="Cerca aggiunta..."
-                      value={ingredientSearch}
-                      onChange={e => setIngredientSearch(e.target.value)}
-                      className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
-                    />
-                    {ingredientSearch && (
-                      <button
-                        onClick={() => setIngredientSearch('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
-                        aria-label="Cancella ricerca"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                  <button 
-                      onClick={() => { setEditingIngredient(null); setIsIngredientsModalOpen(true); }}
-                      className={`${'bg-gold text-black'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
-                  >
-                      <Plus size={20} /> Nuova Aggiunta
-                  </button>
-                </div>
-              </header>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {ingredients
-                    .filter(ing => ing.nome.toLowerCase().includes(ingredientSearch.toLowerCase()))
-                    .map(ing => (
-                    <div key={ing.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
-                       <div className="flex justify-between items-start mb-4">
-                          <div>
-                              <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
-                          </div>
-                          <div className="flex gap-2">
-                              <button onClick={() => { setEditingIngredient(ing); setIsIngredientsModalOpen(true); }} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                              <button onClick={() => deleteIngredient(ing.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
-                          </div>
-                       </div>
-                       
-                       <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black ${'text-gray-500'} uppercase`}>Prezzo</span>
-                            <input 
-                              type="text"
-                              inputMode="decimal"
-                              value={additionPriceDrafts[ing.id] ?? (ing.prezzo ?? 0).toFixed(2)}
-                              onChange={e => setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: e.target.value }))}
-                              onBlur={e => {
-                                const raw = e.target.value.replace(',', '.');
-                                const val = parseFloat(raw);
-                                if (!isNaN(val) && val >= 0) {
-                                  supabase?.from('ingredienti').update({ prezzo: val }).eq('id', ing.id).then(() => fetchIngredients());
-                                  setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: val.toFixed(2) }));
-                                } else {
-                                  setAdditionPriceDrafts(prev => ({ ...prev, [ing.id]: (ing.prezzo ?? 0).toFixed(2) }));
-                                }
-                              }}
-                              className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold text-gold'} border rounded-lg py-1.5 px-2 font-bold text-xs text-center outline-none transition-all`}
-                            />
-                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>€</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                                {ing.disponibile ? 'Disponibile' : 'Esaurito'}
-                            </span>
-                            <button 
-                                onClick={() => toggleIngredientAvailability(ing.id, ing.disponibile)}
-                                className={`p-2.5 rounded-md transition-colors ${ing.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
-                            >
-                                {ing.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                            </button>
-                          </div>
-                       </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
+            <IngredientsTab
+              ingredients={ingredients}
+              ingredientSearch={ingredientSearch}
+              onIngredientSearchChange={setIngredientSearch}
+              canEditMenu={canEditMenu}
+              onNew={() => { setEditingIngredient(null); setIsIngredientsModalOpen(true); }}
+              onEdit={(ing) => { setEditingIngredient(ing); setIsIngredientsModalOpen(true); }}
+              onDelete={deleteIngredient}
+              onToggleAvailability={toggleIngredientAvailability}
+              priceDrafts={additionPriceDrafts}
+              onPriceChange={handleAdditionPriceChange}
+              onPriceBlur={handleAdditionPriceBlur}
+            />
           )}
 
           {activeTab === 'removals' && (
-            <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Rimozioni</h2>
-                  <p className={'text-gray-500'}>Imposta lo sconto per la rimozione di ogni ingrediente.</p>
-                </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
-                  <input 
-                    type="text" 
-                    placeholder="Cerca ingrediente..."
-                    value={ingredientSearch}
-                    onChange={e => setIngredientSearch(e.target.value)}
-                    className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
-                  />
-                  {ingredientSearch && (
-                    <button
-                      onClick={() => setIngredientSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
-                      aria-label="Cancella ricerca"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              </header>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {ingredients
-                    .filter(ing => ing.nome.toLowerCase().includes(ingredientSearch.toLowerCase()))
-                    .map(ing => (
-                    <div key={ing.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
-                       <div className="flex justify-between items-start mb-4">
-                          <div>
-                              <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
-                              <p className="text-rose-400 font-black mt-1">-€{(ing.prezzo_rimozione || 0).toFixed(2)}</p>
-                          </div>
-                       </div>
-                       
-                       <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black ${'text-gray-500'} uppercase`}>Riduzione</span>
-                            <input 
-                              type="text"
-                              inputMode="decimal"
-                              value={removalPriceDrafts[ing.id] ?? (ing.prezzo_rimozione ?? 0).toFixed(2)}
-                              onChange={e => setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: e.target.value }))}
-                              onBlur={e => {
-                                const raw = e.target.value.replace(',', '.');
-                                const val = parseFloat(raw);
-                                if (!isNaN(val) && val >= 0) {
-                                  supabase?.from('ingredienti').update({ prezzo_rimozione: val }).eq('id', ing.id).then(() => fetchIngredients());
-                                  setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: val.toFixed(2) }));
-                                } else {
-                                  setRemovalPriceDrafts(prev => ({ ...prev, [ing.id]: (ing.prezzo_rimozione ?? 0).toFixed(2) }));
-                                }
-                              }}
-                              className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
-                            />
-                            <span className={`text-[10px] font-black ${'text-gray-500'}`}>€</span>
-                          </div>
-                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                              {ing.disponibile ? 'Disponibile' : 'Esaurito'}
-                          </span>
-                       </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
+            <RemovalsTab
+              ingredients={ingredients}
+              ingredientSearch={ingredientSearch}
+              onIngredientSearchChange={setIngredientSearch}
+              priceDrafts={removalPriceDrafts}
+              onPriceChange={handleRemovalPriceChange}
+              onPriceBlur={handleRemovalPriceBlur}
+              canEditMenu={canEditMenu}
+            />
           )}
 
           {activeTab === 'variants' && (
-            <div className={`max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500`}>
-              <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Varianti</h2>
-                  <p className={'text-gray-500'}>Modifica le varianti rapide per ogni categoria di piatti.</p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <select
-                    value={variantCategoryFilter || ''}
-                    onChange={e => setVariantCategoryFilter(e.target.value || null)}
-                    className={`${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-2.5 px-4 text-white font-bold text-sm outline-none transition-all`}
-                  >
-                    <option value="">Tutte le categorie</option>
-                    {allCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => {
-                      const newV: ProductVariant = {
-                        id: `v_${Date.now()}`,
-                        label: '',
-                        price: 0,
-                        categories: variantCategoryFilter || 'Antipasti',
-                        section: 'EXTRA',
-                        style: 'gold',
-                        stackable: false,
-                        order: variants.length + 1,
-                      };
-                      persistVariants([...variants, newV]);
-                      setVariantEditingId(newV.id);
-                      setVariantEditDraft(newV);
-                    }}
-                    className={`${'bg-gold text-black'} font-bold py-2.5 px-5 rounded-2xl flex items-center gap-2 transition-all`}
-                  >
-                    <Plus size={18} /> Nuova Variante
-                  </button>
-                </div>
-              </header>
-
-              {(() => {
-                const filtered = variantCategoryFilter
-                  ? variants.filter(v => v.categories.includes(variantCategoryFilter))
-                  : variants;
-                const grouped: Record<string, typeof filtered> = {};
-                for (const v of filtered) {
-                  if (!grouped[v.section]) grouped[v.section] = [];
-                  grouped[v.section].push(v);
-                }
-                for (const key of Object.keys(grouped)) {
-                  grouped[key].sort((a, b) => a.order - b.order);
-                }
-                const sectionOrder = ['VARIANTI RAPIDE', 'MODIFICHE', 'COTTURA', 'GLASSA / CONDIMENTI', 'PREPARAZIONE', 'CONDIMENTI', 'EXTRA'];
-                const sortedSections = Object.keys(grouped).sort(
-                  (a, b) => (sectionOrder.indexOf(a) === -1 ? 99 : sectionOrder.indexOf(a)) - (sectionOrder.indexOf(b) === -1 ? 99 : sectionOrder.indexOf(b))
-                );
-                const variantCard = (v: typeof filtered[0]) => {
-                  const isEditing = variantEditingId === v.id;
-                  return (
-                    <div key={v.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all ${isEditing ? ('ring-2 ring-gold/40 border-gold/30') : ''}`}>
-                      {isEditing ? (
-                        <div className="space-y-3">
-                          <input
-                            type="text"
-                            value={variantEditDraft.label ?? ''}
-                            onChange={e => setVariantEditDraft(prev => ({ ...prev, label: e.target.value }))}
-                            placeholder="Nome variante"
-                            className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-2 px-3 text-white font-bold text-sm outline-none transition-all`}
-                          />
-                          <div className="flex gap-2">
-                            <div className="flex-1">
-                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Prezzo</label>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={variantEditDraft.price ?? 0}
-                                onChange={e => {
-                                  const raw = e.target.value.replace(',', '.');
-                                  const val = parseFloat(raw);
-                                  setVariantEditDraft(prev => ({ ...prev, price: isNaN(val) ? 0 : val }));
-                                }}
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Ordine</label>
-                              <input
-                                type="number"
-                                value={variantEditDraft.order ?? 0}
-                                onChange={e => setVariantEditDraft(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs text-center outline-none transition-all`}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <div className="flex-1">
-                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Sezione</label>
-                              <select
-                                value={variantEditDraft.section ?? 'EXTRA'}
-                                onChange={e => setVariantEditDraft(prev => ({ ...prev, section: e.target.value }))}
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
-                              >
-                                <option value="VARIANTI RAPIDE">VARIANTI RAPIDE</option>
-                                <option value="MODIFICHE">MODIFICHE</option>
-                                <option value="COTTURA">COTTURA</option>
-                                <option value="GLASSA / CONDIMENTI">GLASSA / CONDIMENTI</option>
-                                <option value="PREPARAZIONE">PREPARAZIONE</option>
-                                <option value="EXTRA">EXTRA</option>
-                                <option value="CONDIMENTI">CONDIMENTI</option>
-                              </select>
-                            </div>
-                            <div className="flex-1">
-                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Stile</label>
-                              <select
-                                value={variantEditDraft.style ?? 'gold'}
-                                onChange={e => setVariantEditDraft(prev => ({ ...prev, style: e.target.value as 'gold' | 'emerald' | 'rose' }))}
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
-                              >
-                                <option value="gold">Gold</option>
-                                <option value="emerald">Emerald</option>
-                                <option value="rose">Rose</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="flex gap-3">
-                            <div className="flex-1">
-                              <label className={`text-[9px] font-black ${'text-gray-500'} uppercase mb-1 block`}>Categorie</label>
-                              <input
-                                type="text"
-                                value={variantEditDraft.categories ?? ''}
-                                onChange={e => setVariantEditDraft(prev => ({ ...prev, categories: e.target.value }))}
-                                placeholder="es: Pizze Rosse,Antipasti"
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-lg py-1.5 px-2 text-white font-bold text-xs outline-none transition-all`}
-                              />
-                            </div>
-                            <div className="flex items-end pb-1">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <span className={`text-[9px] font-black ${'text-gray-500'} uppercase`}>Stackable</span>
-                                <input
-                                  type="checkbox"
-                                  checked={variantEditDraft.stackable ?? false}
-                                  onChange={e => setVariantEditDraft(prev => ({ ...prev, stackable: e.target.checked }))}
-                                  className="w-4 h-4 rounded accent-emerald-500"
-                                />
-                              </label>
-                            </div>
-                          </div>
-                          <div className="flex gap-2 pt-2">
-                            <button
-                              onClick={() => {
-                                if (variantEditDraft.label?.trim()) {
-                                  persistVariants(variants.map(x => x.id === v.id ? { ...v, ...variantEditDraft } as ProductVariant : x));
-                                  setVariantEditingId(null);
-                                  setVariantEditDraft({});
-                                }
-                              }}
-                              className={`flex-1 ${'bg-emerald-500 text-black'} font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-all`}
-                            >
-                              <Save size={14} /> Salva
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (!v.label) { persistVariants(variants.filter(x => x.id !== v.id)); }
-                                setVariantEditingId(null);
-                                setVariantEditDraft({});
-                              }}
-                              className={`flex-1 ${'bg-charcoal border border-surface-light text-gray-500'} font-bold py-2 rounded-xl text-xs transition-all`}
-                            >
-                              Annulla
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{v.label || '(senza nome)'}</h4>
-                              <p className="text-xs text-gray-500 mt-0.5 font-medium">{v.categories}</p>
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => { setVariantEditingId(v.id); setVariantEditDraft({ ...v }); }}
-                                className={`p-1.5 rounded-lg ${'hover:bg-charcoal text-gray-500 hover:text-gold'} transition-all`}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => persistVariants(variants.filter(x => x.id !== v.id))}
-                                className={`p-1.5 rounded-lg ${'hover:bg-charcoal text-gray-500 hover:text-red-400'} transition-all`}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${v.style === 'gold' ? 'bg-gold/10 text-gold' : v.style === 'emerald' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                              {v.section}
-                            </span>
-                            {v.price > 0 && <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">+€{v.price.toFixed(2)}</span>}
-                            {v.stackable && <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">Stackable</span>}
-                            <span className="text-[10px] text-gray-600 font-bold px-2 py-0.5">ord. {v.order}</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                };
-                return sortedSections.length > 0 ? sortedSections.map(section => (
-                  <div key={section} className="mb-6 last:mb-0">
-                    <div className="flex items-center gap-3 mb-3">
-                      <h3 className={`text-xs font-black uppercase tracking-[0.25em] ${'text-gray-500'}`}>{section}</h3>
-                      <div className={`flex-1 h-px ${'bg-surface-light'}`} />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {grouped[section].map(v => variantCard(v))}
-                    </div>
-                  </div>
-                )) : (
-                  <div className="text-center py-12">
-                    <p className={`text-sm font-bold ${'text-gray-500'}`}>Nessuna variante per questa categoria.</p>
-                  </div>
-                );
-              })()}
-
-              <div className="mt-8 flex justify-center">
-                <button
-                  onClick={() => {
-                    persistVariants(getProductVariants());
-                    setVariantEditingId(null);
-                    setVariantEditDraft({});
-                  }}
-                  className={`${'text-gray-500 hover:text-red-400 border-surface-light hover:border-red-400/30'} border rounded-xl py-2 px-6 text-xs font-bold transition-all`}
-                >
-                  Ripristina varianti predefinite
-                </button>
-              </div>
-            </div>
+            <VariantsTab allCategories={allCategories} canEditMenu={canEditMenu} />
           )}
 
           {activeTab === 'haccp' && (
@@ -962,62 +497,17 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
             onSave={handleSaveProduct}
           />
 
-          {/* New/Edit Ingredient Modal */}
-          {isIngredientsModalOpen && (
-              <div className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${'bg-black/80'} backdrop-blur-md animate-in fade-in duration-200`}>
-                  <div className={`${'bg-surface border-surface-light'} border w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200`}>
-                      <div className={`p-8 border-b ${'border-surface-light bg-surface-light/20'} flex justify-between items-center`}>
-                          <h3 className="text-2xl font-bold text-white italic uppercase tracking-tighter">
-                              {editingIngredient ? 'Modifica' : 'Nuova'} <span className={'text-gold'}>Aggiunta</span>
-                          </h3>
-                          <button onClick={() => setIsIngredientsModalOpen(false)} className={`p-2 ${'text-gray-500 hover:text-white'}`}><X size={24} /></button>
-                      </div>
-                      
-                      <div className="p-8 space-y-6">
-                          <div>
-                              <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-2`}>Nome Aggiunta</label>
-                              <input 
-                                type="text" 
-                                value={editingIngredient ? editingIngredient.nome : newIngredient.nome}
-                                onChange={e => editingIngredient ? setEditingIngredient({...editingIngredient, nome: e.target.value}) : setNewIngredient({...newIngredient, nome: e.target.value})}
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
-                                placeholder="Esempio: Mozzarella di Bufala"
-                              />
-                          </div>
-
-                          <div>
-                               <label className={`block text-xs font-black ${'text-gray-500'} uppercase mb-2`}>Prezzo Extra (€)</label>
-                              <input 
-                                type="text"
-                                inputMode="decimal"
-                                value={ingredientPriceDraft}
-                                onChange={e => setIngredientPriceDraft(e.target.value)}
-                                onBlur={e => {
-                                  const raw = e.target.value.replace(',', '.');
-                                  const val = parseFloat(raw);
-                                  if (!isNaN(val) && val >= 0) {
-                                    if (editingIngredient) setEditingIngredient({...editingIngredient, prezzo: val}); else setNewIngredient({...newIngredient, prezzo: val});
-                                    setIngredientPriceDraft(String(val));
-                                  } else {
-                                    setIngredientPriceDraft(String(editingIngredient?.prezzo ?? newIngredient.prezzo ?? 1.5));
-                                  }
-                                }}
-                                className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-xl py-3 px-4 text-white outline-none`}
-                              />
-                          </div>
-                      </div>
-
-                      <div className={`p-8 ${'bg-surface-light/20 border-surface-light'} border-t flex flex-col gap-3`}>
-                          <button 
-                            onClick={handleSaveIngredient}
-                            className={`w-full ${'bg-gold text-black'} font-bold py-4 rounded-xl flex items-center justify-center gap-2`}
-                          >
-                            <Save size={20} /> Salva Aggiunta
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          )}
+          <IngredientFormModal
+            isOpen={isIngredientsModalOpen}
+            editingIngredient={editingIngredient}
+            newIngredient={newIngredient}
+            priceDraft={ingredientPriceDraft}
+            onClose={() => setIsIngredientsModalOpen(false)}
+            onEditingIngredientChange={setEditingIngredient}
+            onNewIngredientChange={setNewIngredient}
+            onPriceDraftChange={setIngredientPriceDraft}
+            onSave={handleSaveIngredient}
+          />
         </main>
       </div>
     </div>

@@ -26,7 +26,7 @@ export default function MenuQRView() {
         <p className="text-sm text-gray-500 font-medium mb-6">Ristorante Pizzeria</p>
 
         <div className="w-full mb-6">
-          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 block text-center">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block text-center">
             Tavolo (opzionale)
           </label>
           <input
@@ -53,7 +53,7 @@ export default function MenuQRView() {
         </p>
 
         <div className="w-full bg-gray-100 rounded-2xl p-3 text-center mb-6">
-          <p className="text-[9px] text-gray-500 font-mono break-all">{url}</p>
+          <p className="text-[10px] text-gray-500 font-mono break-all">{url}</p>
         </div>
 
         <div className="flex gap-3 mb-8">
@@ -82,7 +82,7 @@ export default function MenuQRView() {
         </div>
 
         <div className="w-full border-t border-gray-200 pt-6 flex flex-col items-center">
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-4 text-center">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 text-center">
             WiFi Ospiti — inquadra per connetterti
           </p>
           <div data-qr="wifi" className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-3">

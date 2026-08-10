@@ -857,13 +857,13 @@ export default function WaiterMobileView() {
                     {currentUser ? `Ciao, ${currentUser.name}` : 'Il Girasole'}
                   </h1>
                   {currentUser && (
-                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.role}</p>
+                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.role}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <PrinterStatusBadge />
                   {pendingSyncCount > 0 && (
-                    <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[8px] font-black uppercase tracking-wider animate-pulse">
+                    <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] font-black uppercase tracking-wider animate-pulse">
                       <WifiOff size={10} /> {pendingSyncCount}
                     </div>
                   )}
@@ -995,9 +995,9 @@ export default function WaiterMobileView() {
             <div className="flex flex-col items-center">
               <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-[8px] font-black text-gold uppercase tracking-[0.2em]">Coperti: {selectedTable.clienti}</span>
+                <span className="text-[9px] font-black text-gold uppercase tracking-[0.2em]">Coperti: {selectedTable.clienti}</span>
                 {selectedTable.status === 'OCCUPATO' && tableApertura[selectedTable.id] && (
-                  <span className="flex items-center gap-1 text-[8px] font-black text-amber-400 uppercase tracking-[0.2em]">
+                  <span className="flex items-center gap-1 text-[9px] font-black text-amber-400 uppercase tracking-[0.2em]">
                     <Clock size={10} /> {(() => {
                       const diff = now - new Date(tableApertura[selectedTable.id]).getTime();
                       const mins = Math.floor(diff / 60000);
@@ -1056,11 +1056,11 @@ export default function WaiterMobileView() {
                     <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => setBillsDayOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[9px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
+                    <button type="button" onClick={() => setBillsDayOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[10px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
                       <Receipt size={14} className="inline mr-1" /> Oggi
                     </button>
                     {selectedTable && (
-                      <button type="button" onClick={() => setBillsTableOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[9px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
+                      <button type="button" onClick={() => setBillsTableOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[10px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
                         <Receipt size={14} className="inline mr-1" /> Storico
                       </button>
                     )}
@@ -1127,14 +1127,14 @@ export default function WaiterMobileView() {
               <button
                 onClick={handlePrint}
                 disabled={cart.length === 0}
-                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
+                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
               >
                 <Printer size={14} /> STAMPA
               </button>
               <button
                 onClick={() => saveOrder()}
                 disabled={cart.length === 0 || orderActionBusy}
-                className={`py-3 rounded-xl border font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                className={`py-3 rounded-xl border font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
                   success
                     ? 'bg-emerald-500 border-emerald-500 text-black'
                     : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
@@ -1145,7 +1145,7 @@ export default function WaiterMobileView() {
             </div>
             {IS_DEMO_MODE && (
                <div className="mt-2 text-center">
-                 <span className="text-[9px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">DEMO MODE</span>
+                 <span className="text-[10px] font-black uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">DEMO MODE</span>
                </div>
             )}
           </div>
@@ -1230,7 +1230,7 @@ export default function WaiterMobileView() {
                   if (roomTables.length === 0) return null;
                   return (
                     <div key={room}>
-                      <p className="text-[9px] font-black uppercase tracking-[0.25em] text-gray-600 mb-2 px-1">{room}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-600 mb-2 px-1">{room}</p>
                       <div className="grid grid-cols-2 gap-2">
                         {roomTables.map(t => {
                           const isFree = t.status === 'LIBERO';
@@ -1245,7 +1245,7 @@ export default function WaiterMobileView() {
                                   : 'border-surface-light bg-charcoal/50 opacity-40 cursor-not-allowed'
                               }`}
                             >
-                              <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border self-start ${
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border self-start ${
                                 isFree ? 'border-green-500/40 text-green-400' : 'border-surface-light text-gray-600'
                               }`}>
                                 {t.status === 'LIBERO' ? 'Libero' : t.status}
@@ -1374,7 +1374,7 @@ export default function WaiterMobileView() {
               <div className="flex justify-between items-center mb-5">
                 <div>
                   <h2 className="text-lg font-black italic uppercase tracking-tighter text-white">{reservationModal.reservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
-                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-0.5">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-0.5">
                     {reservationModal.table ? `Tavolo: ${reservationModal.table.nome}` : 'Nessun tavolo assegnato'}
                   </p>
                 </div>
@@ -1384,21 +1384,21 @@ export default function WaiterMobileView() {
               </div>
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Cliente</label>
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Cliente</label>
                   <input type="text" placeholder="es. Mario Rossi" value={resForm.nome} onChange={e => setResForm({...resForm, nome: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Data</label>
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Data</label>
                     <input type="date" value={resForm.data} onChange={e => setResForm({...resForm, data: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Ora</label>
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Ora</label>
                     <input type="time" value={resForm.ora} onChange={e => setResForm({...resForm, ora: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
                   <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-xl p-1.5 px-3">
                     <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-8 h-8 bg-surface rounded-lg text-gold active:scale-90 text-sm">-</button>
                     <span className="text-xl font-black text-white">{resForm.persone}</span>
@@ -1406,7 +1406,7 @@ export default function WaiterMobileView() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
                   <select
                     value={resForm.tavolo_id || ''}
                     onChange={e => setResForm({...resForm, tavolo_id: e.target.value || undefined})}
@@ -1443,7 +1443,7 @@ export default function WaiterMobileView() {
             <div className="p-5 border-b border-surface-light flex justify-between items-center bg-surface-light/5">
               <div>
                 <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">Libro <span className="text-gold">Prenotazioni</span></h2>
-                <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mt-0.5">Prenotazioni di oggi</p>
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-0.5">Prenotazioni di oggi</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="p-3 bg-gold text-black rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-gold/20">
@@ -1469,7 +1469,7 @@ export default function WaiterMobileView() {
                       <div key={res.id} className="bg-gradient-to-br from-charcoal to-surface border border-surface-light/80 p-4 rounded-[24px] flex items-center justify-between group hover:border-gold/40 hover:shadow-lg hover:shadow-gold/5 transition-all">
                          <div className="flex items-center gap-4 flex-1 min-w-0">
                             <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 shrink-0">
-                               <p className="text-[8px] font-black text-gold/70 uppercase tracking-widest leading-none">Ora</p>
+                               <p className="text-[9px] font-black text-gold/70 uppercase tracking-widest leading-none">Ora</p>
                                <p className="text-lg font-black text-gold italic leading-tight">{res.ora.length > 5 ? res.ora.slice(0, 5) : res.ora}</p>
                             </div>
                             <div className="min-w-0">
@@ -1586,7 +1586,7 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
           <div className="flex items-center gap-2">
             <h5 className="font-bold text-white text-sm truncate">{item.nome}</h5>
             {item.portata && (
-              <span className={`shrink-0 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
+              <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
                 {item.portata}ª
               </span>
             )}

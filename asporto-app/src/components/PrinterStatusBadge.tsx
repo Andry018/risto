@@ -39,7 +39,7 @@ export default function PrinterStatusBadge({ size = 'sm' }: { size?: 'sm' | 'md'
   return (
     <div className="flex items-center gap-1.5 group relative" title={labelMap[status]}>
       <div className={`${dotSize} rounded-full ${colorMap[status]} ${status === 'online' ? '' : 'animate-pulse'} shadow-lg`} />
-      <span className="hidden group-hover:inline absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 bg-charcoal border border-surface-light rounded-lg text-[8px] font-black text-white whitespace-nowrap uppercase tracking-wider z-50 shadow-xl pointer-events-none">
+      <span className="hidden group-hover:inline absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 bg-charcoal border border-surface-light rounded-lg text-[9px] font-black text-white whitespace-nowrap uppercase tracking-wider z-50 shadow-xl pointer-events-none">
         {labelMap[status]}
       </span>
     </div>

@@ -163,7 +163,7 @@ export default function BillsHistoryModal({ open, onClose, variant, tableName, o
                   <div className="flex items-center gap-4 ml-auto sm:ml-0 shrink-0">
                     <div className="text-right">
                       <p className="text-2xl font-black text-gold italic">€{Number(o.totale).toFixed(2)}</p>
-                      <p className="text-[9px] font-black text-gray-600 uppercase">
+                      <p className="text-[10px] font-black text-gray-600 uppercase">
                         {(o.carrello?.length ?? 0)} voci
                       </p>
                     </div>

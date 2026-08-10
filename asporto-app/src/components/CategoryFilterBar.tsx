@@ -10,13 +10,13 @@ interface Props {
   onCategoryMoveUp: (cat: string) => void;
   onCategoryMoveDown: (cat: string) => void;
   onCategoryAdd: (name: string) => void;
-  
+  readOnly?: boolean;
 }
 
 export default function CategoryFilterBar({
   allCategories, activeCategory, onCategoryChange,
   onCategoryRename, onCategoryDelete, onCategoryMoveUp, onCategoryMoveDown,
-  onCategoryAdd,
+  onCategoryAdd, readOnly = false,
 }: Props) {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryDraft, setEditCategoryDraft] = useState('');
@@ -67,7 +67,7 @@ export default function CategoryFilterBar({
               cat
             )}
           </button>
-          {editMode && editingCategory !== cat && (
+          {!readOnly && editMode && editingCategory !== cat && (
             <div className="inline-flex items-center gap-0.5 ml-1">
               <button
                 onClick={e => { e.stopPropagation(); setEditingCategory(cat); setEditCategoryDraft(cat); }}
@@ -101,6 +101,7 @@ export default function CategoryFilterBar({
           )}
         </div>
       ))}
+      {!readOnly && (
       <div className="shrink-0 flex items-center gap-1 pl-1">
         {editMode ? (
           <button
@@ -153,6 +154,7 @@ export default function CategoryFilterBar({
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }
