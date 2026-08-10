@@ -4,7 +4,7 @@ _Ultimo aggiornamento: 2026-08-09_
 
 ## 🔴 Da fare subito (bloccato su azioni tue)
 
-- [ ] **Push delle ultime modifiche** — WiFi QR su `/qr-menu`, sezione "Menu Online" in Impostazioni. Ancora non pushate (`git status` mostra modifiche locali).
+- [x] **Push delle ultime modifiche** — WiFi QR su `/qr-menu`, sezione "Menu Online" in Impostazioni. Pushate su `origin/main` (commit `528ffc2`, 2026-08-10).
 - [ ] **Menu Pubblico — completare il deploy**:
   - [ ] Eseguire `menu-pubblico/schema.sql` nel SQL Editor del progetto Supabase Cloud (`ihkdpdawyksohtggspbw`)
   - [ ] Deploy della cartella `menu-pubblico/` su Vercel
