@@ -9,8 +9,18 @@ echo ===================================================
 cd /d C:\risto
 for /f "delims=" %%H in ('git rev-parse HEAD') do set OLD_HEAD=%%H
 git pull
+set PULL_RC=%errorlevel%
 for /f "delims=" %%H in ('git rev-parse HEAD') do set NEW_HEAD=%%H
-if "%OLD_HEAD%"=="%NEW_HEAD%" (set GIT_CHANGED=0) else (set GIT_CHANGED=1)
+if not %PULL_RC%==0 (
+    echo.
+    echo [ATTENZIONE] git pull ha restituito un errore ^(modifiche locali in conflitto?^).
+    echo Forzo comunque una build completa per sicurezza.
+    set GIT_CHANGED=1
+) else if "%OLD_HEAD%"=="%NEW_HEAD%" (
+    set GIT_CHANGED=0
+) else (
+    set GIT_CHANGED=1
+)
 echo.
 
 echo ===================================================
