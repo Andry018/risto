@@ -16,6 +16,7 @@ if not %PULL_RC%==0 (
     echo [ATTENZIONE] git pull ha restituito un errore ^(modifiche locali in conflitto?^).
     echo Forzo comunque una build completa per sicurezza.
     set GIT_CHANGED=1
+    pause
 ) else if "%OLD_HEAD%"=="%NEW_HEAD%" (
     set GIT_CHANGED=0
 ) else (
@@ -70,6 +71,7 @@ if not %INSTALL_RC%==0 (
     echo.
     echo [ERRORE] npm install fallito! Controlla il log: %BUILD_LOG%
     echo.
+    pause
 )
 echo Generazione dei file statici ottimizzati in corso...
 powershell -NoProfile -Command "npm run build 2> '%ERR_TMP%' | Tee-Object -FilePath '%BUILD_LOG%' -Append; exit $LASTEXITCODE"
@@ -82,6 +84,7 @@ if not %BUILD_RC%==0 (
     echo.
     echo [ERRORE] Build fallita! Controlla il log: %BUILD_LOG%
     echo.
+    pause
 )
 
 :build_done
