@@ -33,9 +33,16 @@ cd /d C:\risto\asporto-app
 if not exist "C:\risto\logs" mkdir "C:\risto\logs"
 for /f "delims=" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmmss"') do set BUILD_TS=%%T
 set BUILD_LOG=C:\risto\logs\build_%BUILD_TS%.log
-echo Generazione dei file statici ottimizzati in corso...
 echo Log salvato in: %BUILD_LOG%
-powershell -NoProfile -Command "npm run build 2>&1 | Tee-Object -FilePath '%BUILD_LOG%'; exit $LASTEXITCODE"
+echo Installazione/aggiornamento dipendenze npm...
+powershell -NoProfile -Command "npm install 2>&1 | Tee-Object -FilePath '%BUILD_LOG%'; exit $LASTEXITCODE"
+if errorlevel 1 (
+    echo.
+    echo [ERRORE] npm install fallito! Controlla il log: %BUILD_LOG%
+    echo.
+)
+echo Generazione dei file statici ottimizzati in corso...
+powershell -NoProfile -Command "npm run build 2>&1 | Tee-Object -FilePath '%BUILD_LOG%' -Append; exit $LASTEXITCODE"
 if errorlevel 1 (
     echo.
     echo [ERRORE] Build fallita! Controlla il log: %BUILD_LOG%
