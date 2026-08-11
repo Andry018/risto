@@ -13,11 +13,14 @@ _Ultimo aggiornamento: 2026-08-10_
   - [ ] Nell'app locale, Impostazioni → Menu Online: inserire URL + `PUBLISH_SECRET`, poi premere "Pubblica Menu Online"
 - [ ] **Magazzino — primo utilizzo reale**: aggiungere i primi articoli e verificare che carico/scarico funzionino nel servizio vero (schema già confermato funzionante via query diretta).
 - [x] **Eseguire la nuova migrazione** `supabase/migrations/20260809000000_magazzino_barcode.sql` (aggiunge la colonna `codice_a_barre`) — applicata dall'utente.
+- [ ] **Backup database — setup iniziale**: `backup-db.bat` creato ma va testato manualmente e schedulato una volta sul PC del locale. Istruzioni complete in [BACKUP.md](BACKUP.md). **Nessun backup esisteva prima** — priorità alta.
+- [ ] **Pannello Servizi — verificare `admin-server`**: pagina `/servizi` pronta, ma il backend (porta 4000) va confermato attivo e raggiungibile sul PC del locale (vedi sessione in corso — 502 da risolvere).
 
 ## 🟡 In sospeso (serve una decisione)
 
 - [ ] **Food cost**: richiede un sistema di ricette (piatto → ingredienti di magazzino con quantità consumate). Non è un'estensione veloce di Magazzino, è una feature a sé — da avviare quando si decide di investirci.
 - [ ] **WhatsApp per l'invio fatture**: serve un account WhatsApp Business API (Meta Cloud o Twilio) prima di poter partire.
+- [ ] **Performance per operatore nei report**: richiede aggiungere un campo `operatore` alla tabella `ordini` (migrazione DB) — oggi non esiste, quindi non è ricostruibile dai dati storici. Da valutare se vale la pena.
 
 ## 🟢 Idee future (non prioritarie)
 
@@ -40,6 +43,10 @@ _Ultimo aggiornamento: 2026-08-10_
 - **Permessi granulari dentro `/kitchen`**: il ruolo kitchen ora vede solo il toggle disponibilità (piatti, aggiunte, rimozioni, varianti) — niente più aggiunta/modifica/eliminazione né gestione categorie. Verificato in browser per entrambi i ruoli (admin invariato, kitchen ristretto).
 - **Audit testo piccolo**: tutte le occorrenze `text-[8px]`/`text-[9px]` rimaste (escluse le etichette HACCP e i QR da stampa, vincolate a dimensioni fisiche) alzate di uno step (8→9, 9→10px). Verificato senza overflow su POS e altre viste.
 - **Split di `AdminView.tsx`**: da 1025 a ~410 righe. Estratti `components/admin/{MenuTab,IngredientsTab,RemovalsTab,VariantsTab,IngredientFormModal}.tsx`; logica/stato di alto livello rimasti in AdminView, VariantsTab gestisce il proprio stato in autonomia. Type-check, 65 test e verifica manuale di tutti i tab (menu/aggiunte/rimozioni/varianti/haccp) per admin e kitchen: tutto invariato.
+- **Pannello Servizi ricostruito**: rimosso il vecchio `/admin` (endpoint `/api/exec` che eseguiva comandi shell arbitrari, protetto solo da Basic Auth con default debole mai forzato a cambiare — problema di sicurezza serio). Nuova pagina `/servizi` dentro la webapp (protetta dal PIN admin), backend `admin-server` hardenizzato con secret condiviso (`ADMIN_SECRET`/`secrets.bat`, nessun default). Vedi [admin-server/LEGGIMI.md](admin-server/LEGGIMI.md).
+- **Deploy più robusto**: `start.bat` e `autopull.bat` (quello vero, triggerato dal webhook ad ogni push) ora controllano gli errori invece di fallire silenziosamente e continuare come se nulla fosse. Entrambi scrivono `version.txt` (commit + orario) per verificare cosa gira davvero in produzione senza accesso diretto al PC.
+- **Backup database**: `backup-db.bat` + [BACKUP.md](BACKUP.md) — nessun backup esisteva prima. Da testare/schedulare sul PC del locale (vedi sopra).
+- **Report ampliati**: vendite per fascia oraria, confronto incasso/ordini settimana su settimana (rolling 7gg vs 7gg precedenti). "Performance per operatore" valutato ma non fatto — richiederebbe una migrazione DB (vedi sopra).
 
 ## 📝 Note operative
 

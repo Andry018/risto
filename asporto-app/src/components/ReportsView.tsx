@@ -4,7 +4,7 @@ import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, OrderCarrelloItem, DocumentoEmesso } from '../types/entities';
 import { MOCK_ORDERS } from '../lib/MockData';
-import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2, LogOut, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, Plus, Download, Share2, Trash2, LogOut, AlertTriangle, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import BillingModal from './BillingModal';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -24,6 +24,17 @@ interface CategoryStat {
   count: number;
 }
 
+interface HourStat {
+  hour: number;
+  count: number;
+  revenue: number;
+}
+
+interface WeekComparison {
+  thisWeek: { revenue: number; count: number };
+  lastWeek: { revenue: number; count: number };
+}
+
 export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () => void } = {}) {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
@@ -40,6 +51,7 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
   const [documents, setDocuments] = useState<DocumentoEmesso[]>([]);
   const [billingOpen, setBillingOpen] = useState(false);
   const [sharingId, setSharingId] = useState<string | null>(null);
+  const [weekComparison, setWeekComparison] = useState<WeekComparison | null>(null);
 
   async function fetchDocuments() {
     if (IS_DEMO_MODE) { setDocuments([]); return; }
@@ -81,6 +93,26 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
 
   useEffect(() => { void fetchDocuments(); }, []);
 
+  async function fetchWeekComparison() {
+    if (IS_DEMO_MODE || !supabase) return;
+    const now = new Date();
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const { data } = await supabase.from('ordini').select('created_at, totale, status').gte('created_at', twoWeeksAgo.toISOString());
+    if (!data) return;
+    const oneWeekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    const acc: WeekComparison = { thisWeek: { revenue: 0, count: 0 }, lastWeek: { revenue: 0, count: 0 } };
+    data.forEach((o: { created_at: string; totale: number; status: string }) => {
+      if (o.status !== 'COMPLETATO') return;
+      const t = new Date(o.created_at).getTime();
+      const bucket = t >= oneWeekAgo ? acc.thisWeek : acc.lastWeek;
+      bucket.revenue += o.totale;
+      bucket.count += 1;
+    });
+    setWeekComparison(acc);
+  }
+
+  useEffect(() => { void fetchWeekComparison(); }, []);
+
   const stats = useMemo(() => {
     const completed = orders.filter(o => o.status === 'COMPLETATO');
     const totalRevenue = completed.reduce((sum, o) => sum + o.totale, 0);
@@ -116,7 +148,19 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
 
     const pendingCount = orders.filter(o => o.status === 'IN_ATTESA').length;
 
-    return { totalRevenue, totalOrders, avgOrder, topProducts, categoryStats, pendingCount };
+    const hourMap = new Map<number, { count: number; revenue: number }>();
+    completed.forEach(order => {
+      const hour = new Date(order.created_at).getHours();
+      const existing = hourMap.get(hour) || { count: 0, revenue: 0 };
+      existing.count += 1;
+      existing.revenue += order.totale;
+      hourMap.set(hour, existing);
+    });
+    const hourlyStats: HourStat[] = Array.from(hourMap.entries())
+      .map(([hour, data]) => ({ hour, ...data }))
+      .sort((a, b) => a.hour - b.hour);
+
+    return { totalRevenue, totalOrders, avgOrder, topProducts, categoryStats, pendingCount, hourlyStats };
   }, [orders]);
 
   const periodLabel = period === 'today' ? 'Oggi' : period === 'week' ? 'Ultimi 7 Giorni' : 'Ultimi 30 Giorni';
@@ -219,6 +263,79 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
               >
                 <LogOut size={16} /> CHIUDI GIORNATA
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Week over Week */}
+        {weekComparison && (weekComparison.thisWeek.count > 0 || weekComparison.lastWeek.count > 0) && (
+          <div className="bg-surface border border-surface-light rounded-[40px] p-8 mb-10">
+            <h2 className="text-lg font-black italic uppercase tracking-tighter text-white mb-6 flex items-center gap-3">
+              <TrendingUp className="text-gold" size={20} /> Settimana su Settimana
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {(() => {
+                const { thisWeek, lastWeek } = weekComparison;
+                const revenueDelta = lastWeek.revenue > 0 ? ((thisWeek.revenue - lastWeek.revenue) / lastWeek.revenue) * 100 : null;
+                const countDelta = lastWeek.count > 0 ? ((thisWeek.count - lastWeek.count) / lastWeek.count) * 100 : null;
+                const deltaBadge = (delta: number | null) => {
+                  if (delta === null) return null;
+                  const up = delta > 0.5;
+                  const down = delta < -0.5;
+                  const color = up ? 'text-emerald-400 bg-emerald-500/10' : down ? 'text-rose-400 bg-rose-500/10' : 'text-gray-400 bg-gray-500/10';
+                  const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
+                  return (
+                    <span className={`inline-flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-full ${color}`}>
+                      <Icon size={14} /> {Math.abs(delta).toFixed(0)}%
+                    </span>
+                  );
+                };
+                return (
+                  <>
+                    <div className="bg-charcoal/50 rounded-2xl p-6 border border-surface-light">
+                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Incasso (ultimi 7gg vs 7 precedenti)</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-2xl font-black text-white">€{thisWeek.revenue.toFixed(2)}</p>
+                        {deltaBadge(revenueDelta)}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">vs €{lastWeek.revenue.toFixed(2)} settimana precedente</p>
+                    </div>
+                    <div className="bg-charcoal/50 rounded-2xl p-6 border border-surface-light">
+                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Ordini (ultimi 7gg vs 7 precedenti)</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-2xl font-black text-white">{thisWeek.count}</p>
+                        {deltaBadge(countDelta)}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">vs {lastWeek.count} settimana precedente</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Hourly Breakdown */}
+        {stats.hourlyStats.length > 0 && (
+          <div className="bg-surface border border-surface-light rounded-[40px] p-8 mb-10">
+            <h2 className="text-lg font-black italic uppercase tracking-tighter text-white mb-6 flex items-center gap-3">
+              <Clock className="text-gold" size={20} /> Vendite per Fascia Oraria — {periodLabel}
+            </h2>
+            <div className="space-y-2">
+              {stats.hourlyStats.map(h => {
+                const maxRevenue = Math.max(...stats.hourlyStats.map(x => x.revenue), 1);
+                const pct = (h.revenue / maxRevenue) * 100;
+                return (
+                  <div key={h.hour} className="flex items-center gap-4">
+                    <span className="w-14 text-xs font-black text-gray-500 shrink-0">{String(h.hour).padStart(2, '0')}:00</span>
+                    <div className="flex-1 h-6 bg-charcoal rounded-lg overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-gold to-gold/60 rounded-lg transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-24 text-right text-xs font-black text-gold shrink-0">€{h.revenue.toFixed(2)}</span>
+                    <span className="w-16 text-right text-[10px] text-gray-500 font-bold shrink-0">{h.count} ord.</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

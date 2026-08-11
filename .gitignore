@@ -5,6 +5,9 @@ webhook.exe
 # --- SECRET LOCALI (mai committati) ---
 admin-server/secrets.bat
 logs/
+
+# --- BACKUP DATABASE (dati reali del ristorante, mai committati) ---
+backups/
 # --- LOG E FILE TEMPORANEI NGINX ---
 nginx/logs/
 nginx/temp/
