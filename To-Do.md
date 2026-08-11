@@ -47,6 +47,7 @@ _Ultimo aggiornamento: 2026-08-10_
 - **Deploy più robusto**: `start.bat` e `autopull.bat` (quello vero, triggerato dal webhook ad ogni push) ora controllano gli errori invece di fallire silenziosamente e continuare come se nulla fosse. Entrambi scrivono `version.txt` (commit + orario) per verificare cosa gira davvero in produzione senza accesso diretto al PC.
 - **Backup database**: `backup-db.bat` + [BACKUP.md](BACKUP.md) — nessun backup esisteva prima. Da testare/schedulare sul PC del locale (vedi sopra).
 - **Report ampliati**: vendite per fascia oraria, confronto incasso/ordini settimana su settimana (rolling 7gg vs 7gg precedenti). "Performance per operatore" valutato ma non fatto — richiederebbe una migrazione DB (vedi sopra).
+- **Fatture separate dai Report**: nuova `FattureView.tsx` con rotta propria `/fatture`, estratta da `ReportsView.tsx` (che ora ha solo un link verso Fatture invece della sezione intera). Aggiornati tutti i collegamenti: bottone "Documenti emessi" in Impostazioni, tile dashboard tablet (nuovo, prima mancava del tutto lì). Preparazione in vista di una futura fatturazione elettronica via API (discusso, non ancora deciso quale provider).
 
 ## 📝 Note operative
 

@@ -10,6 +10,7 @@ import PublicMenuView from './components/PublicMenuView';
 import MenuQRView from './components/MenuQRView';
 import MenuQRPrint from './components/MenuQRPrint';
 import ReportsView from './components/ReportsView';
+import FattureView from './components/FattureView';
 import ReservationsView from './components/ReservationsView';
 import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/kitchen" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><AdminView /></StaffPinGuard>} />
           <Route path="/pos" element={<POSView />} />
           <Route path="/reports" element={<StaffPinGuard requiredRoles={['admin']}><ReportsView /></StaffPinGuard>} />
+          <Route path="/fatture" element={<StaffPinGuard requiredRoles={['admin']}><FattureView /></StaffPinGuard>} />
           <Route path="/reservations" element={<ReservationsView />} />
           <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
           <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />

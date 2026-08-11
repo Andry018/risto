@@ -687,7 +687,7 @@ export default function SettingsView() {
                     <ArrowRight size={18} className="ml-auto text-gold shrink-0" />
                   </button>
                   <button
-                    onClick={() => navigate('/reports')}
+                    onClick={() => navigate('/fatture')}
                     className="flex items-center gap-4 p-5 bg-charcoal/40 border border-gold/30 rounded-2xl hover:bg-gold/10 transition-all cursor-pointer text-left"
                   >
                     <div className="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center shrink-0">

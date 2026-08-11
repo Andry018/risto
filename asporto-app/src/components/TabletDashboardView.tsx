@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { LayoutDashboard, BookOpen, Map as MapIcon, Calculator, Settings, X, Database, RefreshCw, Trash2, LogOut, Users, ShieldCheck, Clock, Activity, ArrowRight, BarChart3, Calendar } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Map as MapIcon, Calculator, Settings, X, Database, RefreshCw, Trash2, LogOut, Users, ShieldCheck, Clock, Activity, ArrowRight, BarChart3, Calendar, FileText } from 'lucide-react';
 import TableMapView from './TableMapView';
 import POSView from './POSView';
 import AdminView from './AdminView';
 import ReportsView from './ReportsView';
+import FattureView from './FattureView';
 import ReservationsView from './ReservationsView';
 import { staffLogout, getCurrentUser, getStaffUsers, removeStaffUser, updateStaffUser, type StaffUser, type StaffRole } from '../lib/staffAuth';
 import { dbUtils } from '../lib/DatabaseUtils';
@@ -14,7 +15,7 @@ import { useToast } from '../components/Toast';
 export default function TabletDashboardView() {
   const { confirm } = useConfirm();
   const { addToast } = useToast();
-  const [activeView, setActiveView] = useState<'DASHBOARD' | 'POS' | 'MAPPA' | 'MENU' | 'PRENOTAZIONI' | 'REPORTS'>('DASHBOARD');
+  const [activeView, setActiveView] = useState<'DASHBOARD' | 'POS' | 'MAPPA' | 'MENU' | 'PRENOTAZIONI' | 'REPORTS' | 'FATTURE'>('DASHBOARD');
   const [selectedTable, setSelectedTable] = useState<{ id: string, nome: string } | null>(null);
   const [freedTableIds, setFreedTableIds] = useState<Set<string>>(new Set());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -107,11 +108,19 @@ export default function TabletDashboardView() {
     },
     {
       title: "Report & Analytics",
-      desc: "Vendite, statistiche e fatture",
+      desc: "Vendite e statistiche",
       icon: BarChart3,
       view: 'REPORTS' as const,
       color: "from-sky-500/20 to-sky-500/5",
       iconColor: "text-sky-400"
+    },
+    {
+      title: "Fatture",
+      desc: "Documenti fiscali emessi",
+      icon: FileText,
+      view: 'FATTURE' as const,
+      color: "from-amber-500/20 to-amber-500/5",
+      iconColor: "text-amber-400"
     }
   ];
 
@@ -375,6 +384,8 @@ export default function TabletDashboardView() {
         <AdminView onNavigateHome={() => setActiveView('DASHBOARD')} />
       ) : activeView === 'REPORTS' ? (
         <ReportsView onNavigateHome={() => setActiveView('DASHBOARD')} />
+      ) : activeView === 'FATTURE' ? (
+        <FattureView onNavigateHome={() => setActiveView('DASHBOARD')} />
       ) : null}
     </div>
   );
