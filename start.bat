@@ -7,21 +7,14 @@ echo ===================================================
 echo   [1/7] AGGIORNAMENTO CODICE DA GIT
 echo ===================================================
 cd /d C:\risto
-for /f "delims=" %%H in ('git rev-parse HEAD') do set OLD_HEAD=%%H
 git pull
-set PULL_RC=%errorlevel%
-for /f "delims=" %%H in ('git rev-parse HEAD') do set NEW_HEAD=%%H
-if not %PULL_RC%==0 (
+if not %errorlevel%==0 (
     echo.
     echo [ATTENZIONE] git pull ha restituito un errore ^(modifiche locali in conflitto?^).
-    echo Forzo comunque una build completa per sicurezza.
-    set GIT_CHANGED=1
+    echo Procedo comunque con la build, ma il codice potrebbe non essere aggiornato.
     pause
-) else if "%OLD_HEAD%"=="%NEW_HEAD%" (
-    set GIT_CHANGED=0
-) else (
-    set GIT_CHANGED=1
 )
+for /f "delims=" %%H in ('git rev-parse HEAD') do set NEW_HEAD=%%H
 echo.
 
 echo ===================================================
@@ -44,12 +37,6 @@ echo ===================================================
 echo   [3/7] COMPILAZIONE FRONTEND (BUILD VITE)
 echo ===================================================
 cd /d C:\risto\asporto-app
-
-if "%GIT_CHANGED%"=="0" if exist "dist\index.html" (
-    echo Nessuna modifica da git pull, salto npm install/build.
-    echo ^(build gia' aggiornata al commit %NEW_HEAD:~0,7%^)
-    goto :build_done
-)
 
 if not exist "C:\risto\logs" mkdir "C:\risto\logs"
 for /f "delims=" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmmss"') do set BUILD_TS=%%T
@@ -86,8 +73,6 @@ if not %BUILD_RC%==0 (
     echo.
     pause
 )
-
-:build_done
 echo.
 
 echo ===================================================
@@ -115,6 +100,9 @@ echo.
 echo ===================================================
 echo   [6/7] AVVIO PANNELLO AMMINISTRAZIONE (PORTA 4000)
 echo ===================================================
+:: Chiude un eventuale processo rimasto appeso sulla porta 4000, altrimenti
+:: il nuovo pannello si sposta su 4001+ e nginx (fissa su 4000) da' sempre 502.
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 if exist "C:\risto\avvia_pannello.bat" (
     powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c C:\risto\avvia_pannello.bat'"
     echo Dashboard di amministrazione attiva (nascosta).
