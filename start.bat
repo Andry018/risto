@@ -30,8 +30,17 @@ echo ===================================================
 echo   [3/7] COMPILAZIONE FRONTEND (BUILD VITE)
 echo ===================================================
 cd /d C:\risto\asporto-app
+if not exist "C:\risto\logs" mkdir "C:\risto\logs"
+for /f "delims=" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmmss"') do set BUILD_TS=%%T
+set BUILD_LOG=C:\risto\logs\build_%BUILD_TS%.log
 echo Generazione dei file statici ottimizzati in corso...
-call npm run build
+echo Log salvato in: %BUILD_LOG%
+powershell -NoProfile -Command "npm run build 2>&1 | Tee-Object -FilePath '%BUILD_LOG%'; exit $LASTEXITCODE"
+if errorlevel 1 (
+    echo.
+    echo [ERRORE] Build fallita! Controlla il log: %BUILD_LOG%
+    echo.
+)
 echo.
 
 echo ===================================================
@@ -80,14 +89,9 @@ echo.
 
 echo ===================================================
 echo   SISTEMA DI PRODUZIONE AVVIATO CON SUCCESSO!
-<<<<<<< Updated upstream
-echo   Il sito e raggiungibile su: http://gestionale.90-minuti.it
-echo   Pannello admin: http://gestionale.90-minuti.it/admin
-=======
 echo   Il gestionale e' raggiungibile su: https://gestionale.90-minuti.it
 echo   Pannello admin: https://gestionale.90-minuti.it/admin
 echo   ATTENZIONE: Non usare l'indirizzo IP. Usa solo il dominio ufficiale!
 echo   La rete Wi-Fi interna (AdGuard) gestira' il traffico in automatico.
->>>>>>> Stashed changes
 echo ===================================================
 pause
