@@ -14,6 +14,7 @@ import ReservationsView from './components/ReservationsView';
 import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
 import MagazzinoView from './components/MagazzinoView';
+import SystemPanelView from './components/SystemPanelView';
 import ExitGuard from './components/ExitGuard';
 import StaffPinGuard from './components/StaffPinGuard';
 import { isTablet } from './lib/DeviceUtils';
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="/reservations" element={<ReservationsView />} />
           <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
           <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />
+          <Route path="/servizi" element={<StaffPinGuard requiredRoles={['admin']}><SystemPanelView /></StaffPinGuard>} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
         </Routes>
         </ExitGuard>

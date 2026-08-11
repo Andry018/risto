@@ -699,6 +699,19 @@ export default function SettingsView() {
                     </div>
                     <ArrowRight size={18} className="ml-auto text-gold shrink-0" />
                   </button>
+                  <button
+                    onClick={() => navigate('/servizi')}
+                    className="flex items-center gap-4 p-5 bg-charcoal/40 border border-gold/30 rounded-2xl hover:bg-gold/10 transition-all cursor-pointer text-left"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center shrink-0">
+                      <MonitorCog size={24} className="text-gold" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-white">Pannello Servizi</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Nginx, stampante, aggiornamenti da Git</p>
+                    </div>
+                    <ArrowRight size={18} className="ml-auto text-gold shrink-0" />
+                  </button>
                 </div>
 
                 <Card title="Database" subtitle="Operazioni di manutenzione sui dati del ristorante.">

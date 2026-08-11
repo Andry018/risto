@@ -43,6 +43,7 @@ export const SETTINGS_KEYS = {
   theme: 'app_theme',
   publishMenuUrl: 'risto_setting_publish_menu_url',
   publishMenuSecret: 'risto_setting_publish_menu_secret',
+  systemPanelSecret: 'risto_setting_system_panel_secret',
 } as const;
 
 export function getSetting(key: string, fallback: string): string {

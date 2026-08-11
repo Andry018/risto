@@ -7,7 +7,10 @@ echo ===================================================
 echo   [1/7] AGGIORNAMENTO CODICE DA GIT
 echo ===================================================
 cd /d C:\risto
+for /f "delims=" %%H in ('git rev-parse HEAD') do set OLD_HEAD=%%H
 git pull
+for /f "delims=" %%H in ('git rev-parse HEAD') do set NEW_HEAD=%%H
+if "%OLD_HEAD%"=="%NEW_HEAD%" (set GIT_CHANGED=0) else (set GIT_CHANGED=1)
 echo.
 
 echo ===================================================
@@ -30,11 +33,22 @@ echo ===================================================
 echo   [3/7] COMPILAZIONE FRONTEND (BUILD VITE)
 echo ===================================================
 cd /d C:\risto\asporto-app
+
+if "%GIT_CHANGED%"=="0" if exist "dist\index.html" (
+    echo Nessuna modifica da git pull, salto npm install/build.
+    echo ^(build gia' aggiornata al commit %NEW_HEAD:~0,7%^)
+    goto :build_done
+)
+
 if not exist "C:\risto\logs" mkdir "C:\risto\logs"
 for /f "delims=" %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HHmmss"') do set BUILD_TS=%%T
 set BUILD_LOG=C:\risto\logs\build_%BUILD_TS%.log
 echo Log salvato in: %BUILD_LOG%
 set ERR_TMP=%BUILD_LOG%.stderr.tmp
+
+echo commit=%NEW_HEAD%> public\version.txt
+echo builtAt=%BUILD_TS%>> public\version.txt
+
 echo Installazione/aggiornamento dipendenze npm...
 powershell -NoProfile -Command "npm install 2> '%ERR_TMP%' | Tee-Object -FilePath '%BUILD_LOG%'; exit $LASTEXITCODE"
 set INSTALL_RC=%errorlevel%
@@ -59,6 +73,8 @@ if not %BUILD_RC%==0 (
     echo [ERRORE] Build fallita! Controlla il log: %BUILD_LOG%
     echo.
 )
+
+:build_done
 echo.
 
 echo ===================================================

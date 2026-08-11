@@ -1,6 +1,10 @@
 # AI context file (il tuo originale)
 prompt.txt
 webhook.exe
+
+# --- SECRET LOCALI (mai committati) ---
+admin-server/secrets.bat
+logs/
 # --- LOG E FILE TEMPORANEI NGINX ---
 nginx/logs/
 nginx/temp/

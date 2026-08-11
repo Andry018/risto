@@ -7,38 +7,34 @@ const crypto = require('crypto');
 // ── Config ──────────────────────────────────────────────
 const PORT = 4000;
 const BASE = 'C:\\risto';
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.ADMIN_PASS || 'ristorante123';
+// Secret condiviso con la pagina "Pannello Sistema" della webapp (stesso pattern
+// del PUBLISH_SECRET del Menu Pubblico). Va impostato via env var ADMIN_SECRET
+// sul PC del locale -- nessun default in produzione: se manca, il server si
+// rifiuta di avviarsi invece di esporre un endpoint di controllo indovinabile.
+const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
 const LOG_FILE = path.join(BASE, 'log_git.txt');
 const NGINX_DIR = path.join(BASE, 'nginx');
 const AGENT_BAT = path.join(BASE, 'avvia_stampante.bat');
 const AUTOPULL_BAT = path.join(BASE, 'autopull.bat');
-const PUBLIC_DIR = path.join(__dirname, 'public');
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.css':  'text/css; charset=utf-8',
-  '.js':   'application/javascript; charset=utf-8',
-  '.json': 'application/json',
-  '.png':  'image/png',
-  '.ico':  'image/x-icon',
-  '.svg':  'image/svg+xml',
-};
 
 // ── Auth ────────────────────────────────────────────────
+function timingSafeEqual(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 function authenticate(req) {
-  const auth = req.headers['authorization'];
-  if (!auth || !auth.startsWith('Basic ')) return false;
-  const raw = Buffer.from(auth.slice(6), 'base64').toString('utf8');
-  const [u, p] = raw.split(':');
-  return u === ADMIN_USER && p === ADMIN_PASS;
+  if (!ADMIN_SECRET) return false;
+  const header = req.headers['x-admin-secret'];
+  return typeof header === 'string' && header.length > 0 && timingSafeEqual(header, ADMIN_SECRET);
 }
 
 function requireAuth(req, res) {
   if (!authenticate(req)) {
-    res.writeHead(401, {
-      'WWW-Authenticate': 'Basic realm="Pannello Amministrazione", charset="UTF-8"'
-    });
-    res.end('Accesso negato');
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Accesso negato' }));
     return false;
   }
   return true;
@@ -98,29 +94,9 @@ async function router(req, res) {
     return res.end();
   }
 
-  // ── Static files ──────────────────────────────
-  if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    const filePath = path.join(PUBLIC_DIR, 'index.html');
-    if (!fs.existsSync(filePath)) {
-      res.writeHead(404);
-      return res.end('Not found');
-    }
-    const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'text/plain' });
-    return fs.createReadStream(filePath).pipe(res);
-  }
-
-  if (method === 'GET' && pathname.startsWith('/static/')) {
-    const filePath = path.join(PUBLIC_DIR, pathname.slice(1));
-    if (!fs.existsSync(filePath)) {
-      res.writeHead(404);
-      return res.end('Not found');
-    }
-    const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    return fs.createReadStream(filePath).pipe(res);
-  }
-
+  // Non c'e' piu' una UI propria: il frontend e' la pagina "Pannello Sistema"
+  // dentro la webapp (vedi src/components/SystemPanelView.tsx), che chiama
+  // solo queste API JSON.
   // ── API routes (auth required) ────────────────
   if (!requireAuth(req, res)) return;
 
@@ -228,37 +204,23 @@ async function router(req, res) {
     return json(res, 200, { ok: errors.length === 0, message: errors.length ? 'Servizi riavviati con alcuni errori' : 'Tutti i servizi riavviati', errors });
   }
 
-  // POST /api/exec (raw command — per admin esperti)
-  if (method === 'POST' && pathname === '/api/exec') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; if (body.length > 10000) req.destroy(); });
-    req.on('end', async () => {
-      try {
-        const { cmd } = JSON.parse(body || '{}');
-        if (!cmd || cmd.length > 500) {
-          return json(res, 400, { ok: false, error: 'Comando vuoto o troppo lungo' });
-        }
-        const result = await runCmd(cmd, { cwd: BASE });
-        return json(res, 200, { ok: result.code === 0, ...result });
-      } catch (e) {
-        return json(res, 400, { ok: false, error: e.message });
-      }
-    });
-    return;
-  }
-
   // 404
   res.writeHead(404);
   res.end('Not found');
 }
 
 // ── Server ──────────────────────────────────────────────
+if (!ADMIN_SECRET) {
+  console.error('[ADMIN] ADMIN_SECRET non impostato: rifiuto di avviarmi per sicurezza.');
+  console.error('[ADMIN] Imposta la variabile d\'ambiente ADMIN_SECRET (stessa stringa da inserire nella pagina "Pannello Sistema" della webapp) prima di avviare.');
+  process.exit(1);
+}
+
 const server = http.createServer(router);
 
 function tryListen(port) {
   server.listen(port, '127.0.0.1', () => {
     console.log(`[ADMIN] Pannello su http://127.0.0.1:${port}`);
-    console.log(`[ADMIN] Auth: ${ADMIN_USER} / **** (imposta via ADMIN_PASS env)`);
   });
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE' && port < PORT + 10) {
