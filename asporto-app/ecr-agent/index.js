@@ -1,0 +1,522 @@
+/**
+ * ECR Agent — Nexi PAX A35 (ECR17) + Custom Big Plus RT (scontrino fiscale)
+ *
+ * Espone un'API HTTP locale per:
+ *   POST /pay          — avvia pagamento carta sul terminale PAX A35
+ *   POST /cancel       — storna l'ultima transazione PAX
+ *   POST /print-receipt — stampa scontrino fiscale su cassa Custom Big Plus RT
+ *   GET  /status       — verifica connettività terminale PAX
+ *   GET  /health       — health check agente
+ *
+ * NOTA: Le parti marcate [TODO-NEXI] o [TODO-CUSTOM] richiedono verifica
+ * contro la documentazione ufficiale dei rispettivi produttori.
+ */
+
+'use strict';
+
+require('dotenv').config();
+const net  = require('node:net');
+const http = require('node:http');
+const { URL } = require('node:url');
+
+// ---------------------------------------------------------------------------
+// Configurazione
+// ---------------------------------------------------------------------------
+
+const PAX_HOST         = process.env.PAX_HOST         || '192.168.1.50';
+const PAX_PORT         = Number(process.env.PAX_PORT   || 10009);
+const SERVER_PORT      = Number(process.env.ECR_PORT   || 8788);
+const CONNECT_TIMEOUT  = Number(process.env.PAX_CONNECT_TIMEOUT  || 5000);   // ms
+const RESPONSE_TIMEOUT = Number(process.env.PAX_RESPONSE_TIMEOUT || 90000);  // ms (90 s — tempo per inserire carta)
+
+// Cassa fiscale Custom Big Plus RT
+const CUSTOM_HOST      = process.env.CUSTOM_HOST      || '192.168.1.51';
+const CUSTOM_PORT      = Number(process.env.CUSTOM_PORT || 9100);
+const CUSTOM_TIMEOUT   = Number(process.env.CUSTOM_TIMEOUT || 10000);        // ms
+
+// ---------------------------------------------------------------------------
+// Costanti protocollo ECR17
+// ---------------------------------------------------------------------------
+
+const STX = 0x02; // Start of Text
+const ETX = 0x03; // End of Text
+const FS  = 0x1C; // Field Separator (ASCII FS, standard ECR17)
+
+/**
+ * Calcola il byte LRC (Longitudinal Redundancy Check).
+ * Algoritmo: XOR di tutti i byte del payload + ETX, con valore base 0x7F.
+ */
+function calcLRC(bytes) {
+  return bytes.reduce((acc, b) => acc ^ b, 0x7F);
+}
+
+/**
+ * Incapsula un payload ASCII nel frame ECR17: [STX][payload][ETX][LRC]
+ */
+function buildFrame(payload) {
+  const payloadBuf = Buffer.from(payload, 'latin1');
+  const frame = Buffer.alloc(payloadBuf.length + 3);
+  frame[0] = STX;
+  payloadBuf.copy(frame, 1);
+  frame[payloadBuf.length + 1] = ETX;
+
+  const lrcInput = [...payloadBuf, ETX];
+  frame[payloadBuf.length + 2] = calcLRC(lrcInput);
+  return frame;
+}
+
+/**
+ * Costruisce il messaggio di richiesta di stato terminale.
+ * [TODO-NEXI] Verificare comando esatto per Status Request.
+ */
+function buildStatusRequest() {
+  // Comando: "00" = Status Request (comune in ECR17)
+  return buildFrame('00');
+}
+
+/**
+ * Costruisce il messaggio di acquisto (pagamento carta).
+ * [TODO-NEXI] Verificare campo per campo con spec Nexi ECR17:
+ *   - Codice comando (qui "01" = Purchase)
+ *   - Formato importo (qui 12 cifre in centesimi, es. 000000001500 = €15,00)
+ *   - Codice valuta (978 = EUR, ISO 4217)
+ *   - Eventuali campi aggiuntivi (cashback, rate, etc.)
+ */
+function buildPurchaseRequest(amountCents) {
+  const cmd      = '01';                                    // [TODO-NEXI] Purchase command code
+  const amount   = String(amountCents).padStart(12, '0');  // [TODO-NEXI] verificare lunghezza campo
+  const currency = '978';                                   // EUR
+
+  const sep = String.fromCharCode(FS);
+  const payload = [cmd, amount, currency].join(sep);
+  return buildFrame(payload);
+}
+
+/**
+ * Costruisce il messaggio di annullamento/storno.
+ * [TODO-NEXI] Verificare comando esatto (qui "02" = Reversal).
+ */
+function buildCancelRequest(txRef) {
+  const cmd = '02'; // [TODO-NEXI] Reversal command code
+  const sep = String.fromCharCode(FS);
+  const payload = txRef ? [cmd, txRef].join(sep) : cmd;
+  return buildFrame(payload);
+}
+
+// ---------------------------------------------------------------------------
+// Parser risposta terminale
+// ---------------------------------------------------------------------------
+
+/**
+ * Analizza il buffer di risposta del terminale.
+ * Risposta attesa: [STX][response_code][FS][auth_code][FS][...campi...][ETX][LRC]
+ *
+ * [TODO-NEXI] Verificare posizione e significato di ogni campo nella risposta.
+ * Codici risposta comuni ECR17:
+ *   "00" = Approvato
+ *   altri = Rifiutato (con codice errore specifico)
+ */
+function parseResponse(buf) {
+  if (buf.length < 4) {
+    return { ok: false, error: 'Risposta troppo corta dal terminale' };
+  }
+  if (buf[0] !== STX) {
+    return { ok: false, error: `Risposta non valida: primo byte ${buf[0].toString(16)} (atteso STX 0x02)` };
+  }
+
+  const etxIdx = buf.indexOf(ETX, 1);
+  if (etxIdx === -1) {
+    return { ok: false, error: 'Risposta non valida: ETX mancante' };
+  }
+
+  const lrcReceived  = buf[etxIdx + 1];
+  const lrcExpected  = calcLRC([...buf.slice(1, etxIdx), ETX]);
+  if (lrcReceived !== lrcExpected) {
+    console.warn(`[ECR] LRC errato: ricevuto 0x${lrcReceived.toString(16)}, atteso 0x${lrcExpected.toString(16)}`);
+    // Non rifiutare: alcuni terminali calcolano LRC in modo leggermente diverso.
+    // Loggare l'anomalia e procedere.
+  }
+
+  const payload = buf.slice(1, etxIdx).toString('latin1');
+  const sep     = String.fromCharCode(FS);
+  const fields  = payload.split(sep);
+
+  const responseCode = (fields[0] || '').trim();
+  const approved     = responseCode === '00'; // [TODO-NEXI] Verificare codice successo Nexi
+
+  return {
+    ok:           approved,
+    responseCode,
+    authCode:     fields[1] || '',   // [TODO-NEXI] Verificare posizione codice autorizzazione
+    amount:       fields[2] || '',   // [TODO-NEXI] Verificare se il terminale rispecchia l'importo
+    rawPayload:   payload,
+    rawFields:    fields,
+    error: approved ? null : `Transazione rifiutata (codice: ${responseCode})`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Comunicazione TCP con il terminale
+// ---------------------------------------------------------------------------
+
+function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let buf      = Buffer.alloc(0);
+    let settled  = false;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      result instanceof Error ? reject(result) : resolve(result);
+    };
+
+    const timer = setTimeout(() => {
+      finish(new Error(`Timeout: il terminale non ha risposto entro ${Math.round(timeoutMs / 1000)} secondi`));
+    }, timeoutMs);
+
+    socket.setTimeout(CONNECT_TIMEOUT);
+
+    socket.connect(PAX_PORT, PAX_HOST, () => {
+      socket.setTimeout(0);
+      console.log(`[ECR] Connesso a ${PAX_HOST}:${PAX_PORT}, invio messaggio (${message.length} byte)`);
+      socket.write(message);
+    });
+
+    socket.on('data', (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      // Una risposta ECR17 è completa quando abbiamo ETX + LRC (almeno 2 byte dopo ETX)
+      const etxIdx = buf.indexOf(ETX);
+      if (etxIdx !== -1 && buf.length >= etxIdx + 2) {
+        finish(parseResponse(buf));
+      }
+    });
+
+    socket.on('timeout', () => finish(new Error('Timeout di connessione al terminale PAX')));
+    socket.on('error',   (err) => finish(err));
+    socket.on('close',   () => {
+      if (!settled) finish(new Error('Connessione chiusa prima della risposta'));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Protocollo Custom Big Plus RT
+// ---------------------------------------------------------------------------
+//
+// Frame: [STX][CNT 2 cifre][IDENT 1 char][CMD 4 char + params][CKS 2 cifre][ETX]
+//
+// - STX  = 0x02
+// - CNT  = contatore frame 00-99 (due cifre ASCII decimali)
+// - IDENT= tipo pacchetto: 'A' = comando, 'B' = risposta
+// - CMD  = 4 caratteri codice comando + parametri separati da FS (0x1C)
+// - CKS  = checksum: somma di (CNT + IDENT + CMD) modulo 100, due cifre decimali
+// - ETX  = 0x03
+//
+// Comandi fiscali Custom (da verificare sul manuale Big Plus RT):
+// [TODO-CUSTOM] Cercare nel manuale tecnico la sezione "Comandi ECR" o "Protocollo ECR":
+//   - Comando apertura scontrino
+//   - Comando vendita articolo (nome, prezzo, quantità, IVA)
+//   - Comando tipo pagamento (contanti / carta)
+//   - Comando chiusura scontrino
+//
+// I codici qui sotto sono placeholder da sostituire con i valori corretti.
+
+let customFrameCounter = 0;
+
+function nextCustomCnt() {
+  const cnt = customFrameCounter % 100;
+  customFrameCounter++;
+  return String(cnt).padStart(2, '0');
+}
+
+/**
+ * Calcola il checksum Custom: somma dei byte ASCII di CNT+IDENT+CMD, modulo 100.
+ */
+function customChecksum(cnt, ident, cmd) {
+  const raw = cnt + ident + cmd;
+  let sum = 0;
+  for (let i = 0; i < raw.length; i++) sum += raw.charCodeAt(i);
+  return String(sum % 100).padStart(2, '0');
+}
+
+/**
+ * Costruisce un frame Custom completo.
+ */
+function buildCustomFrame(ident, cmd) {
+  const cnt = nextCustomCnt();
+  const cks = customChecksum(cnt, ident, cmd);
+  return Buffer.from(`\x02${cnt}${ident}${cmd}${cks}\x03`, 'latin1');
+}
+
+/**
+ * Invia un frame alla cassa Custom e attende la risposta.
+ */
+function sendToCustom(frame, timeoutMs = CUSTOM_TIMEOUT) {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let buf      = Buffer.alloc(0);
+    let settled  = false;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      result instanceof Error ? reject(result) : resolve(result);
+    };
+
+    const timer = setTimeout(() => finish(new Error(`Timeout cassa Custom (${timeoutMs}ms)`)), timeoutMs);
+
+    socket.setTimeout(CONNECT_TIMEOUT);
+    socket.connect(CUSTOM_PORT, CUSTOM_HOST, () => {
+      socket.setTimeout(0);
+      socket.write(frame);
+    });
+
+    socket.on('data', (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      // La risposta Custom termina con ETX
+      if (buf.includes(0x03)) finish({ raw: buf.toString('latin1'), ok: true });
+    });
+
+    socket.on('timeout', () => finish(new Error('Timeout connessione cassa Custom')));
+    socket.on('error',   (err) => finish(err));
+    socket.on('close',   () => { if (!settled) finish(new Error('Connessione cassa chiusa prima della risposta')); });
+  });
+}
+
+/**
+ * Stampa uno scontrino fiscale sulla cassa Custom Big Plus RT.
+ *
+ * @param {object} receipt
+ * @param {Array}  receipt.items     - Array di { nome, prezzo, quantita, iva }
+ * @param {number} receipt.total     - Totale da pagare
+ * @param {string} receipt.payment   - 'carta' | 'contanti'
+ * @param {string} [receipt.authCode] - Codice autorizzazione carta (facoltativo)
+ */
+async function printFiscalReceipt(receipt) {
+  const { items = [], total, payment = 'carta', authCode } = receipt;
+
+  // [TODO-CUSTOM] Sostituire i codici comando con quelli corretti dal manuale Big Plus RT.
+  // Il manuale tecnico di Custom si chiama tipicamente "Manuale Programmazione" o
+  // "Interfaccia ECR". I comandi fiscali sono nella sezione "Scontrino Fiscale".
+  //
+  // Sequenza tipica per uno scontrino:
+  //   1. Apertura scontrino  (es. comando "3010" o "OPEN")
+  //   2. Articolo per riga   (es. comando "3401" con nome;prezzo;qta;iva)
+  //   3. Tipo pagamento       (es. comando "3402" con tipo;importo)
+  //   4. Chiusura scontrino  (es. comando "3501" o "CLOSE")
+
+  console.log(`[CUSTOM] Stampa scontrino: ${items.length} articoli, totale €${total.toFixed(2)}, pagamento ${payment}`);
+
+  // --- Apertura scontrino ---
+  // [TODO-CUSTOM] Sostituire '3010' con il codice apertura corretto
+  await sendToCustom(buildCustomFrame('A', '3010'));
+
+  // --- Articoli ---
+  for (const item of items) {
+    const nome     = String(item.nome     || 'Articolo').substring(0, 32).padEnd(32, ' ');
+    const prezzo   = Math.round((item.prezzo   || 0) * 100); // in centesimi
+    const quantita = Math.round((item.quantita || 1) * 1000); // in millesimi
+    const iva      = String(item.iva || '10');   // aliquota IVA % — [TODO-CUSTOM] verificare formato
+
+    // [TODO-CUSTOM] Verificare formato esatto parametri articolo (separatore, ordine campi)
+    const cmdArticolo = `3401${nome}\x1C${prezzo}\x1C${quantita}\x1C${iva}`;
+    await sendToCustom(buildCustomFrame('A', cmdArticolo));
+  }
+
+  // --- Pagamento ---
+  const paymentCode = payment === 'carta' ? '1' : '0'; // [TODO-CUSTOM] verificare codici pagamento Custom
+  const totalCents  = Math.round(total * 100);
+  const cmdPagamento = `3402${paymentCode}\x1C${totalCents}`;
+  if (authCode) {
+    // [TODO-CUSTOM] verificare se e come passare il codice auth carta alla cassa
+    console.log(`[CUSTOM] Auth code carta: ${authCode}`);
+  }
+  await sendToCustom(buildCustomFrame('A', cmdPagamento));
+
+  // --- Chiusura scontrino ---
+  // [TODO-CUSTOM] Sostituire '3501' con il codice chiusura corretto
+  await sendToCustom(buildCustomFrame('A', '3501'));
+
+  console.log('[CUSTOM] Scontrino stampato con successo');
+}
+
+// ---------------------------------------------------------------------------
+// Stato transazione corrente
+// ---------------------------------------------------------------------------
+
+let currentTx = null; // { id, amount, startedAt }
+
+// ---------------------------------------------------------------------------
+// HTTP Server
+// ---------------------------------------------------------------------------
+
+function jsonResponse(res, status, data) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.end(JSON.stringify(data));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 50_000) req.destroy(); });
+    req.on('end',  () => {
+      try { resolve(JSON.parse(body || '{}')); }
+      catch { resolve({}); }
+    });
+    req.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
+
+  const url      = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+  const pathname = url.pathname;
+
+  // GET /health
+  if (req.method === 'GET' && pathname === '/health') {
+    return jsonResponse(res, 200, {
+      ok:      true,
+      paxHost: PAX_HOST,
+      paxPort: PAX_PORT,
+      busy:    !!currentTx,
+    });
+  }
+
+  // GET /status — verifica connettività terminale
+  if (req.method === 'GET' && pathname === '/status') {
+    try {
+      const msg    = buildStatusRequest();
+      const result = await sendToTerminal(msg, 5000);
+      return jsonResponse(res, 200, { ok: true, terminal: result });
+    } catch (err) {
+      console.error('[ECR] Status check fallito:', err.message);
+      return jsonResponse(res, 503, { ok: false, error: err.message });
+    }
+  }
+
+  // POST /pay — avvia pagamento
+  if (req.method === 'POST' && pathname === '/pay') {
+    if (currentTx) {
+      return jsonResponse(res, 409, {
+        ok:    false,
+        error: `Transazione in corso (${currentTx.id}). Attendere il completamento.`,
+      });
+    }
+
+    const body        = await readBody(req);
+    const rawAmount   = parseFloat(body.amount);
+    const partNumber  = body.partNumber  || null;
+    const totalParts  = body.totalParts  || null;
+    const description = body.description || null;
+
+    if (!rawAmount || isNaN(rawAmount) || rawAmount <= 0) {
+      return jsonResponse(res, 400, { ok: false, error: 'Importo non valido o mancante' });
+    }
+
+    const amountCents = Math.round(rawAmount * 100);
+    const txId        = `TX-${Date.now()}`;
+
+    currentTx = { id: txId, amount: amountCents, startedAt: new Date().toISOString() };
+
+    const partLabel = partNumber && totalParts ? ` [quota ${partNumber}/${totalParts}]` : '';
+    console.log(`[ECR] Avvio pagamento ${txId}: €${rawAmount.toFixed(2)}${partLabel}`);
+
+    try {
+      const msg    = buildPurchaseRequest(amountCents);
+      const result = await sendToTerminal(msg);
+
+      const response = {
+        ok:          result.ok,
+        txId,
+        amount:      rawAmount,
+        amountCents,
+        authCode:    result.authCode,
+        responseCode: result.responseCode,
+        description,
+        partNumber,
+        totalParts,
+        completedAt: new Date().toISOString(),
+        error:       result.error,
+      };
+
+      console.log(`[ECR] ${txId}: ${result.ok ? 'APPROVATO' : 'RIFIUTATO'} (codice ${result.responseCode}, auth ${result.authCode})`);
+      return jsonResponse(res, result.ok ? 200 : 402, response);
+    } catch (err) {
+      console.error(`[ECR] Errore ${txId}:`, err.message);
+      return jsonResponse(res, 503, {
+        ok: false, txId,
+        amount: rawAmount, amountCents,
+        error: err.message,
+      });
+    } finally {
+      currentTx = null;
+    }
+  }
+
+  // POST /cancel — storna l'ultima transazione (opzionale)
+  if (req.method === 'POST' && pathname === '/cancel') {
+    if (currentTx) {
+      return jsonResponse(res, 409, { ok: false, error: 'Transazione in corso, impossibile stornare ora' });
+    }
+    const body  = await readBody(req);
+    const txRef = body.txRef || '';
+    try {
+      const msg    = buildCancelRequest(txRef);
+      const result = await sendToTerminal(msg, 15000);
+      return jsonResponse(res, result.ok ? 200 : 422, { ok: result.ok, ...result });
+    } catch (err) {
+      return jsonResponse(res, 503, { ok: false, error: err.message });
+    }
+  }
+
+  // POST /print-receipt — stampa scontrino fiscale sulla cassa Custom
+  if (req.method === 'POST' && pathname === '/print-receipt') {
+    const body = await readBody(req);
+    const { items, total, payment, authCode } = body;
+
+    if (!total || isNaN(parseFloat(total)) || parseFloat(total) <= 0) {
+      return jsonResponse(res, 400, { ok: false, error: 'Totale mancante o non valido' });
+    }
+
+    try {
+      await printFiscalReceipt({
+        items:    items    || [],
+        total:    parseFloat(total),
+        payment:  payment  || 'carta',
+        authCode: authCode || null,
+      });
+      return jsonResponse(res, 200, { ok: true });
+    } catch (err) {
+      console.error('[CUSTOM] Errore stampa scontrino:', err.message);
+      return jsonResponse(res, 503, { ok: false, error: err.message });
+    }
+  }
+
+  res.statusCode = 404;
+  res.end('Not found');
+});
+
+server.listen(SERVER_PORT, '0.0.0.0', () => {
+  console.log('=== ECR Agent Avviato ===');
+  console.log(`HTTP bridge su :${SERVER_PORT}`);
+  console.log(`Terminale PAX A35: ${PAX_HOST}:${PAX_PORT}`);
+  console.log('Endpoints: GET /health  GET /status  POST /pay  POST /cancel');
+});
+
+process.on('SIGINT', () => {
+  if (currentTx) {
+    console.warn(`[ATTENZIONE] Transazione ${currentTx.id} in corso durante lo spegnimento!`);
+  }
+  server.close(() => process.exit(0));
+});

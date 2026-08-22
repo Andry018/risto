@@ -112,7 +112,7 @@ if exist "C:\risto\avvia_pannello.bat" (
 echo.
 
 echo ===================================================
-echo   [7/7] AVVIO PRINT AGENT (STAMPANTE)
+echo   [7/8] AVVIO PRINT AGENT (STAMPANTE)
 echo ===================================================
 if exist "C:\risto\avvia_stampante.bat" (
     powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c C:\risto\avvia_stampante.bat'"
@@ -123,7 +123,18 @@ if exist "C:\risto\avvia_stampante.bat" (
 echo.
 
 echo ===================================================
-echo   SISTEMA DI PRODUZIONE AVVIATO CON SUCCESSO!
+echo   [8/8] AVVIO ECR AGENT (PAX A35 - NEXI)
+echo ===================================================
+if exist "C:\risto\avvia_ecr.bat" (
+    powershell -Command "Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c C:\risto\avvia_ecr.bat'"
+    echo ECR agent attivo su porta 8788 (nascosto).
+) else (
+    echo [ATTENZIONE] avvia_ecr.bat non trovato. Pagamento carta non disponibile.
+)
+echo.
+
+echo ===================================================
+echo   SISTEMA DI PRODUZIONE AVVIATO CON SUCCESSO! [8 servizi]
 echo   Il gestionale e' raggiungibile su: https://gestionale.90-minuti.it
 echo   Pannello admin: https://gestionale.90-minuti.it/admin
 echo   ATTENZIONE: Non usare l'indirizzo IP. Usa solo il dominio ufficiale!

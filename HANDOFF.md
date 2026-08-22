@@ -1,5 +1,87 @@
 # HANDOFF — Risto (Il Girasole)
 
+_Ultima sessione: 2026-08-22. Sessione precedente: 2026-08-06 → 2026-08-09._
+
+---
+
+## SESSIONE 2026-08-22 — Integrazione POS Nexi + Cassa Fiscale Custom
+
+### Cosa è stato fatto
+
+#### 1. Rimossa `agriturismo-app/`
+Cartella eliminata su richiesta. Non più nel progetto.
+
+#### 2. ECR Agent — `asporto-app/ecr-agent/`
+Nuovo servizio Node.js (porta **8788**) per la comunicazione con il terminale POS **Nexi PAX A35** e la cassa fiscale **Custom Big Plus RT**.
+
+**File creati:**
+- `ecr-agent/index.js` — server HTTP + implementazione protocollo ECR17 (PAX A35) + protocollo Custom (Big Plus RT)
+- `ecr-agent/package.json` — zero dipendenze esterne (solo `dotenv`)
+- `ecr-agent/.env.example` — variabili da configurare (vedi sotto)
+- `avvia_ecr.bat` — script di avvio con auto-restart (stesso pattern di `avvia_stampante.bat`)
+
+**Endpoints HTTP:**
+| Endpoint | Funzione |
+|----------|----------|
+| `GET /health` | Health check agente |
+| `GET /status` | Verifica connettività terminale PAX A35 |
+| `POST /pay` | Avvia pagamento carta (`{ amount, partNumber?, totalParts?, description? }`) |
+| `POST /cancel` | Storna ultima transazione PAX |
+| `POST /print-receipt` | Stampa scontrino fiscale sulla cassa Custom (`{ items[], total, payment, authCode? }`) |
+
+**Protocollo PAX A35 (ECR17):**
+- TCP verso PAX A35 sulla porta **10009**
+- Frame: `[STX][payload ASCII][ETX][LRC]`
+- LRC = XOR di tutti i byte payload+ETX con base `0x7F`
+- Separatore campi: `FS (0x1C)`
+- **[TODO-NEXI]** Codici comando e formato parametri da verificare con documentazione ufficiale su `developer.nexigroup.com/traditionalpos`
+
+**Protocollo Custom Big Plus RT:**
+- TCP verso cassa sulla porta **9100**
+- Frame: `[STX][CNT 2 cifre][IDENT 1 char][CMD + params][CKS 2 cifre][ETX]`
+- Checksum: somma byte di `CNT+IDENT+CMD` modulo 100
+- **[TODO-CUSTOM]** Codici comando da verificare nel manuale tecnico Big Plus RT:
+  - Codice apertura scontrino (placeholder: `3010`)
+  - Codice articolo/vendita (placeholder: `3401`) — parametri: nome, prezzo in centesimi, quantità in millesimi, aliquota IVA
+  - Codice tipo pagamento (placeholder: `3402`) — `0`=contanti, `1`=carta
+  - Codice chiusura scontrino (placeholder: `3501`)
+
+**Configurazione `.env` da creare in `ecr-agent/`:**
+```
+PAX_HOST=192.168.1.XX      # IP statico del PAX A35
+PAX_PORT=10009
+CUSTOM_HOST=192.168.1.XX   # IP statico della cassa Custom
+CUSTOM_PORT=9100
+ECR_PORT=8788
+PAX_RESPONSE_TIMEOUT=90000
+```
+
+**Prerequisiti hardware non ancora soddisfatti:**
+- Il PAX A35 deve avere la **modalità ECR abilitata** (contattare Nexi o installatore)
+- Ottenere accesso al **developer portal Nexi** (`developer.nexigroup.com`) per verificare [TODO-NEXI]
+- Trovare il **manuale tecnico Custom Big Plus RT** ("Protocollo ECR" o "Comandi Fiscali") per verificare [TODO-CUSTOM]
+- Assegnare **IP statici** a PAX A35 e cassa Custom sulla LAN
+
+#### 3. Frontend — nuovi file
+- `src/lib/ecrAgent.ts` — client TypeScript: `payWithCard()`, `getTerminalStatus()`, `pingEcrAgent()`, `printFiscalReceipt()`
+- `src/components/CardPaymentModal.tsx` — modal pagamento carta con macchina a stati:
+  - `confirm` → `paying` → `partSuccess` (per split) → `allDone` / `error`
+  - Gestisce pagamenti multipli sequenziali per divisione conto (passa il terminale da persona a persona)
+  - Dopo approvazione: chiama automaticamente `/print-receipt` → mostra stato stampa con RIPROVA
+  - IVA hardcoded a `10%` nel passaggio degli articoli (da rendere configurabile quando si ha il manuale Custom)
+
+#### 4. POSView.tsx — modifiche
+- Bottone **PAGA CON CARTA** (blu) aggiunto in 3 punti: sidebar principale, Bill Review overlay, Split Result modal
+- Nel Split Result: bottone carta in evidenza + "CONTANTE" per chiusura manuale
+- `CardPaymentModal` montato in fondo al componente con `fiscalItems` calcolati dal carrello
+
+#### 5. start.bat
+- Aggiunto step **8/8** per avviare l'ECR agent (`avvia_ecr.bat`)
+
+---
+
+## SESSIONE 2026-08-06 → 2026-08-09
+
 _Sessione del 2026-08-06 → 2026-08-09. Per la lista prioritizzata dei prossimi passi vedi [To-Do.md](To-Do.md) — qui sotto solo un estratto essenziale._
 
 ## 1. Stato attuale

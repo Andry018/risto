@@ -5,8 +5,10 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause, UtensilsCrossed } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause, UtensilsCrossed, CreditCard } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
+import CardPaymentModal from './CardPaymentModal';
+import type { PaymentResult } from '../lib/ecrAgent';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import PaninoBuilderModal from './PaninoBuilderModal';
 import CustomItemModal from './CustomItemModal';
@@ -61,6 +63,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [discountDraftTipo, setDiscountDraftTipo] = useState<'percentuale' | 'fisso'>('percentuale');
   const [discountDraftValue, setDiscountDraftValue] = useState('');
   const [currentPortata, setCurrentPortata] = useState<(typeof PORTATA_OPTIONS)[number]['value']>('1');
+
+  // Pagamento carta (ECR / PAX A35)
+  const [cardPaymentOpen, setCardPaymentOpen] = useState(false);
+  const [cardPaymentSplitParts, setCardPaymentSplitParts] = useState<number | undefined>(undefined);
 
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
@@ -671,6 +677,19 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     }
   };
 
+  const openCardPayment = (splitParts?: number) => {
+    setCardPaymentSplitParts(splitParts);
+    setCardPaymentOpen(true);
+  };
+
+  const handleCardAllPaid = (_results: PaymentResult[]) => {
+    setCardPaymentOpen(false);
+    setCardPaymentSplitParts(undefined);
+    setSplitResult(null);
+    setIsSplitModalOpen(false);
+    void handleFinishOrder();
+  };
+
   const categoryDefs: { label: string; match: string[] }[] = [
     { label: 'Antipasto', match: ['Antipasto', 'Antipasti'] },
     { label: 'Primo', match: ['Primo', 'Primi'] },
@@ -858,6 +877,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                             <Pause size={16} /> METTI IN SOSPESO
                           </button>
                           <button
+                            onClick={() => openCardPayment()}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-black text-xs py-4 rounded-2xl border border-sky-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            <CreditCard size={14} /> PAGA CON CARTA
+                          </button>
+                          <button
                             onClick={handleFinishOrder}
                             disabled={cart.length === 0 || finishingOrder}
                             className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
@@ -873,6 +899,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                             className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                           >
                             <Pause size={16} /> METTI IN SOSPESO
+                          </button>
+                          <button
+                            onClick={() => openCardPayment()}
+                            disabled={cart.length === 0 || finishingOrder}
+                            className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-black text-xs py-4 rounded-2xl border border-sky-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            <CreditCard size={14} /> PAGA CON CARTA
                           </button>
                           <button
                             onClick={handleFinishOrder}
@@ -1273,6 +1306,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     </button>
                   </div>
                   <button
+                    onClick={() => openCardPayment()}
+                    disabled={cart.length === 0 || finishingOrder}
+                    className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-black text-sm py-3 rounded-2xl border border-sky-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CreditCard size={16} /> PAGA CON CARTA
+                  </button>
+                  <button
                     onClick={handleFinishOrder}
                     disabled={cart.length === 0 || finishingOrder}
                     className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
@@ -1291,13 +1331,20 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                       Metti in Sospeso <Pause size={16} />
                     </button>
                     <button
-                      onClick={handleFinishOrder}
+                      onClick={() => openCardPayment()}
                       disabled={cart.length === 0 || finishingOrder}
-                      className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
+                      className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-black text-xs py-3 rounded-2xl border border-sky-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      {finishingOrder ? <>Attendi...</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                      <CreditCard size={14} /> CARTA
                     </button>
                   </div>
+                  <button
+                    onClick={handleFinishOrder}
+                    disabled={cart.length === 0 || finishingOrder}
+                    className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
+                  >
+                    {finishingOrder ? <>Attendi...</> : <>Chiudi Conto <CheckCircle size={20} /></>}
+                  </button>
                 </div>
               )}
             </div>
@@ -1392,24 +1439,33 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               <p className="text-xs text-gray-500 mt-2">× {splitResult.parts} persone</p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3">
               <button
-                onClick={() => setSplitResult(null)}
-                className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-5 rounded-2xl text-sm uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
-              >
-                INDIETRO
-              </button>
-              <button
-                onClick={() => {
-                  setSplitResult(null);
-                  setIsSplitModalOpen(false);
-                  void handleFinishOrder();
-                }}
+                onClick={() => openCardPayment(splitResult.parts)}
                 disabled={finishingOrder}
-                className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
+                className="w-full bg-sky-500 hover:bg-sky-400 text-white font-black py-5 rounded-3xl text-base shadow-xl shadow-sky-500/20 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-2 uppercase tracking-widest"
               >
-                {finishingOrder ? 'ATTENDI...' : 'CONFERMA E CHIUDI CONTO'}
+                <CreditCard size={18} /> PAGA CON CARTA
               </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSplitResult(null)}
+                  className="flex-1 bg-charcoal border border-surface-light text-gray-300 font-black py-4 rounded-2xl text-sm uppercase tracking-widest hover:bg-surface-light active:scale-95 transition-all"
+                >
+                  INDIETRO
+                </button>
+                <button
+                  onClick={() => {
+                    setSplitResult(null);
+                    setIsSplitModalOpen(false);
+                    void handleFinishOrder();
+                  }}
+                  disabled={finishingOrder}
+                  className="flex-[2] bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl text-sm shadow-xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30 uppercase tracking-widest"
+                >
+                  {finishingOrder ? 'ATTENDI...' : 'CONTANTE'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1533,6 +1589,20 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         onClose={() => setBillsSuspendedOpen(false)}
         variant="suspended"
         onSelect={resumeOrder}
+      />
+      <CardPaymentModal
+        open={cardPaymentOpen}
+        totalAmount={discountedTotal}
+        splitParts={cardPaymentSplitParts}
+        label={tableName || 'POS'}
+        fiscalItems={cart.map(item => ({
+          nome:     item.nome,
+          prezzo:   calculateItemPrice(item, ingredients),
+          quantita: item.quantity,
+          iva:      '10',
+        }))}
+        onClose={() => { setCardPaymentOpen(false); setCardPaymentSplitParts(undefined); }}
+        onAllPaid={handleCardAllPaid}
       />
     </>
   );
