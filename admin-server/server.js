@@ -5,17 +5,15 @@ const path = require('path');
 const crypto = require('crypto');
 
 // ── Config ──────────────────────────────────────────────
-const PORT = 4000;
-const BASE = 'C:\\risto';
-// Secret condiviso con la pagina "Pannello Sistema" della webapp (stesso pattern
-// del PUBLISH_SECRET del Menu Pubblico). Va impostato via env var ADMIN_SECRET
-// sul PC del locale -- nessun default in produzione: se manca, il server si
-// rifiuta di avviarsi invece di esporre un endpoint di controllo indovinabile.
+const PORT       = 4000;
+const IS_WIN     = process.platform === 'win32';
+const BASE       = process.env.RISTO_BASE || (IS_WIN ? 'C:\\risto' : '/opt/risto');
 const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
-const LOG_FILE = path.join(BASE, 'log_git.txt');
-const NGINX_DIR = path.join(BASE, 'nginx');
-const AGENT_BAT = path.join(BASE, 'avvia_stampante.bat');
-const AUTOPULL_BAT = path.join(BASE, 'autopull.bat');
+const LOG_FILE   = path.join(BASE, IS_WIN ? 'log_git.txt' : 'logs/autopull.log');
+const NGINX_DIR  = path.join(BASE, 'nginx');
+// Script di avvio agenti: .bat su Windows, .sh su Linux
+const AGENT_SCRIPT    = IS_WIN ? path.join(BASE, 'avvia_stampante.bat')       : path.join(BASE, 'linux', 'services', '_restart-print.sh');
+const AUTOPULL_SCRIPT = IS_WIN ? path.join(BASE, 'autopull.bat')              : path.join(BASE, 'linux', 'autopull.sh');
 
 // ── Auth ────────────────────────────────────────────────
 function timingSafeEqual(a, b) {
@@ -61,8 +59,38 @@ function runCmd(cmd, opts = {}) {
 
 function isRunning(name) {
   return new Promise((resolve) => {
-    exec(`tasklist /fi "IMAGENAME eq ${name}"`, { windowsHide: true }, (err, stdout) => {
-      resolve(stdout ? stdout.toLowerCase().includes(name.toLowerCase()) : false);
+    // Windows: tasklist — Linux: pgrep
+    const cmd = IS_WIN
+      ? `tasklist /fi "IMAGENAME eq ${name}"`
+      : `pgrep -x "${name.replace('.exe', '')}" > /dev/null 2>&1 && echo yes || echo no`;
+    exec(cmd, { windowsHide: true }, (err, stdout) => {
+      if (IS_WIN) {
+        resolve(stdout ? stdout.toLowerCase().includes(name.toLowerCase()) : false);
+      } else {
+        resolve((stdout || '').trim() === 'yes');
+      }
+    });
+  });
+}
+
+function isNodeScriptRunning(pattern) {
+  return new Promise((resolve) => {
+    const cmd = IS_WIN
+      ? `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*${pattern}*' } | Measure-Object | Select-Object -ExpandProperty Count"`
+      : `pgrep -f "${pattern}" | wc -l`;
+    exec(cmd, { windowsHide: true }, (err, stdout) => {
+      resolve(parseInt((stdout || '0').trim()) > 0);
+    });
+  });
+}
+
+function isPortListening(port) {
+  return new Promise((resolve) => {
+    const cmd = IS_WIN
+      ? `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty State"`
+      : `ss -tlnp 2>/dev/null | grep -q ":${port} " && echo Listen || echo no`;
+    exec(cmd, { windowsHide: true }, (err, stdout) => {
+      resolve((stdout || '').trim() === 'Listen');
     });
   });
 }
@@ -102,19 +130,14 @@ async function router(req, res) {
 
   // GET /api/status
   if (method === 'GET' && pathname === '/api/status') {
-    const [nginx, webhook, adminServer, printAgent] = await Promise.all([
-      isRunning('nginx.exe'),
-      isRunning('webhook.exe'),
-      (async () => {
-        const r = await runCmd(`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 4000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty State"`);
-        return r.stdout === 'Listen';
-      })(),
-      (async () => {
-        const r = await runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | Measure-Object | Select-Object -ExpandProperty Count"`);
-        return parseInt(r.stdout) > 0;
-      })(),
+    const [nginx, webhook, adminServer, printAgent, ecrAgent] = await Promise.all([
+      IS_WIN ? isRunning('nginx.exe')   : isRunning('nginx'),
+      IS_WIN ? isRunning('webhook.exe') : isRunning('webhook'),
+      isPortListening(4000),
+      isNodeScriptRunning('print-agent'),
+      isNodeScriptRunning('ecr-agent'),
     ]);
-    return json(res, 200, { nginx, webhook, adminServer, printAgent });
+    return json(res, 200, { nginx, webhook, adminServer, printAgent, ecrAgent });
   }
 
   // GET /api/log
@@ -125,83 +148,79 @@ async function router(req, res) {
 
   // POST /api/restart-nginx
   if (method === 'POST' && pathname === '/api/restart-nginx') {
-    await runCmd('taskkill /f /im nginx.exe');
-    const child = spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', `${NGINX_DIR}\\nginx.exe`], {
-      detached: true,
-      stdio: 'ignore',
-      cwd: NGINX_DIR,
-      windowsHide: true,
-    });
-    child.unref();
-    return json(res, 200, { ok: true, message: 'Nginx riavviato' });
+    let result;
+    if (IS_WIN) {
+      await runCmd('taskkill /f /im nginx.exe');
+      spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', `${NGINX_DIR}\\nginx.exe`], { detached: true, stdio: 'ignore', cwd: NGINX_DIR, windowsHide: true }).unref();
+      result = { ok: true };
+    } else {
+      result = await runCmd('systemctl reload-or-restart nginx');
+    }
+    return json(res, 200, { ok: true, message: 'Nginx riavviato', ...result });
   }
 
   // POST /api/autopull
   if (method === 'POST' && pathname === '/api/autopull') {
-    const result = await runCmd(`"${AUTOPULL_BAT}"`, { cwd: BASE });
+    const cmd = IS_WIN ? `"${AUTOPULL_SCRIPT}"` : `bash "${AUTOPULL_SCRIPT}"`;
+    const result = await runCmd(cmd, { cwd: BASE });
     return json(res, 200, { ok: result.code === 0, ...result });
   }
 
   // POST /api/restart-print
   if (method === 'POST' && pathname === '/api/restart-print') {
-    // Kill the print-agent node process
-    await runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`);
-    // Start fresh via the auto-restart batch
-    const child = spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_BAT], {
-      detached: true,
-      stdio: 'ignore',
-      cwd: BASE,
-      windowsHide: true,
-    });
-    child.unref();
+    if (IS_WIN) {
+      await runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`);
+      spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_SCRIPT], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+    } else {
+      await runCmd('systemctl restart risto-print');
+    }
     return json(res, 200, { ok: true, message: 'Print Agent riavviato' });
   }
 
   // POST /api/restart-webhook
   if (method === 'POST' && pathname === '/api/restart-webhook') {
-    await runCmd('taskkill /f /im webhook.exe');
-    const child = spawn('cmd.exe', ['/c', 'start', '', 'C:\\risto\\webhook.exe', '-hooks', 'C:\\risto\\hooks.json', '-verbose', '-port', '9000'], {
-      detached: true,
-      stdio: 'ignore',
-      cwd: BASE,
-      windowsHide: true,
-    });
-    child.unref();
+    if (IS_WIN) {
+      await runCmd('taskkill /f /im webhook.exe');
+      const whPath = path.join(BASE, 'webhook.exe');
+      if (fs.existsSync(whPath)) {
+        spawn('cmd.exe', ['/c', 'start', '', whPath, '-hooks', path.join(BASE, 'hooks.json'), '-verbose', '-port', '9000'], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+      }
+    } else {
+      await runCmd('systemctl restart risto-webhook');
+    }
     return json(res, 200, { ok: true, message: 'Webhook riavviato' });
   }
 
   // POST /api/restart-admin
   if (method === 'POST' && pathname === '/api/restart-admin') {
-    // Riavvio in background dopo 1 secondo, così la response arriva prima
-    const child = spawn('cmd.exe', ['/c', 'timeout', '/t', '1', '&', 'start', '', 'cmd.exe', '/c', path.join(BASE, 'avvia_pannello.bat')], {
-      detached: true,
-      stdio: 'ignore',
-      cwd: BASE,
-      windowsHide: true,
-    });
-    child.unref();
+    if (IS_WIN) {
+      spawn('cmd.exe', ['/c', 'timeout', '/t', '1', '&', 'start', '', 'cmd.exe', '/c', path.join(BASE, 'avvia_pannello.bat')], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+    } else {
+      // Riavvio tramite systemd in background dopo la response
+      setTimeout(() => runCmd('systemctl restart risto-admin'), 500);
+    }
     setTimeout(() => { process.exit(0); }, 500);
     return json(res, 200, { ok: true, message: 'Admin server in riavvio...' });
   }
 
   // POST /api/restart-all
   if (method === 'POST' && pathname === '/api/restart-all') {
-    const results = await Promise.allSettled([
-      runCmd('taskkill /f /im nginx.exe'),
-      runCmd('taskkill /f /im webhook.exe'),
-      runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`),
-    ]);
-    const errors = results.filter(r => r.status === 'rejected').map(r => r.reason?.message);
-    // Riavvia nginx
-    spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', `${NGINX_DIR}\\nginx.exe`], { detached: true, stdio: 'ignore', cwd: NGINX_DIR, windowsHide: true }).unref();
-    // Riavvia webhook
-    const whPath = path.join(BASE, 'webhook.exe');
-    if (fs.existsSync(whPath)) {
-      spawn('cmd.exe', ['/c', 'start', '', whPath, '-hooks', path.join(BASE, 'hooks.json'), '-verbose', '-port', '9000'], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+    if (IS_WIN) {
+      await Promise.allSettled([
+        runCmd('taskkill /f /im nginx.exe'),
+        runCmd('taskkill /f /im webhook.exe'),
+        runCmd(`powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='node.exe'\\" | Where-Object { $_.CommandLine -like '*print-agent*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`),
+      ]);
+      spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', `${NGINX_DIR}\\nginx.exe`], { detached: true, stdio: 'ignore', cwd: NGINX_DIR, windowsHide: true }).unref();
+      const whPath = path.join(BASE, 'webhook.exe');
+      if (fs.existsSync(whPath)) {
+        spawn('cmd.exe', ['/c', 'start', '', whPath, '-hooks', path.join(BASE, 'hooks.json'), '-verbose', '-port', '9000'], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+      }
+      spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_SCRIPT], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
+    } else {
+      await runCmd('systemctl reload-or-restart nginx risto-print risto-ecr risto-webhook');
     }
-    // Riavvia print agent
-    spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_BAT], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
-    return json(res, 200, { ok: errors.length === 0, message: errors.length ? 'Servizi riavviati con alcuni errori' : 'Tutti i servizi riavviati', errors });
+    return json(res, 200, { ok: true, message: 'Tutti i servizi riavviati' });
   }
 
   // 404

@@ -1,0 +1,16 @@
+[Unit]
+Description=Risto — ECR Agent (PAX A35 + cassa Custom)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/risto/asporto-app/ecr-agent
+EnvironmentFile=/opt/risto/asporto-app/ecr-agent/.env
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:/opt/risto/logs/ecr.log
+StandardError=append:/opt/risto/logs/ecr.log
+
+[Install]
+WantedBy=multi-user.target

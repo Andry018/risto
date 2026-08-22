@@ -1,0 +1,15 @@
+[Unit]
+Description=Risto — Webhook (auto-pull da GitHub)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/risto
+ExecStart=/usr/local/bin/webhook -hooks /opt/risto/hooks.json -verbose -port 9000
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/opt/risto/logs/webhook.log
+StandardError=append:/opt/risto/logs/webhook.log
+
+[Install]
+WantedBy=multi-user.target

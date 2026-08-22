@@ -1,0 +1,16 @@
+[Unit]
+Description=Risto — Admin Server (pannello di controllo)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/risto/admin-server
+EnvironmentFile=/opt/risto/admin-server/secrets.env
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:/opt/risto/logs/admin.log
+StandardError=append:/opt/risto/logs/admin.log
+
+[Install]
+WantedBy=multi-user.target

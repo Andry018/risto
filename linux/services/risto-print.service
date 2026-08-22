@@ -1,0 +1,16 @@
+[Unit]
+Description=Risto — Print Agent (stampante termica)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/risto/asporto-app/print-agent
+EnvironmentFile=/opt/risto/asporto-app/print-agent/.env
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:/opt/risto/logs/print.log
+StandardError=append:/opt/risto/logs/print.log
+
+[Install]
+WantedBy=multi-user.target
