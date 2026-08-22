@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/andre/Documents/GitHub/risto -maxdepth 3 -name *.ts -o -name *.tsx -o -name *.js -o -name vite.config* -o -name tsconfig* -o -name docker-compose*)",
+      "Bash(find /c/Users/andre/Documents/GitHub/risto -maxdepth 2 -name docker* -o -name .env* -o -name supabase.toml -o -name nginx.conf)",
+      "WebSearch"
+    ]
+  }
+}
