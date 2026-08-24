@@ -9,6 +9,7 @@ import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Sav
 import BillsHistoryModal from './BillsHistoryModal';
 import CashPaymentModal from './CashPaymentModal';
 import CardPaymentModal from './CardPaymentModal';
+import PaymentChoiceModal from './PaymentChoiceModal';
 import type { PaymentResult } from '../lib/ecrAgent';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import PaninoBuilderModal from './PaninoBuilderModal';
@@ -66,6 +67,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [currentPortata, setCurrentPortata] = useState<(typeof PORTATA_OPTIONS)[number]['value']>('1');
 
   // Pagamento carta (ECR / PAX A35)
+  const [paymentChoiceOpen, setPaymentChoiceOpen] = useState(false);
   const [cashPaymentOpen, setCashPaymentOpen] = useState(false);
   const [cardPaymentOpen, setCardPaymentOpen] = useState(false);
   const [cardPaymentSplitParts, setCardPaymentSplitParts] = useState<number | undefined>(undefined);
@@ -880,14 +882,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                             <Pause size={16} /> METTI IN SOSPESO
                           </button>
                           <button
-                            onClick={() => openCardPayment()}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-black text-xs py-4 rounded-2xl border border-sky-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            <CreditCard size={14} /> PAGA CON CARTA
-                          </button>
-                          <button
-                            onClick={() => setCashPaymentOpen(true)}
+                            onClick={() => setPaymentChoiceOpen(true)}
                             disabled={cart.length === 0 || finishingOrder}
                             className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                           >
@@ -904,14 +899,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                             <Pause size={16} /> METTI IN SOSPESO
                           </button>
                           <button
-                            onClick={() => openCardPayment()}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-black text-xs py-4 rounded-2xl border border-sky-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            <CreditCard size={14} /> PAGA CON CARTA
-                          </button>
-                          <button
-                            onClick={() => setCashPaymentOpen(true)}
+                            onClick={() => setPaymentChoiceOpen(true)}
                             disabled={cart.length === 0 || finishingOrder}
                             className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                           >
@@ -1309,7 +1297,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     </button>
                   </div>
                   <button
-                    onClick={() => setCashPaymentOpen(true)}
+                    onClick={() => setPaymentChoiceOpen(true)}
                     disabled={cart.length === 0 || finishingOrder}
                     className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                   >
@@ -1326,7 +1314,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     Metti in Sospeso <Pause size={16} />
                   </button>
                   <button
-                    onClick={() => setCashPaymentOpen(true)}
+                    onClick={() => setPaymentChoiceOpen(true)}
                     disabled={cart.length === 0 || finishingOrder}
                     className="w-full bg-gold hover:bg-gold-hover text-black font-black text-base py-3 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
                   >
@@ -1576,6 +1564,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         onClose={() => setBillsSuspendedOpen(false)}
         variant="suspended"
         onSelect={resumeOrder}
+      />
+      <PaymentChoiceModal
+        open={paymentChoiceOpen}
+        total={discountedTotal}
+        onClose={() => setPaymentChoiceOpen(false)}
+        onCash={() => { setPaymentChoiceOpen(false); setCashPaymentOpen(true); }}
+        onCard={() => { setPaymentChoiceOpen(false); openCardPayment(); }}
       />
       <CashPaymentModal
         open={cashPaymentOpen}
