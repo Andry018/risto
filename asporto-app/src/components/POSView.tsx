@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { requireManagerPin } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
