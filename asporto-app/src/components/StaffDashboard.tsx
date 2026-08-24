@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Tavolo, Reservation } from '../types/entities';
 import {
@@ -15,7 +15,15 @@ type Section = 'hub' | 'sala';
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
-  const [section, setSection] = useState<Section>('hub');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [section, setSection] = useState<Section>(
+    (searchParams.get('section') as Section) || 'hub'
+  );
+
+  function goToSection(s: Section) {
+    setSection(s);
+    setSearchParams(s === 'hub' ? {} : { section: s }, { replace: true });
+  }
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,22 +78,6 @@ export default function StaffDashboard() {
   const timeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  const statCard = (label: string, value: number, accent: 'gold' | 'green' | 'gray' | 'blue', icon: React.ReactNode) => (
-    <div className="bg-surface border border-surface-light rounded-2xl p-4 flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
-        accent === 'gold' ? 'bg-gold/10 text-gold' :
-        accent === 'green' ? 'bg-emerald-500/10 text-emerald-400' :
-        accent === 'blue' ? 'bg-sky-500/10 text-sky-400' :
-        'bg-gray-500/10 text-gray-400'
-      }`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-2xl font-black text-white leading-none">{value}</p>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-1">{label}</p>
-      </div>
-    </div>
-  );
 
   return (
     <div className="h-dvh bg-charcoal text-white flex flex-col font-sans overflow-hidden">
@@ -94,7 +86,7 @@ export default function StaffDashboard() {
         <div className="flex items-center gap-3">
           {section !== 'hub' && (
             <button
-              onClick={() => setSection('hub')}
+              onClick={() => goToSection('hub')}
               className="p-2 -ml-1 mr-1 bg-surface border border-surface-light rounded-xl text-gray-400 hover:text-white transition-colors cursor-pointer"
               title="Torna alle sezioni"
             >
@@ -131,23 +123,48 @@ export default function StaffDashboard() {
       </div>
 
       {section === 'hub' && (
-        <>
+        <div className="flex-1 min-h-0 flex flex-col px-5 md:px-8 pb-5 gap-4 overflow-hidden">
+
           {/* KPI Row */}
-          <div className="px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
-            {statCard('Tavoli occupati', occupiedCount, 'gold', <Table2 size={20} />)}
-            {statCard('Tavoli liberi', availableCount, 'green', <MapIcon size={20} />)}
-            {statCard('Tavoli prenotati', reservedCount, 'blue', <CalendarDays size={20} />)}
-            {statCard('Persone attese', expectedPeople, 'gray', <UserPlus size={20} />)}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+            <KpiCard label="Tavoli occupati" value={occupiedCount} accent="gold"  icon={<Table2 size={18} />} />
+            <KpiCard label="Tavoli liberi"   value={availableCount} accent="green" icon={<MapIcon size={18} />} />
+            <KpiCard label="Prenotati oggi"  value={reservedCount}  accent="blue"  icon={<CalendarDays size={18} />} />
+            <KpiCard label="Persone attese"  value={expectedPeople} accent="gray"  icon={<UserPlus size={18} />} />
           </div>
 
-          {/* Sezioni macro */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-5 md:px-8 py-6">
-            <SectionBox title="Sala" icon={<MapIcon size={26} strokeWidth={1.5} />} onClick={() => setSection('sala')} />
-            <SectionBox title="Cucina" icon={<ChefHat size={26} strokeWidth={1.5} />} onClick={() => navigate('/kitchen?tab=menu')} />
-            <SectionBox title="Magazzino" icon={<Package size={26} strokeWidth={1.5} />} onClick={() => navigate('/magazzino')} />
-            <SectionBox title="Personale" icon={<Users size={26} strokeWidth={1.5} />} onClick={() => navigate('/settings?section=personale')} />
+          {/* Sezioni macro — riempiono lo spazio restante */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1 min-h-0">
+            <BigSectionCard
+              title="Sala"
+              desc="Tavoli, conto e POS"
+              icon={<MapIcon size={36} strokeWidth={1.2} />}
+              accent="gold"
+              onClick={() => goToSection('sala')}
+            />
+            <BigSectionCard
+              title="Cucina"
+              desc="Comande & menu"
+              icon={<ChefHat size={36} strokeWidth={1.2} />}
+              accent="orange"
+              onClick={() => navigate('/kitchen?tab=menu')}
+            />
+            <BigSectionCard
+              title="Magazzino"
+              desc="Inventario & scorte"
+              icon={<Package size={36} strokeWidth={1.2} />}
+              accent="blue"
+              onClick={() => navigate('/magazzino')}
+            />
+            <BigSectionCard
+              title="Personale"
+              desc="Staff & impostazioni"
+              icon={<Users size={36} strokeWidth={1.2} />}
+              accent="purple"
+              onClick={() => navigate('/settings?section=personale')}
+            />
           </div>
-        </>
+        </div>
       )}
 
       {section === 'sala' && (
@@ -324,14 +341,48 @@ export default function StaffDashboard() {
   );
 }
 
-function SectionBox({ title, icon, onClick }: { title: string; icon: React.ReactNode; onClick: () => void }) {
+type Accent = 'gold' | 'green' | 'gray' | 'blue' | 'orange' | 'purple';
+
+const accentClasses: Record<Accent, { icon: string; border: string; glow: string; bg: string }> = {
+  gold:   { icon: 'text-gold',        border: 'hover:border-gold/50',        glow: 'group-hover:bg-gold/10',        bg: 'bg-gold/10' },
+  green:  { icon: 'text-emerald-400', border: 'hover:border-emerald-500/50', glow: 'group-hover:bg-emerald-500/10', bg: 'bg-emerald-500/10' },
+  blue:   { icon: 'text-sky-400',     border: 'hover:border-sky-500/50',     glow: 'group-hover:bg-sky-500/10',     bg: 'bg-sky-500/10' },
+  orange: { icon: 'text-orange-400',  border: 'hover:border-orange-500/50',  glow: 'group-hover:bg-orange-500/10', bg: 'bg-orange-500/10' },
+  purple: { icon: 'text-violet-400',  border: 'hover:border-violet-500/50',  glow: 'group-hover:bg-violet-500/10', bg: 'bg-violet-500/10' },
+  gray:   { icon: 'text-gray-400',    border: 'hover:border-gray-500/50',    glow: 'group-hover:bg-gray-500/10',   bg: 'bg-gray-500/10' },
+};
+
+function KpiCard({ label, value, accent, icon }: { label: string; value: number; accent: Accent; icon: React.ReactNode }) {
+  const a = accentClasses[accent];
+  return (
+    <div className="bg-surface border border-surface-light rounded-2xl p-4 flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${a.bg} ${a.icon}`}>
+        {icon}
+      </div>
+      <div>
+        <p className={`text-3xl font-black leading-none ${a.icon}`}>{value}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-1">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function BigSectionCard({ title, desc, icon, accent, onClick }: {
+  title: string; desc: string; icon: React.ReactNode; accent: Accent; onClick: () => void;
+}) {
+  const a = accentClasses[accent];
   return (
     <button
       onClick={onClick}
-      className="aspect-square md:aspect-auto md:h-36 bg-surface border border-surface-light rounded-2xl p-5 flex flex-col items-start justify-between hover:border-gold/40 hover:bg-surface-light/40 transition-all active:scale-[0.98] cursor-pointer"
+      className={`group bg-surface border border-surface-light ${a.border} rounded-3xl p-7 flex flex-col justify-between transition-all duration-200 active:scale-[0.97] cursor-pointer h-full min-h-[180px]`}
     >
-      <div className="text-gold">{icon}</div>
-      <span className="text-base font-bold text-white">{title}</span>
+      <div className={`w-16 h-16 rounded-2xl ${a.bg} ${a.glow} flex items-center justify-center transition-colors duration-200 ${a.icon}`}>
+        {icon}
+      </div>
+      <div className="text-left mt-4">
+        <p className={`text-2xl font-black uppercase tracking-tight text-white group-hover:${a.icon} transition-colors`}>{title}</p>
+        <p className="text-xs text-gray-500 mt-1 font-medium">{desc}</p>
+      </div>
     </button>
   );
 }

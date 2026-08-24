@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { requireManagerPin } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
@@ -37,6 +37,7 @@ const PORTATA_OPTIONS = [
 
 export default function POSView({ tableId: propTableId, tableName: propTableName, onOrderFinished, onNavigateHome }: { tableId?: string, tableName?: string, onOrderFinished?: () => void, onNavigateHome?: () => void }) {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const tableId = propTableId || searchParams.get('tableId');
   const tableName = propTableName || searchParams.get('tableName');
 
@@ -986,9 +987,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                    <LayoutDashboard size={24} />
                 </button>
               ) : (
-                <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
+                <button
+                  onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
+                  className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl"
+                >
                    <LayoutDashboard size={24} />
-                </Link>
+                </button>
               )}
               <div>
                 <div className="flex items-center gap-3">
