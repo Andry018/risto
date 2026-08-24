@@ -71,13 +71,14 @@ info "Node.js $(node --version), npm $(npm --version)"
 # ---------------------------------------------------------------------------
 if ! command -v docker &>/dev/null; then
   info "Installazione Docker Engine..."
+  OS_ID=$(. /etc/os-release && echo "$ID")   # "debian" o "ubuntu"
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/debian/gpg \
+  curl -fsSL "https://download.docker.com/linux/${OS_ID}/gpg" \
     | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
   echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-     https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+     https://download.docker.com/linux/${OS_ID} $(lsb_release -cs) stable" \
     > /etc/apt/sources.list.d/docker.list
   apt-get update -qq
   apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
@@ -126,6 +127,8 @@ fi
 # ---------------------------------------------------------------------------
 info "npm install — asporto-app (frontend + build)..."
 cd "$RISTO_BASE/asporto-app"
+# Rimuovi lockfile generato su Windows (contiene binari win32 incompatibili)
+rm -f package-lock.json
 npm install
 
 info "npm install — print-agent..."

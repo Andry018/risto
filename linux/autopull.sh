@@ -12,6 +12,8 @@ cd "$RISTO_BASE"
 git pull >> "$LOG" 2>&1
 
 cd asporto-app
+# Rimuovi lockfile generato su Windows (contiene binari win32 incompatibili)
+rm -f package-lock.json
 npm install >> "$LOG" 2>&1
 
 # Scrivi version.txt prima della build (come in start.bat / autopull.bat)
