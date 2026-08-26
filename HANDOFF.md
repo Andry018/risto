@@ -1,6 +1,85 @@
 # HANDOFF — Risto (Il Girasole)
 
-_Ultima sessione: 2026-08-22. Sessione precedente: 2026-08-06 → 2026-08-09._
+_Ultima sessione: 2026-08-26. Sessione precedente: 2026-08-22._
+
+---
+
+## SESSIONE 2026-08-26 — Deploy Linux CT + Cloudflare + Pagamento Contante
+
+### Infrastruttura CT
+
+| Host | IP | Ruolo |
+|------|----|-------|
+| CT 100 (Ubuntu Noble) | 192.168.1.250 | Gestionale (nginx, frontend, supabase, agenti) |
+| CT 106 (Ubuntu Noble) | 192.168.1.X | cloudflared tunnel |
+| Stampante termica | 192.168.1.200 | HZXT (era .150, cambiata) |
+| Windows PC sviluppo | 192.168.1.100 | Dev locale |
+
+**Dominio esterno**: `gestionale.90-minuti.it` via Cloudflare Tunnel
+
+**Path nginx sul CT:**
+```
+/             → /opt/risto/asporto-app/dist/
+/print-agent/ → http://127.0.0.1:8787/
+/admin/       → http://127.0.0.1:4000/
+/rest/        → http://127.0.0.1:54321/rest/v1/
+/auth/        → http://127.0.0.1:54321/auth/v1/
+/realtime/    → http://127.0.0.1:54321/realtime/v1/
+```
+
+**`.env` del CT** (`/opt/risto/asporto-app/.env`):
+```
+VITE_SUPABASE_URL=http://192.168.1.250/rest
+VITE_PRINT_AGENT_URL=/print-agent
+```
+
+### Fix applicati sul CT (non rifare)
+
+1. `lightningcss-win32-x64-msvc` rimosso da `package.json` (causava EBADPLATFORM su Linux)
+2. `rm -f package-lock.json` aggiunto in `setup.sh` e `autopull.sh` prima di `npm install`
+3. `risto-admin.service`: `ExecStart` corretto a `node server.js` (era `index.js`)
+4. DNS Proxmox host: cambiato da 100.100.100.100 (Tailscale) a 8.8.8.8/1.1.1.1 — tutti i CT ereditano
+5. cloudflared: `TimeoutStartSec=90`, `--protocol http2` (QUIC bloccato dal router)
+6. `VITE_PRINT_AGENT_URL=/print-agent` in `.env` CT — browser usa nginx proxy invece di 127.0.0.1:8787
+
+### TODO pendenti dal CT
+
+- [ ] **Seed DB**: ancora vuoto (niente tavoli, menu, PIN staff)
+  ```bash
+  cd /opt/risto && supabase db reset --local
+  ```
+- [ ] **Node.js**: CT usa v20, alcuni package richiedono v22
+  ```bash
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt install -y nodejs
+  ```
+- [ ] **hooks.json per risto-webhook**: verificare che esista (altrimenti autopull GitHub non funziona)
+- [ ] **Verifica cloudflared**: dopo fix DNS + reboot, confermare che gestionale.90-minuti.it risponda
+- [ ] **[TODO-NEXI]** PAX A35: codici ECR17 da developer.nexigroup.com/traditionalpos; IP in `ecr-agent/.env` → `PAX_HOST`
+- [ ] **[TODO-CUSTOM]** Custom RT: codici da manuale tecnico; IP in `ecr-agent/.env` → `CUSTOM_HOST`
+
+### Commit pendenti (modifiche non ancora pushate)
+
+- `PaymentChoiceModal.tsx` — nuovo: scelta carta/contante quando si clicca "CHIUDI CONTO"
+- `CashPaymentModal.tsx` — nuovo: schermata cassiera (banconote rapide + tastierino + resto)
+- `POSView.tsx` — rimosso "PAGA CON CARTA" dalla sidebar, aggiunto flusso PaymentChoice → Cash/Card
+- `StaffDashboard.tsx` — redesign hub: KPI + BigSectionCard a schermo intero, URL `?section=sala`
+- `package.json` — rimosso `lightningcss-win32-x64-msvc` da dependencies
+- `linux/setup.sh` / `linux/autopull.sh` — `rm -f package-lock.json` prima di npm install
+
+### Nuovi componenti
+
+**`PaymentChoiceModal.tsx`** — si apre su "CHIUDI CONTO", due bottoni: CONTANTE (gold) / CARTA (sky)
+
+**`CashPaymentModal.tsx`** — layout due colonne su md+ (iPad ottimizzato):
+- Sinistra: totale da pagare, display ricevuto, resto (verde/rosso), bottone CONFERMA
+- Destra: banconote rapide €5/10/20/50/100/200, tastierino numerico, shortcut "PAGAMENTO ESATTO"
+
+**`StaffDashboard.tsx`** — URL-based section (`?section=sala`), hub con KpiCard + BigSectionCard a full height
+
+### Navigazione
+
+- `navigate(-1)` in `POSView` (non `<Link to="/">`) — torna solo di un passo
+- `StaffDashboard` usa `useSearchParams` + `?section=sala` per persistere la sezione selezionata
 
 ---
 
