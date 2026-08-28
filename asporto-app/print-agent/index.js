@@ -328,10 +328,12 @@ async function stampaEtichettaHaccp(dati) {
     printer.bold(false);
     printer.println('');
 
-    // Barcode dal lotto (centrato)
+    // Lotto in grande (QR code ESC/POS non supportato su questo driver)
     if (dati.lotto) {
       printer.alignCenter();
-      printer.qrCode(dati.lotto);
+      printer.setTextDoubleWidth();
+      printer.println(dati.lotto);
+      printer.setTextNormal();
       printer.alignLeft();
       printer.println('');
     }
