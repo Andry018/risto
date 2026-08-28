@@ -22,4 +22,12 @@ echo "builtAt=$(date -Iseconds)" >> public/version.txt
 
 npm run build >> "$LOG" 2>&1
 
+# Applica nuove migrazioni DB (best-effort, non blocca se fallisce)
+cd "$RISTO_BASE"
+supabase migration up --local --workdir "$RISTO_BASE" >> "$LOG" 2>&1 || echo "[$(date -Iseconds)] WARN: migration up fallita (ignorata)" >> "$LOG"
+
+# Riavvia servizi aggiornati
+systemctl restart risto-print >> "$LOG" 2>&1 || true
+systemctl restart risto-ecr >> "$LOG" 2>&1 || true
+
 echo "[$(date -Iseconds)] Autopull completato" >> "$LOG"
