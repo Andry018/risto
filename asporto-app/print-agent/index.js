@@ -329,10 +329,11 @@ async function stampaEtichettaHaccp(dati) {
     printer.println('');
 
 
-    // Barcode lotto (CODE128, supportato da tutti i termici ESC/POS)
+    // QR code con URL scheda preparazione (scansionabile dai controlli sanitari)
     if (dati.lotto) {
+      const qrUrl = `https://gestionale.90-minuti.it/etichetta/${dati.lotto}`;
       printer.alignCenter();
-      printer.printBarcode(dati.lotto, 73); // 73 = CODE128
+      printer.qrCode(qrUrl, 2, 4, 'M');
       printer.println('');
       printer.alignLeft();
     }
