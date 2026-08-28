@@ -16,6 +16,7 @@ _Ultima sessione: 2026-08-26. Sessione precedente: 2026-08-22._
 | Windows PC sviluppo | 192.168.1.100 | Dev locale |
 
 **Dominio esterno**: `gestionale.90-minuti.it` via Cloudflare Tunnel
+**Proxmox**: `pve.90-minuti.it` (pannello web) — console CT/VM solo via Tailscale (`https://[tailscale-ip]:8006`)
 
 **Path nginx sul CT:**
 ```

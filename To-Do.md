@@ -1,8 +1,51 @@
 # To-Do — Risto (Il Girasole)
 
-_Ultimo aggiornamento: 2026-08-10_
+_Ultimo aggiornamento: 2026-08-28_
 
 ## 🔴 Da fare subito (bloccato su azioni tue)
+
+- [ ] **Open WebUI (chat Claude sul CT)** — eseguire sul CT 100 (192.168.1.250):
+  ```bash
+  # 1. Avvia container
+  docker run -d \
+    --name open-webui \
+    --restart always \
+    -p 3001:8080 \
+    -e ANTHROPIC_API_KEY="sk-ant-..." \
+    -e ENABLE_ANTHROPIC_API=true \
+    -v open-webui:/app/backend/data \
+    ghcr.io/open-webui/open-webui:main
+
+  # 2. Aspetta avvio
+  docker logs -f open-webui   # aspetta "Application startup complete"
+
+  # 3. Aggiungi a nginx.conf dentro server { }
+  # location /claude/ {
+  #     proxy_pass         http://127.0.0.1:3001/;
+  #     proxy_http_version 1.1;
+  #     proxy_set_header   Upgrade $http_upgrade;
+  #     proxy_set_header   Connection "upgrade";
+  #     proxy_set_header   Host $host;
+  #     proxy_read_timeout 300s;
+  # }
+  nginx -t && systemctl reload nginx
+  ```
+  Accesso: `http://192.168.1.250/claude/` o `https://gestionale.90-minuti.it/claude/`
+  Prima volta: crea account admin → Admin Panel → Connections → Anthropic → inserisci API key
+
+- [ ] **Seed DB**: il DB è vuoto (niente tavoli, menu, PIN staff)
+  ```bash
+  cd /opt/risto && supabase db reset --local
+  ```
+
+- [ ] **Node.js upgrade sul CT**: aggiorna da v20 a v22
+  ```bash
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
+  sudo apt install -y nodejs
+  ```
+
+- [ ] **Commit modifiche pendenti** (da Windows, non dal CT):
+  PaymentChoiceModal, CashPaymentModal, StaffDashboard redesign, POSView, package.json, linux scripts
 
 - [x] **Push delle ultime modifiche** — WiFi QR su `/qr-menu`, sezione "Menu Online" in Impostazioni. Pushate su `origin/main` (commit `528ffc2`, 2026-08-10).
 - [ ] **Menu Pubblico — completare il deploy**:

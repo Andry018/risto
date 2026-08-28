@@ -331,7 +331,7 @@ async function stampaEtichettaHaccp(dati) {
     // Barcode dal lotto (centrato)
     if (dati.lotto) {
       printer.alignCenter();
-      printer.qrcode(dati.lotto);
+      printer.qrCode(dati.lotto);
       printer.alignLeft();
       printer.println('');
     }
