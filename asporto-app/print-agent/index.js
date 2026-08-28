@@ -329,6 +329,14 @@ async function stampaEtichettaHaccp(dati) {
     printer.println('');
 
 
+    // Barcode lotto (CODE128, supportato da tutti i termici ESC/POS)
+    if (dati.lotto) {
+      printer.alignCenter();
+      printer.printBarcode(dati.lotto, 73); // 73 = CODE128
+      printer.println('');
+      printer.alignLeft();
+    }
+
     printer.println('');
     printer.cut();
     await executePrinter(printer, `Etichetta HACCP ${dati.nome_prodotto}`);
