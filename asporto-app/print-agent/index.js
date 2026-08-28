@@ -333,7 +333,7 @@ async function stampaEtichettaHaccp(dati) {
     if (dati.lotto) {
       const qrUrl = `https://gestionale.90-minuti.it/etichetta/${dati.lotto}`;
       printer.alignCenter();
-      printer.qrCode(qrUrl, 2, 4, 'M');
+      printer.printQR(qrUrl, { cellSize: 4, correction: 'M', model: 2 });
       printer.println('');
       printer.alignLeft();
     }
