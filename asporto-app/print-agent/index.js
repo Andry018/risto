@@ -275,68 +275,56 @@ async function stampaEtichettaHaccp(dati) {
     printer.println('');
     printer.println('');
 
-    // Titolo — nome prodotto in grassetto, carattere grande
+    // QR code in alto a destra (stampato prima, poi nome sotto a sinistra)
+    if (dati.lotto) {
+      const qrUrl = `https://gestionale.90-minuti.it/etichetta/${dati.lotto}`;
+      printer.alignRight();
+      printer.printQR(qrUrl, { cellSize: 3, correction: 'M', model: 2 });
+      printer.alignLeft();
+    }
+
+    // Nome prodotto — grassetto, grande
     printer.bold(true);
     printer.setTextDoubleWidth();
     printer.println((dati.nome_prodotto || '').toUpperCase());
     printer.setTextNormal();
     printer.bold(false);
-
     printer.println('');
 
-    // Allergeni
+    // Allergeni inline
     if (dati.allergeni) {
       printer.bold(true);
-      printer.println('Allergeni Presenti');
+      printer.print('Allergeni: ');
       printer.bold(false);
       printer.println(dati.allergeni);
-      printer.println('');
     }
 
-    // Ingredienti
+    // Ingredienti inline
     if (dati.ingredienti) {
       printer.bold(true);
       printer.print('INGREDIENTI: ');
       printer.bold(false);
       printer.println(dati.ingredienti);
-      printer.println('');
     }
 
-    // Conservazione
+    // Conservazione inline
     if (dati.conservazione) {
       printer.bold(true);
-      printer.println('Conservazione');
+      printer.print('Conservazione: ');
       printer.bold(false);
       printer.println(dati.conservazione);
-      printer.println('');
     }
 
-    // Riga divisoria leggera
+    printer.println('');
     printer.drawLine();
-    printer.println('');
 
-    // Piè di pagina — due colonne con date e lotto
-    if (dati.data_preparazione) {
-      printer.leftRight('Preparato il', dati.lotto ? `Lotto: ${dati.lotto}` : '');
-      printer.leftRight(dati.data_preparazione, '');
-    } else if (dati.lotto) {
-      printer.leftRight('', `Lotto: ${dati.lotto}`);
-    }
-    printer.leftRight('Scadenza', '');
+    // Footer: Preparato il + Lotto su stessa riga, Scadenza sotto
+    const prepLabel = dati.data_preparazione ? `Preparato il ${dati.data_preparazione}` : '';
+    const lottoLabel = dati.lotto ? `Lotto: ${dati.lotto}` : '';
+    printer.leftRight(prepLabel, lottoLabel);
     printer.bold(true);
-    printer.leftRight(dati.data_scadenza || '', '');
+    printer.println(`Scadenza ${dati.data_scadenza || ''}`);
     printer.bold(false);
-    printer.println('');
-
-
-    // QR code con URL scheda preparazione (scansionabile dai controlli sanitari)
-    if (dati.lotto) {
-      const qrUrl = `https://gestionale.90-minuti.it/etichetta/${dati.lotto}`;
-      printer.alignCenter();
-      printer.printQR(qrUrl, { cellSize: 4, correction: 'M', model: 2 });
-      printer.println('');
-      printer.alignLeft();
-    }
 
     printer.println('');
     printer.cut();
