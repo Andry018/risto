@@ -12,6 +12,7 @@ import {
   getCurrentUser,
   hasPermission,
   clearStaffSession,
+  syncStaffUsersFromDb,
   type StaffUser,
   type StaffRole,
 } from '../lib/staffAuth';
@@ -34,7 +35,11 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
   const defaultPin = getDefaultStaffPin();
 
   useEffect(() => { setAuthed(isStaffSessionValid()); }, []);
-  useEffect(() => { setUsers(getStaffUsers()); }, []);
+  useEffect(() => {
+    // Carica prima da localStorage, poi sincronizza dal DB (cross-device)
+    setUsers(getStaffUsers());
+    syncStaffUsersFromDb().then(() => setUsers(getStaffUsers()));
+  }, []);
 
   useEffect(() => {
     if (authed) {

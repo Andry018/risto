@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 const PIN_STORAGE_KEY = 'risto_manager_pin';
 const USERS_STORAGE_KEY = 'risto_staff_users';
 const SESSION_STORAGE_KEY = 'risto_staff_session_user_id';
@@ -109,6 +111,35 @@ export function getDefaultRouteForRole(_role: StaffRole): string {
 
 export function canAccessRoute(_path: string): boolean {
   return true;
+}
+
+// ── Sync con Supabase (best-effort, fallback su localStorage) ────────────────
+
+/** Carica gli operatori dal DB e li salva in localStorage. Da chiamare all'avvio. */
+export async function syncStaffUsersFromDb(): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('staff_users').select('*');
+    if (!error && data && data.length > 0) {
+      writeUsers(data as StaffUser[]);
+    }
+  } catch { /* offline: usa localStorage */ }
+}
+
+/** Salva o aggiorna un operatore sul DB. */
+export async function pushStaffUserToDb(user: StaffUser): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from('staff_users').upsert({ id: user.id, name: user.name, pin: user.pin, role: user.role });
+  } catch { /* offline */ }
+}
+
+/** Rimuove un operatore dal DB. */
+export async function deleteStaffUserFromDb(id: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from('staff_users').delete().eq('id', id);
+  } catch { /* offline */ }
 }
 
 let _pinPromptHandler: ((label: string) => Promise<boolean>) | null = null;

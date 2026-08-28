@@ -9,6 +9,7 @@ import {
 import {
   requireManagerPin, setManagerPin,
   getStaffUsers, addStaffUser, updateStaffUser, removeStaffUser,
+  pushStaffUserToDb, deleteStaffUserFromDb,
   type StaffUser, type StaffRole,
 } from '../lib/staffAuth';
 import { hasTurno, toggleTurno, type TurnoTipo } from '../lib/turni';
@@ -138,7 +139,8 @@ export default function SettingsView() {
   const handleAddUser = () => {
     if (!newUserName.trim()) { addToast({ type: 'error', title: 'Nome mancante', message: 'Inserisci un nome per l\'operatore' }); return; }
     if (newUserPin.trim().length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
-    addStaffUser(newUserName, newUserPin, newUserRole);
+    const newUser = addStaffUser(newUserName, newUserPin, newUserRole);
+    void pushStaffUserToDb(newUser);
     refreshStaffUsers();
     setNewUserName('');
     setNewUserPin('');
@@ -162,6 +164,8 @@ export default function SettingsView() {
       updates.pin = editUserPin.trim();
     }
     updateStaffUser(id, updates);
+    const updated = getStaffUsers().find(u => u.id === id);
+    if (updated) void pushStaffUserToDb(updated);
     refreshStaffUsers();
     setEditingUserId(null);
     addToast({ type: 'success', title: 'Operatore aggiornato' });
@@ -171,6 +175,7 @@ export default function SettingsView() {
     const ok = await confirm({ title: 'Elimina operatore', message: `Eliminare "${user.name}"? Dovrà reinserire i dati per accedere di nuovo.`, destructive: true });
     if (!ok) return;
     removeStaffUser(user.id);
+    void deleteStaffUserFromDb(user.id);
     refreshStaffUsers();
     addToast({ type: 'success', title: 'Operatore eliminato' });
   };
