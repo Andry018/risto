@@ -106,6 +106,22 @@ function readTailLines(filePath, n = 100) {
   }
 }
 
+// ── File editor — whitelist percorsi modificabili ───────
+const EDITABLE_FILES = {
+  'app-env':   path.join(BASE, 'asporto-app', '.env'),
+  'ecr-env':   path.join(BASE, 'asporto-app', 'ecr-agent', '.env'),
+  'print-env': path.join(BASE, 'asporto-app', 'print-agent', '.env'),
+};
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 100_000) req.destroy(); });
+    req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch { resolve({}); } });
+    req.on('error', reject);
+  });
+}
+
 // ── Routes ──────────────────────────────────────────────
 async function router(req, res) {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -221,6 +237,35 @@ async function router(req, res) {
       await runCmd('systemctl reload-or-restart nginx risto-print risto-ecr risto-webhook');
     }
     return json(res, 200, { ok: true, message: 'Tutti i servizi riavviati' });
+  }
+
+  // GET /api/file?name=app-env|ecr-env|print-env
+  if (method === 'GET' && pathname === '/api/file') {
+    const name = url.searchParams.get('name');
+    const filePath = EDITABLE_FILES[name];
+    if (!filePath) return json(res, 400, { ok: false, error: 'File non consentito' });
+    try {
+      const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+      return json(res, 200, { ok: true, content });
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e.message });
+    }
+  }
+
+  // POST /api/file?name=app-env|ecr-env|print-env  { content: "..." }
+  if (method === 'POST' && pathname === '/api/file') {
+    const name = url.searchParams.get('name');
+    const filePath = EDITABLE_FILES[name];
+    if (!filePath) return json(res, 400, { ok: false, error: 'File non consentito' });
+    const body = await readBody(req);
+    if (typeof body.content !== 'string') return json(res, 400, { ok: false, error: 'Contenuto mancante' });
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, body.content, 'utf8');
+      return json(res, 200, { ok: true, message: 'File salvato' });
+    } catch (e) {
+      return json(res, 500, { ok: false, error: e.message });
+    }
   }
 
   // 404

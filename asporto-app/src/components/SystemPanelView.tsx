@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, Server, GitPullRequest, Printer, Radio, LayoutDashboard,
-  CheckCircle2, XCircle, ScrollText, KeyRound,
+  CheckCircle2, XCircle, ScrollText, KeyRound, FileEdit, Save,
 } from 'lucide-react';
 import { getSetting, setSetting, SETTINGS_KEYS } from '../lib/appSettings';
 import { useToast } from './Toast';
@@ -48,6 +48,17 @@ export default function SystemPanelView() {
   const [loadingLog, setLoadingLog] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [authError, setAuthError] = useState(false);
+
+  // File editor
+  const FILE_OPTIONS = [
+    { key: 'app-env',   label: 'App (.env)' },
+    { key: 'ecr-env',   label: 'ECR Agent (.env)' },
+    { key: 'print-env', label: 'Print Agent (.env)' },
+  ];
+  const [selectedFile, setSelectedFile] = useState('app-env');
+  const [fileContent, setFileContent] = useState('');
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileSaving, setFileSaving] = useState(false);
 
   const authHeaders = useCallback((): HeadersInit => ({ 'X-Admin-Secret': secret }), [secret]);
 
@@ -111,6 +122,42 @@ export default function SystemPanelView() {
     } finally {
       setBusyAction(null);
       setTimeout(fetchStatus, 1500);
+    }
+  };
+
+  const loadFile = async (name: string) => {
+    if (!secret) return;
+    setFileLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/file?name=${name}`, { headers: authHeaders() });
+      if (res.status === 401) { setAuthError(true); return; }
+      const data = await res.json();
+      if (data.ok) setFileContent(data.content);
+      else addToast({ type: 'error', title: 'Errore', message: data.error || 'Impossibile leggere il file.' });
+    } catch {
+      addToast({ type: 'error', title: 'Errore', message: 'Impossibile contattare il pannello sistema.' });
+    } finally {
+      setFileLoading(false);
+    }
+  };
+
+  const saveFile = async () => {
+    if (!secret) return;
+    setFileSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/file?name=${selectedFile}`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: fileContent }),
+      });
+      if (res.status === 401) { setAuthError(true); return; }
+      const data = await res.json();
+      if (data.ok) addToast({ type: 'success', title: 'Salvato', message: 'File aggiornato. Riavvia i servizi se necessario.' });
+      else addToast({ type: 'error', title: 'Errore', message: data.error || 'Salvataggio fallito.' });
+    } catch {
+      addToast({ type: 'error', title: 'Errore', message: 'Impossibile contattare il pannello sistema.' });
+    } finally {
+      setFileSaving(false);
     }
   };
 
@@ -232,6 +279,43 @@ export default function SystemPanelView() {
           >
             <RefreshCw size={16} /> Riavvia Tutto
           </button>
+        </div>
+
+        {/* File Editor */}
+        <div className={`${'bg-surface border-surface-light'} border rounded-2xl p-5 mb-6`}>
+          <div className="flex items-center gap-2 mb-4">
+            <FileEdit size={18} className="text-gold" />
+            <h2 className="font-bold text-white text-sm uppercase tracking-widest">Editor File Configurazione</h2>
+          </div>
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {FILE_OPTIONS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setSelectedFile(f.key); loadFile(f.key); }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${selectedFile === f.key ? 'bg-gold text-black' : 'bg-charcoal text-gray-400 hover:text-white border border-surface-light'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={fileContent}
+            onChange={e => setFileContent(e.target.value)}
+            disabled={fileLoading}
+            rows={12}
+            spellCheck={false}
+            className="w-full bg-black/40 border border-surface-light rounded-xl p-4 font-mono text-xs text-gray-300 outline-none focus:border-gold resize-y disabled:opacity-50"
+            placeholder={fileLoading ? 'Caricamento...' : 'Seleziona un file per modificarlo'}
+          />
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={saveFile}
+              disabled={fileSaving || fileLoading}
+              className="flex items-center gap-2 bg-gold hover:bg-gold-hover text-black font-bold py-2.5 px-5 rounded-xl text-sm disabled:opacity-40 transition-all"
+            >
+              <Save size={16} /> {fileSaving ? 'Salvataggio...' : 'Salva'}
+            </button>
+          </div>
         </div>
 
         <div className={`${'bg-surface border-surface-light'} border rounded-2xl p-5`}>
