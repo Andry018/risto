@@ -135,6 +135,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     if (!IS_DEMO_MODE && supabase) {
       await supabase.from('tavoli').delete().eq('id', id);
     }
+    setTavoli(prev => prev.filter(t => t.id !== id));
   };
 
   const addTable = async () => {
@@ -148,7 +149,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
       addToast({ type: 'error', title: 'Nome già esistente', message: `Esiste già un tavolo chiamato "${name}"` });
       return;
     }
-    await supabase.from('tavoli').insert([{
+    const { data } = await supabase.from('tavoli').insert([{
       nome: name,
       x: 10,
       y: 10,
@@ -156,7 +157,8 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
       status: 'LIBERO',
       shape: 'SQUARE',
       sala: activeSala
-    }]);
+    }]).select().single();
+    if (data) setTavoli(prev => [...prev, data]);
   };
 
   async function fetchReservationsForDate() {
