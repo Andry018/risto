@@ -5,7 +5,7 @@ import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Po
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
@@ -921,6 +921,13 @@ export default function WaiterMobileView() {
                     desc="Scorte e carico/scarico"
                     accent="bg-orange-500/10 text-orange-400"
                     onClick={() => navigate('/magazzino')}
+                  />
+                  <HubCard
+                    icon={<ShieldCheck size={24} />}
+                    title="HACCP"
+                    desc="Etichette & tracciabilità"
+                    accent="bg-emerald-600/10 text-emerald-400"
+                    onClick={() => navigate('/haccp')}
                   />
                 </>
               )}
