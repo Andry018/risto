@@ -1,8 +1,8 @@
 [
   {
     "id": "aggiorna-ristorante",
-    "execute-command": "C:/risto/autopull.bat",
-    "command-working-directory": "C:/risto",
+    "execute-command": "/opt/risto/linux/autopull.sh",
+    "command-working-directory": "/opt/risto",
     "response-message": "Ricevuto! Aggiornamento in corso...",
     "trigger-rule": {
       "match": {

@@ -5,7 +5,7 @@ import { getPrintAgentUrl } from '../lib/printConfig';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { QRCodeCanvas } from 'qrcode.react';
-import { ShieldCheck, Save, Printer, Trash2, Edit2, X, Copy, Package, Truck } from 'lucide-react';
+import { ShieldCheck, Save, Printer, Trash2, Edit2, X, Copy, Package, Truck, History } from 'lucide-react';
 
 interface HaccpFornitore {
   id: string;
@@ -25,11 +25,20 @@ interface HaccpProdotto {
   conservazione: string;
 }
 
+interface HaccpEtichetta {
+  id: string;
+  lotto: string;
+  prodotto_id: string;
+  data_preparazione: string;
+  data_scadenza: string;
+  created_at: string;
+}
+
 interface HaccpViewProps {
   isEmbedded: boolean;
 }
 
-type SubTab = 'recipes' | 'fornitori' | 'print';
+type SubTab = 'recipes' | 'fornitori' | 'print' | 'storico';
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -66,7 +75,10 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
 
   const [printProdottoId, setPrintProdottoId] = useState('');
   const [printLotto, setPrintLotto] = useState(generateLotto());
+  const [printQuantity, setPrintQuantity] = useState(1);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [storico, setStorico] = useState<HaccpEtichetta[]>([]);
+  const [loadingStorico, setLoadingStorico] = useState(false);
 
   const [fornEditId, setFornEditId] = useState<string | null>(null);
   const [fNome, setFNome] = useState('');
@@ -117,6 +129,26 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
     if (!supabase) return;
     const { data } = await supabase.from('haccp_fornitori').select('*').order('nome');
     if (data) setFornitori(data as HaccpFornitore[]);
+  }, []);
+
+  const fetchStorico = useCallback(async () => {
+    setLoadingStorico(true);
+    try {
+      if (IS_DEMO_MODE || !supabase) {
+        const stored = localStorage.getItem('risto_haccp_etichette');
+        const items: HaccpEtichetta[] = stored ? JSON.parse(stored) : [];
+        setStorico(items.sort((a, b) => b.created_at.localeCompare(a.created_at)));
+        return;
+      }
+      const { data } = await supabase
+        .from('haccp_etichette')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (data) setStorico(data as HaccpEtichetta[]);
+    } finally {
+      setLoadingStorico(false);
+    }
   }, []);
 
   useEffect(() => { fetchProdotti(); fetchLinks(); fetchFornitori(); }, [fetchProdotti, fetchLinks, fetchFornitori]);
@@ -299,35 +331,40 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       const now = new Date();
       const scad = new Date(now);
       scad.setDate(scad.getDate() + p.giorni_scadenza);
+      const lottoValue = printLotto.trim();
 
-      const data: HaccpLabelData = {
+      const labelData: HaccpLabelData = {
         kind: 'haccp_label',
         nome_prodotto: p.nome_prodotto,
         ingredienti: p.ingredienti,
         allergeni: p.allergeni,
         data_scadenza: formatDate(scad),
         data_preparazione: formatDateTime(now),
-        lotto: printLotto.trim() || undefined,
+        lotto: lottoValue || undefined,
         conservazione: p.conservazione || undefined,
       };
-      await printLabelViaAgent(data, getPrintAgentUrl());
 
-      // Save to storico etichette
+      const qty = Math.max(1, Math.min(20, printQuantity));
+      for (let i = 0; i < qty; i++) {
+        await printLabelViaAgent(labelData, getPrintAgentUrl());
+      }
+
+      // Save one record to storico (same lotto, printed N copies)
       const etichettaRecord = {
-        lotto: printLotto.trim(),
+        lotto: lottoValue,
         prodotto_id: p.id,
         data_preparazione: now.toISOString(),
         data_scadenza: scad.toISOString().split('T')[0],
       };
       if (IS_DEMO_MODE || !supabase) {
-        const storico = JSON.parse(localStorage.getItem('risto_haccp_etichette') || '[]');
-        storico.push({ id: crypto.randomUUID(), ...etichettaRecord, created_at: new Date().toISOString() });
-        localStorage.setItem('risto_haccp_etichette', JSON.stringify(storico));
+        const stored = JSON.parse(localStorage.getItem('risto_haccp_etichette') || '[]');
+        stored.push({ id: crypto.randomUUID(), ...etichettaRecord, created_at: new Date().toISOString() });
+        localStorage.setItem('risto_haccp_etichette', JSON.stringify(stored));
       } else {
         await supabase.from('haccp_etichette').insert([etichettaRecord]);
       }
 
-      addToast({ type: 'success', title: 'Etichetta stampata', message: p.nome_prodotto });
+      addToast({ type: 'success', title: `${qty > 1 ? qty + ' etichette stampate' : 'Etichetta stampata'}`, message: p.nome_prodotto });
       setPrintLotto(generateLotto());
     } catch (err) {
       addToast({ type: 'error', title: 'Errore stampa', message: String(err) });
@@ -349,10 +386,10 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
 
       {/* Sub-tabs */}
       <div className="flex gap-1 mb-8 p-1 rounded-2xl w-fit border border-surface-light">
-        {([['print', 'Stampa Etichetta', Printer], ['recipes', 'Ricette HACCP', Package], ['fornitori', 'Fornitori', Truck]] as const).map(([key, label, Icon]) => (
+        {([['print', 'Stampa Etichetta', Printer], ['recipes', 'Ricette HACCP', Package], ['fornitori', 'Fornitori', Truck], ['storico', 'Storico', History]] as const).map(([key, label, Icon]) => (
           <button
             key={key}
-            onClick={() => setSubTab(key)}
+            onClick={() => { setSubTab(key); if (key === 'storico') fetchStorico(); }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${subTab === key ? (isEmbedded ? 'bg-gold text-black' : 'bg-white text-slate-900 shadow-md') : 'text-gray-500 hover:text-white'}`}
           >
             <Icon size={16} /> {label}
@@ -428,13 +465,28 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                 </div>
               </div>
 
+              <div>
+                <label className="text-xs font-black text-gray-400 tracking-widest uppercase mb-2 block">Numero copie</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setPrintQuantity(q => Math.max(1, q - 1))}
+                    className="w-12 h-12 rounded-2xl border border-surface-light text-white font-black text-xl hover:border-gold/40 transition-all"
+                  >−</button>
+                  <span className="flex-1 text-center text-white font-black text-2xl">{printQuantity}</span>
+                  <button
+                    onClick={() => setPrintQuantity(q => Math.min(20, q + 1))}
+                    className="w-12 h-12 rounded-2xl border border-surface-light text-white font-black text-xl hover:border-gold/40 transition-all"
+                  >+</button>
+                </div>
+              </div>
+
               <button
                 onClick={handlePrint}
                 disabled={isPrinting || !printProdottoId}
                 className="w-full bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none shadow-xl"
               >
                 <Printer size={20} />
-                {isPrinting ? 'Stampa in corso...' : 'STAMPA ETICHETTA'}
+                {isPrinting ? 'Stampa in corso...' : printQuantity > 1 ? `STAMPA ${printQuantity} ETICHETTE` : 'STAMPA ETICHETTA'}
               </button>
             </div>
           </div>
@@ -576,6 +628,54 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                     <button onClick={() => deleteProdotto(p.id)} className="p-2.5 bg-charcoal text-gray-500 hover:text-red-400 rounded-xl transition-all">
                       <Trash2 size={16} />
                     </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Storico Etichette sub-tab */}
+      {subTab === 'storico' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-gray-500 text-sm">{storico.length} etichette stampate</p>
+            <button
+              onClick={fetchStorico}
+              disabled={loadingStorico}
+              className="text-xs font-bold text-gray-500 hover:text-white transition-all disabled:opacity-40"
+            >
+              {loadingStorico ? 'Caricamento...' : 'Aggiorna'}
+            </button>
+          </div>
+          {storico.length === 0 && !loadingStorico && (
+            <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-12 text-center`}>
+              <History size={40} className="mx-auto mb-4 text-gray-500" />
+              <p className="text-gray-500 font-bold">Nessuna etichetta stampata.</p>
+              <p className="text-gray-600 text-sm mt-1">Le etichette appaiono qui dopo la stampa.</p>
+            </div>
+          )}
+          <div className="space-y-3">
+            {storico.map(et => {
+              const prod = prodotti.find(p => p.id === et.prodotto_id);
+              const isScaduto = et.data_scadenza && new Date(et.data_scadenza) < new Date();
+              const isInScadenza = !isScaduto && et.data_scadenza && new Date(et.data_scadenza) < new Date(Date.now() + 2 * 86400000);
+              return (
+                <div key={et.id} className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border ${isScaduto ? 'border-rose-500/40' : isInScadenza ? 'border-amber-500/40' : 'border-surface-light'} rounded-[20px] p-4 flex items-start gap-4`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-white font-black text-base">{prod?.nome_prodotto || et.prodotto_id}</h4>
+                      {isScaduto && <span className="text-[10px] font-black bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full">SCADUTO</span>}
+                      {isInScadenza && !isScaduto && <span className="text-[10px] font-black bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">IN SCADENZA</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs font-bold text-gray-500">
+                      <span className="font-mono text-gold text-[11px]">{et.lotto}</span>
+                      <span>Prep: {et.data_preparazione ? new Date(et.data_preparazione).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                      <span className={isScaduto ? 'text-rose-400' : isInScadenza ? 'text-amber-400' : ''}>
+                        Scad: {et.data_scadenza ? new Date(et.data_scadenza).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
