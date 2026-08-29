@@ -39,6 +39,7 @@ function createPrinter(printerInterface) {
     characterSet: 'PC858_EURO',
     removeSpecialCharacters: false,
     lineCharacter: '=',
+    options: { timeout: 10000 },
   });
 }
 
