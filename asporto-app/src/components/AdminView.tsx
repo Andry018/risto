@@ -5,7 +5,7 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
-import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Palette } from 'lucide-react';
+import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Menu, X } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
@@ -15,7 +15,6 @@ import IngredientsTab from './admin/IngredientsTab';
 import RemovalsTab from './admin/RemovalsTab';
 import VariantsTab from './admin/VariantsTab';
 import IngredientFormModal from './admin/IngredientFormModal';
-import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 
 interface AdminViewProps {
   onNavigateHome?: () => void;
@@ -27,7 +26,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   /** Il ruolo kitchen può solo togliere/rimettere disponibilità: niente aggiunta, modifica o eliminazione di piatti/aggiunte/varianti. */
   const canEditMenu = getCurrentUser()?.role !== 'kitchen';
   const [searchParams, setSearchParams] = useSearchParams();
-  const [themeId, setThemeId] = useState<string>(getThemeId());
+  const [menuOpen, setMenuOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
@@ -307,29 +306,23 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
       <div className="flex flex-col md:flex-row h-dvh overflow-hidden">
 
         {/* Modern Sidebar Nav */}
-        <aside className={`w-full md:w-72 ${'bg-surface md:border-r md:border-surface-light'} p-3 md:p-6 flex flex-col z-20 shadow-2xl`}>
-          <div className="flex items-center justify-between gap-3 mb-3 md:mb-12">
+        <aside className={`w-full md:w-72 bg-surface md:border-r border-b md:border-b-0 border-surface-light px-4 py-3 md:p-6 flex flex-col z-20 shadow-2xl`}>
+          <div className="flex items-center justify-between gap-3 mb-0 md:mb-12">
             <div className="flex items-center gap-3">
               <div className={`${'bg-gold'} p-2.5 rounded-xl ${''}`}>
                 <ChefHat size={28} className={'text-black'} />
               </div>
               <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Kitchen<span className={'text-gold'}>Hub</span></h1>
             </div>
-            <div className="md:hidden flex items-center gap-2">
-              <Palette size={16} className="text-gold" />
-              <select
-                value={themeId}
-                onChange={(e) => { applyTheme(e.target.value); setThemeId(e.target.value); }}
-                className="text-xs rounded-lg px-2 py-1 outline-none cursor-pointer bg-surface-light text-gray-200 border border-surface-light"
-              >
-                {THEMES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
-            </div>
+            <button
+              onClick={() => setMenuOpen(true)}
+              className="md:hidden p-2 rounded-xl bg-charcoal text-gray-400 hover:text-white transition-colors"
+            >
+              <Menu size={22} />
+            </button>
           </div>
 
-          <nav className="flex md:flex-col gap-2 md:gap-1 overflow-x-auto hide-scrollbar md:flex-1 pb-1 md:pb-0">
+          <nav className="hidden md:flex md:flex-col gap-1 md:flex-1">
             {onNavigateHome ? (
               <button
                 onClick={onNavigateHome}
@@ -422,6 +415,59 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
              <span className={`${'text-gold'} text-sm font-medium`}>Sistema Online</span>
           </div>
         </aside>
+
+        {/* Mobile drawer */}
+        {menuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 w-72 bg-surface flex flex-col p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="bg-gold p-2.5 rounded-xl"><ChefHat size={24} className="text-black" /></div>
+                  <h1 className="text-xl font-bold text-white">Kitchen<span className="text-gold">Hub</span></h1>
+                </div>
+                <button onClick={() => setMenuOpen(false)} className="p-2 text-gray-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-1 flex-1">
+                {onNavigateHome ? (
+                  <button onClick={() => { setMenuOpen(false); onNavigateHome(); }} className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all">
+                    <LayoutDashboard size={20} /> Dashboard
+                  </button>
+                ) : (
+                  <a href="/" className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all" onClick={() => setMenuOpen(false)}>
+                    <LayoutDashboard size={20} /> Dashboard
+                  </a>
+                )}
+                <div className="h-px bg-surface-light/50 my-1" />
+                {([
+                  ['menu', 'Disponibilità Menu', List],
+                  ['ingredients', 'Gestione Aggiunte', Plus],
+                  ['removals', 'Gestione Rimozioni', Minus],
+                  ['variants', 'Gestione Varianti', SlidersHorizontal],
+                ] as const).map(([tab, label, Icon]) => (
+                  <button
+                    key={tab}
+                    onClick={() => { setActiveTab(tab); setMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === tab ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-500 hover:bg-charcoal hover:text-white'}`}
+                  >
+                    <Icon size={20} className={activeTab === tab ? 'text-gold' : ''} />
+                    <span className="font-medium">{label}</span>
+                  </button>
+                ))}
+                <div className="h-px bg-surface-light/50 my-1" />
+                <button
+                  onClick={() => { setActiveTab('haccp'); setMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'haccp' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-500 hover:bg-charcoal hover:text-white'}`}
+                >
+                  <ShieldCheck size={20} className={activeTab === 'haccp' ? 'text-gold' : ''} />
+                  <span className="font-medium">HACCP Etichette</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dashboard Content */}
         <main className={`flex-1 p-4 md:p-10 overflow-y-auto ${'bg-charcoal'}`}>
