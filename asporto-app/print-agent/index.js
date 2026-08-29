@@ -9,7 +9,39 @@ const { createClient } = require('@supabase/supabase-js');
 const ThermalPrinter = require('node-thermal-printer').printer;
 const PrinterTypes = require('node-thermal-printer').types;
 const http = require('node:http');
+const net  = require('node:net');
 const { URL } = require('node:url');
+
+/**
+ * Invia un buffer ESC/POS alla stampante via TCP raw.
+ * Bypassa il layer di rete di node-thermal-printer che setta un inactivity
+ * timeout troppo aggressivo che scatta durante la scrittura di buffer grandi.
+ */
+function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let done = false;
+
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      err ? reject(err) : resolve();
+    };
+
+    // Timeout globale sull'intera operazione
+    const timer = setTimeout(() => finish(new Error('Socket timeout')), timeoutMs);
+
+    socket.connect(port, host, () => {
+      clearTimeout(timer);
+      socket.write(buffer, null, () => finish(null));
+    });
+
+    socket.on('error', finish);
+    socket.on('timeout', () => finish(new Error('Socket connect timeout')));
+    socket.setTimeout(5000); // solo per la fase di connessione
+  });
+}
 
 function getDisplayName(item) {
     if (!item) return "Articolo";
@@ -105,7 +137,18 @@ function portataLabel(key) {
 
 async function executePrinter(printer, context) {
   try {
-    await printer.execute();
+    // Usa send TCP diretto per evitare il bug di inactivity timeout
+    // nel network layer di node-thermal-printer su buffer ESC/POS grandi.
+    const buffer = printer.getBuffer();
+    const iface  = resolvePrinterInterface(null);
+    const match  = /tcp:\/\/([^:]+):(\d+)/.exec(iface);
+    if (match) {
+      const host = match[1];
+      const port = Number(match[2]);
+      await sendBufferToTcp(host, port, buffer);
+    } else {
+      await printer.execute();
+    }
     console.log(`[PRINT SUCCESS] ${context}`);
   } catch (error) {
     console.error(`[PRINT ERROR] ${context}`, error);
