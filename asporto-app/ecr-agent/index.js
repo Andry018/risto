@@ -104,17 +104,25 @@ function buildStatusRequest() {
 function buildPurchaseRequest(amountCents) {
   const amount  = String(amountCents).padStart(8, '0');
   const textPad = ''.padStart(128, ' ');
-  const payload = TERMINAL_ID + '0P' + CASH_REG_ID + '0' + '00' + '0' + '0' + amount + textPad + '00000000';
+  // Usa 'X' (Extended Payment) invece di 'P': stessa struttura request ma
+  // la risposta include anche action code e importo confermato dall'host.
+  const payload = TERMINAL_ID + '0X' + CASH_REG_ID + '0' + '00' + '0' + '0' + amount + textPad + '00000000';
   return buildFrame(payload);
 }
 
 /**
  * Reversal (storno ultima transazione)
- * [TODO-NEXI] Ottenere il formato esatto dal manuale tecnico Nexi.
- * Presumibilmente: Terminal ID + '0S' + Cash Reg ID + STAN (6 cifre)
+ * Pos 1-8:   Terminal ID
+ * Pos 9:     Reserved '0'
+ * Pos 10:    Message code 'S'
+ * Pos 11-18: Cash register ID
+ * Pos 19-24: STAN (6 cifre). '000000' = nessun controllo, storna l'ultima tx.
+ * Pos 25:    Additional data '0'
+ * Pos 26:    Reserved '0'
  */
 function buildCancelRequest(stan = '') {
-  const payload = TERMINAL_ID + '0S' + CASH_REG_ID + stan.padStart(6, '0');
+  const stanField = stan ? stan.padStart(6, '0') : '000000';
+  const payload = TERMINAL_ID + '0S' + CASH_REG_ID + stanField + '0' + '0';
   return buildFrame(payload);
 }
 
@@ -180,20 +188,26 @@ function parseResponse(payload) {
     const resultCode = payload.substring(10, 12); // posizione 11-12
     const approved   = resultCode === '00';
 
+    // Campi comuni (disponibili se il payload è abbastanza lungo)
+    const cardType   = payload[47]                || '';          // pos 48
+    const stan       = payload.substring(59, 65).trim();         // pos 60-65
+    const actionCode = payload.substring(71, 74).trim();         // pos 72-74 (extended)
+    const hostAmount = payload.length >= 82                       // pos 75-82 (extended, solo 'X')
+      ? payload.substring(74, 82).replace(/^0+/, '') || '0'
+      : null;
+
     if (approved) {
-      const pan      = payload.substring(12, 31).trimStart().replace(/^0+/, ''); // posizione 13-31
-      const txType   = payload.substring(31, 34).trim();   // posizione 32-34
-      const authCode = payload.substring(34, 40).trim();   // posizione 35-40
-      const cardType = payload[47] || '';                   // posizione 48
-      const stan     = payload.substring(59, 65).trim();   // posizione 60-65
-      return { ok: true, resultCode, authCode, pan, txType, cardType, stan, error: null };
+      const pan      = payload.substring(12, 31).replace(/^0+/, ''); // pos 13-31
+      const txType   = payload.substring(31, 34).trim();              // pos 32-34
+      const authCode = payload.substring(34, 40).trim();              // pos 35-40
+      return { ok: true, resultCode, authCode, pan, txType, cardType, stan, actionCode, hostAmount, error: null };
     } else {
-      const errorDesc = payload.substring(12, 36).trim();  // posizione 13-36
-      const stan      = payload.substring(59, 65).trim();  // posizione 60-65
+      const errorDesc = payload.substring(12, 36).trim();  // pos 13-36
       return {
         ok: false,
         resultCode,
         stan,
+        actionCode,
         error: errorDesc || `Transazione rifiutata (codice: ${resultCode})`,
       };
     }
