@@ -642,6 +642,68 @@ export default function SettingsView() {
               </Card>
             )}
 
+            {/* Weekly turni grid */}
+            {section === 'personale' && staffUsers.length > 0 && (() => {
+              const [ty, tm, td] = turniDate.split('-').map(Number);
+              const refDate = new Date(ty, tm - 1, td);
+              const dow = refDate.getDay(); // 0=Sun
+              const mondayOffset = dow === 0 ? -6 : 1 - dow;
+              const monday = new Date(ty, tm - 1, td + mondayOffset);
+              const weekDays = Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                return toLocalISODate(d);
+              });
+              const shortDays = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+              const today = toLocalISODate();
+              return (
+                <Card title="Settimana" subtitle={`${new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} – ${new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}`}>
+                  <div key={turniTick} className="overflow-x-auto">
+                    <table className="w-full text-xs min-w-[480px]">
+                      <thead>
+                        <tr>
+                          <th className="text-left text-gray-500 font-black uppercase tracking-widest pb-3 w-28">Operatore</th>
+                          {weekDays.map((day, i) => (
+                            <th key={day} className={`text-center pb-3 font-black uppercase tracking-wider ${day === today ? 'text-gold' : day === turniDate ? 'text-white' : 'text-gray-500'}`}>
+                              <div>{shortDays[i]}</div>
+                              <div className="text-[10px] font-bold">{parseInt(day.slice(-2))}</div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-light">
+                        {staffUsers.map(user => (
+                          <tr key={user.id}>
+                            <td className="py-2.5 pr-2">
+                              <span className="font-bold text-white truncate block max-w-[100px]">{user.name}</span>
+                            </td>
+                            {weekDays.map(day => {
+                              const p = hasTurno(user.id, day, 'pranzo');
+                              const s = hasTurno(user.id, day, 'sera');
+                              return (
+                                <td key={day} className="py-2.5 text-center">
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <button
+                                      onClick={() => { toggleTurno(user.id, day, 'pranzo'); setTurniTick(t => t + 1); }}
+                                      className={`w-7 h-5 rounded text-[9px] font-black uppercase transition-all active:scale-90 ${p ? 'bg-gold text-black' : 'bg-surface border border-surface-light text-gray-600'}`}
+                                    >P</button>
+                                    <button
+                                      onClick={() => { toggleTurno(user.id, day, 'sera'); setTurniTick(t => t + 1); }}
+                                      className={`w-7 h-5 rounded text-[9px] font-black uppercase transition-all active:scale-90 ${s ? 'bg-blue-500 text-white' : 'bg-surface border border-surface-light text-gray-600'}`}
+                                    >S</button>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              );
+            })()}
+
             {/* ===== MENU ONLINE ===== */}
             {section === 'menu-online' && (
               <Card title="Menu Online" subtitle="Pubblica il menu su internet (raggiungibile senza WiFi del locale).">

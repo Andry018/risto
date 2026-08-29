@@ -14,6 +14,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [tables, setTables] = useState<Tavolo[]>([]);
   const [selectedDate, setSelectedDate] = useState(toLocalISODate());
+  const [calMonth, setCalMonth] = useState(() => toLocalISODate().slice(0, 7));
+  const [monthReservations, setMonthReservations] = useState<Record<string, number>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,6 +31,23 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   });
 
   const setOra = (val: string) => setNewRes(prev => ({ ...prev, ora: val.split(':').slice(0, 2).join(':') }));
+
+  async function fetchMonthReservations(month: string) {
+    if (IS_DEMO_MODE || !supabase) return;
+    const [y, m] = month.split('-').map(Number);
+    const start = `${month}-01`;
+    const end = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+    const { data } = await supabase.from('prenotazioni')
+      .select('data')
+      .gte('data', start)
+      .lte('data', end)
+      .neq('status', 'ANNULLATA');
+    if (data) {
+      const counts: Record<string, number> = {};
+      (data as { data: string }[]).forEach(r => { counts[r.data] = (counts[r.data] || 0) + 1; });
+      setMonthReservations(counts);
+    }
+  }
 
   async function fetchReservations() {
     if (IS_DEMO_MODE) {
@@ -49,6 +68,8 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     const { data } = await supabase.from('tavoli').select('*').order('nome');
     if (data) setTables(data);
   }
+
+  useEffect(() => { void fetchMonthReservations(calMonth); }, [calMonth]);
 
   useEffect(() => {
     void fetchReservations();
@@ -169,9 +190,37 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     setSelectedDate(toLocalISODate(dt));
   };
 
+  const changeMonth = (delta: number) => {
+    const [y, m] = calMonth.split('-').map(Number);
+    const dt = new Date(y, m - 1 + delta, 1);
+    setCalMonth(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  const calendarDays = (() => {
+    const [y, m] = calMonth.split('-').map(Number);
+    const firstDow = new Date(y, m - 1, 1).getDay(); // 0=Sun
+    const offset = firstDow === 0 ? 6 : firstDow - 1; // Mon=0
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const days: (string | null)[] = Array(offset).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      days.push(`${calMonth}-${String(d).padStart(2, '0')}`);
+    }
+    return days;
+  })();
+
+  const today = toLocalISODate();
+
+  const [calY, calM] = calMonth.split('-').map(Number);
+  const calMonthLabel = new Date(calY, calM - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+  const selectedDateLabel = (() => {
+    const [sy, sm, sd] = selectedDate.split('-').map(Number);
+    return new Date(sy, sm - 1, sd).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+  })();
+
   return (
-    <div className="flex-1 flex flex-col bg-charcoal text-white h-full overflow-hidden p-8">
-      <header className="flex justify-between items-center mb-10">
+    <div className="flex-1 flex flex-col bg-charcoal text-white h-full overflow-hidden">
+      {/* Header */}
+      <header className="flex justify-between items-center px-8 pt-8 pb-6 flex-shrink-0">
         <div className="flex items-center gap-6">
           <button onClick={() => onNavigateHome ? onNavigateHome() : navigate('/')} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl" title="Torna indietro">
             <ArrowLeft size={24} />
@@ -181,27 +230,73 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
             <h1 className="text-4xl font-black text-white uppercase italic">Libro Prenotazioni</h1>
           </div>
         </div>
-
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-4 bg-surface p-2 rounded-2xl border border-surface-light shadow-xl">
-            <button onClick={() => changeDate(-1)} className="p-2 hover:bg-charcoal rounded-xl text-gray-500 hover:text-white transition-all"><ChevronLeft /></button>
-            <div className="flex items-center gap-3 px-4">
-              <Calendar className="text-gold" size={20} />
-              <span className="text-lg font-black italic">{new Date(selectedDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })}</span>
-            </div>
-            <button onClick={() => changeDate(1)} className="p-2 hover:bg-charcoal rounded-xl text-gray-500 hover:text-white transition-all"><ChevronRight /></button>
-          </div>
-
-          <button 
-            onClick={openNewModal}
-            className="bg-gold hover:bg-gold-hover text-black px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center gap-2 active:scale-95 transition-all"
-          >
-            <Plus size={20} /> Nuova Prenotazione
-          </button>
-        </div>
+        <button
+          onClick={openNewModal}
+          className="bg-gold hover:bg-gold-hover text-black px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center gap-2 active:scale-95 transition-all"
+        >
+          <Plus size={20} /> Nuova Prenotazione
+        </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+      {/* Body: calendar left + list right */}
+      <div className="flex-1 flex gap-6 px-8 pb-8 overflow-hidden">
+        {/* Calendar panel */}
+        <div className="w-80 flex-shrink-0 flex flex-col gap-4">
+          <div className="bg-surface border border-surface-light rounded-3xl p-5 flex-shrink-0">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-charcoal rounded-xl text-gray-500 hover:text-white transition-all">
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-sm font-black uppercase tracking-widest text-white capitalize">{calMonthLabel}</span>
+              <button onClick={() => changeMonth(1)} className="p-2 hover:bg-charcoal rounded-xl text-gray-500 hover:text-white transition-all">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            {/* Weekday headers */}
+            <div className="grid grid-cols-7 mb-2">
+              {['L','M','M','G','V','S','D'].map((d, i) => (
+                <div key={i} className="text-center text-[10px] font-black text-gray-600 uppercase py-1">{d}</div>
+              ))}
+            </div>
+            {/* Day cells */}
+            <div className="grid grid-cols-7 gap-y-1">
+              {calendarDays.map((day, i) => {
+                if (!day) return <div key={i} />;
+                const isSelected = day === selectedDate;
+                const isToday = day === today;
+                const count = monthReservations[day] || 0;
+                return (
+                  <button
+                    key={day}
+                    onClick={() => { setSelectedDate(day); if (day.slice(0, 7) !== calMonth) setCalMonth(day.slice(0, 7)); }}
+                    className={`relative flex flex-col items-center justify-center rounded-xl py-1.5 text-sm font-bold transition-all active:scale-95 ${
+                      isSelected
+                        ? 'bg-gold text-black'
+                        : isToday
+                        ? 'bg-charcoal text-gold ring-1 ring-gold/40'
+                        : 'hover:bg-charcoal text-gray-300'
+                    }`}
+                  >
+                    <span>{parseInt(day.slice(-2))}</span>
+                    {count > 0 && (
+                      <span className={`absolute bottom-0.5 w-1 h-1 rounded-full ${isSelected ? 'bg-black/40' : 'bg-gold'}`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Selected date info */}
+          <div className="bg-surface border border-surface-light rounded-3xl p-5">
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Giorno selezionato</p>
+            <p className="text-base font-black text-white capitalize">{selectedDateLabel}</p>
+            <p className="text-2xl font-black text-gold mt-1">{reservations.length} {reservations.length === 1 ? 'prenotazione' : 'prenotazioni'}</p>
+          </div>
+        </div>
+
+        {/* Reservations list */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
         {reservations.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50">
             <Calendar size={80} strokeWidth={1} className="mb-6" />
@@ -276,6 +371,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* New/Edit Reservation Modal */}

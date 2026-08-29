@@ -70,6 +70,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   // Pagamento carta (ECR / PAX A35)
   const [paymentChoiceOpen, setPaymentChoiceOpen] = useState(false);
   const [cashPaymentOpen, setCashPaymentOpen] = useState(false);
+  const [cashPaymentAmount, setCashPaymentAmount] = useState(0);
   const [cardPaymentOpen, setCardPaymentOpen] = useState(false);
   const [cardPaymentSplitParts, setCardPaymentSplitParts] = useState<number | undefined>(undefined);
 
@@ -1435,6 +1436,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </button>
                 <button
                   onClick={() => {
+                    setCashPaymentAmount(splitResult.eachAmount);
                     setSplitResult(null);
                     setIsSplitModalOpen(false);
                     setCashPaymentOpen(true);
@@ -1573,12 +1575,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         open={paymentChoiceOpen}
         total={discountedTotal}
         onClose={() => setPaymentChoiceOpen(false)}
-        onCash={() => { setPaymentChoiceOpen(false); setCashPaymentOpen(true); }}
+        onCash={() => { setPaymentChoiceOpen(false); setCashPaymentAmount(discountedTotal); setCashPaymentOpen(true); }}
         onCard={() => { setPaymentChoiceOpen(false); openCardPayment(); }}
       />
       <CashPaymentModal
         open={cashPaymentOpen}
-        total={discountedTotal}
+        total={cashPaymentAmount}
         loading={finishingOrder}
         onClose={() => setCashPaymentOpen(false)}
         onConfirm={() => { setCashPaymentOpen(false); void handleFinishOrder(); }}
