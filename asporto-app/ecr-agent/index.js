@@ -7,9 +7,6 @@
  *   POST /print-receipt — stampa scontrino fiscale su cassa Custom Big Plus RT
  *   GET  /status       — verifica connettività terminale PAX
  *   GET  /health       — health check agente
- *
- * NOTA: Le parti marcate [TODO-NEXI] o [TODO-CUSTOM] richiedono verifica
- * contro la documentazione ufficiale dei rispettivi produttori.
  */
 
 'use strict';
@@ -29,168 +26,310 @@ const SERVER_PORT      = Number(process.env.ECR_PORT   || 8788);
 const CONNECT_TIMEOUT  = Number(process.env.PAX_CONNECT_TIMEOUT  || 5000);   // ms
 const RESPONSE_TIMEOUT = Number(process.env.PAX_RESPONSE_TIMEOUT || 90000);  // ms (90 s — tempo per inserire carta)
 
+// IDs — 8 cifre numeriche, '00000000' = accettato da qualsiasi terminale
+const TERMINAL_ID = (process.env.PAX_TERMINAL_ID || '00000000').padStart(8, '0');
+const CASH_REG_ID = (process.env.ECR_CASH_REG_ID || '00000001').padStart(8, '0');
+
 // Cassa fiscale Custom Big Plus RT
 const CUSTOM_HOST      = process.env.CUSTOM_HOST      || '192.168.1.51';
 const CUSTOM_PORT      = Number(process.env.CUSTOM_PORT || 9100);
 const CUSTOM_TIMEOUT   = Number(process.env.CUSTOM_TIMEOUT || 10000);        // ms
 
 // ---------------------------------------------------------------------------
-// Costanti protocollo ECR17
+// Costanti protocollo ECR17 (Nexi LAN Integration)
 // ---------------------------------------------------------------------------
 
 const STX = 0x02; // Start of Text
 const ETX = 0x03; // End of Text
-const FS  = 0x1C; // Field Separator (ASCII FS, standard ECR17)
+const ACK = 0x06; // Acknowledgement
+const NAK = 0x15; // Negative Acknowledgement
+const SOH = 0x01; // Start of Heading (progress update packets)
+const EOT = 0x04; // End of Transmission (fine progress update)
+const MAX_RETRIES = 3;
 
-/**
- * Calcola il byte LRC (Longitudinal Redundancy Check).
- * Algoritmo: XOR di tutti i byte del payload + ETX, con valore base 0x7F.
- */
+// LRC = XOR di tutti i byte del payload + ETX, con valore base 0x7F
 function calcLRC(bytes) {
   return bytes.reduce((acc, b) => acc ^ b, 0x7F);
 }
 
-/**
- * Incapsula un payload ASCII nel frame ECR17: [STX][payload][ETX][LRC]
- */
+// Frame applicativo: [STX][payload][ETX][LRC]
 function buildFrame(payload) {
   const payloadBuf = Buffer.from(payload, 'latin1');
   const frame = Buffer.alloc(payloadBuf.length + 3);
   frame[0] = STX;
   payloadBuf.copy(frame, 1);
   frame[payloadBuf.length + 1] = ETX;
-
-  const lrcInput = [...payloadBuf, ETX];
-  frame[payloadBuf.length + 2] = calcLRC(lrcInput);
+  frame[payloadBuf.length + 2] = calcLRC([...payloadBuf, ETX]);
   return frame;
 }
 
+// ACK di conferma ricezione: [ACK][ETX][LRC]
+function buildAck() {
+  return Buffer.from([ACK, ETX, calcLRC([ACK, ETX])]);
+}
+
+// NAK di rifiuto: [NAK][ETX][LRC]
+function buildNak() {
+  return Buffer.from([NAK, ETX, calcLRC([NAK, ETX])]);
+}
+
+// ---------------------------------------------------------------------------
+// Costruzione messaggi ECR → Terminale
+// ---------------------------------------------------------------------------
+
 /**
- * Costruisce il messaggio di richiesta di stato terminale.
- * [TODO-NEXI] Verificare comando esatto per Status Request.
+ * Terminal Status Request
+ * Pos 1-8:  Terminal ID (8 cifre)
+ * Pos 9:    Reserved '0'
+ * Pos 10:   Message code 's' (0x73)
  */
 function buildStatusRequest() {
-  // Comando: "00" = Status Request (comune in ECR17)
-  return buildFrame('00');
+  return buildFrame(TERMINAL_ID + '0s');
 }
 
 /**
- * Costruisce il messaggio di acquisto (pagamento carta).
- * [TODO-NEXI] Verificare campo per campo con spec Nexi ECR17:
- *   - Codice comando (qui "01" = Purchase)
- *   - Formato importo (qui 12 cifre in centesimi, es. 000000001500 = €15,00)
- *   - Codice valuta (978 = EUR, ISO 4217)
- *   - Eventuali campi aggiuntivi (cashback, rate, etc.)
+ * Payment Request
+ * Pos 1-8:   Terminal ID
+ * Pos 9:     Reserved '0'
+ * Pos 10:    Message code 'P' (0x50)
+ * Pos 11-18: Cash register ID (8 cifre)
+ * Pos 19:    Additional data '0' (non presente)
+ * Pos 20-21: Reserved '00'
+ * Pos 22:    Card present flag '0' (carta non ancora inserita)
+ * Pos 23:    Payment type '0' (riconoscimento automatico)
+ * Pos 24-31: Amount in cents, 8 cifre, zero-padded a sinistra
+ * Pos 32-159: Testo da stampare (128 char, space-padded a sinistra)
+ * Pos 160-167: Reserved '00000000'
  */
 function buildPurchaseRequest(amountCents) {
-  const cmd      = '01';                                    // [TODO-NEXI] Purchase command code
-  const amount   = String(amountCents).padStart(12, '0');  // [TODO-NEXI] verificare lunghezza campo
-  const currency = '978';                                   // EUR
-
-  const sep = String.fromCharCode(FS);
-  const payload = [cmd, amount, currency].join(sep);
+  const amount  = String(amountCents).padStart(8, '0');
+  const textPad = ''.padStart(128, ' ');
+  const payload = TERMINAL_ID + '0P' + CASH_REG_ID + '0' + '00' + '0' + '0' + amount + textPad + '00000000';
   return buildFrame(payload);
 }
 
 /**
- * Costruisce il messaggio di annullamento/storno.
- * [TODO-NEXI] Verificare comando esatto (qui "02" = Reversal).
+ * Reversal (storno ultima transazione)
+ * [TODO-NEXI] Ottenere il formato esatto dal manuale tecnico Nexi.
+ * Presumibilmente: Terminal ID + '0S' + Cash Reg ID + STAN (6 cifre)
  */
-function buildCancelRequest(txRef) {
-  const cmd = '02'; // [TODO-NEXI] Reversal command code
-  const sep = String.fromCharCode(FS);
-  const payload = txRef ? [cmd, txRef].join(sep) : cmd;
+function buildCancelRequest(stan = '') {
+  const payload = TERMINAL_ID + '0S' + CASH_REG_ID + stan.padStart(6, '0');
   return buildFrame(payload);
 }
 
 // ---------------------------------------------------------------------------
-// Parser risposta terminale
+// Parser risposta Terminale → ECR
 // ---------------------------------------------------------------------------
 
 /**
- * Analizza il buffer di risposta del terminale.
- * Risposta attesa: [STX][response_code][FS][auth_code][FS][...campi...][ETX][LRC]
+ * Analizza il payload (stringa tra STX e ETX) in base al codice messaggio.
  *
- * [TODO-NEXI] Verificare posizione e significato di ogni campo nella risposta.
- * Codici risposta comuni ECR17:
- *   "00" = Approvato
- *   altri = Rifiutato (con codice errore specifico)
+ * Payment response ('E' o 'V'):
+ *   Pos 1-8:   Terminal ID
+ *   Pos 9:     Reserved
+ *   Pos 10:    Message code ('E' normale, 'V' con currency exchange)
+ *   Pos 11-12: Result code: "00" = OK, "01" = KO, "05" = carta assente, "09" = tag sconosciuto
+ *   Se OK:
+ *     Pos 13-31: PAN carta (19 char, zero-padded a sinistra)
+ *     Pos 32-34: Tipo transazione (ICC/MAG/MAN/CLM/CLI)
+ *     Pos 35-40: Codice autorizzazione (6 char)
+ *     Pos 41-47: Data/ora host (DDDHHMM)
+ *   Se KO:
+ *     Pos 13-36: Descrizione errore (24 char)
+ *   Comuni:
+ *     Pos 48:    Tipo carta ('1'=Bancomat, '2'=Credito, '3'=Altro)
+ *     Pos 49-59: Acquirer ID (11 char)
+ *     Pos 60-65: STAN (6 cifre)
+ *     Pos 66-71: ID online (6 cifre)
+ *
+ * Status response ('s'):
+ *   Pos 1-8:   Terminal ID
+ *   Pos 9:     Reserved
+ *   Pos 10:    's'
+ *   Pos 11-20: Reserved ('0' x10)
+ *   Pos 21-30: Data/ora terminale (DDMMYYhhmm)
+ *   Pos 31:    Status ('2' = operativo)
+ *   Pos 32+:   SW release
  */
-function parseResponse(buf) {
-  if (buf.length < 4) {
+function parseResponse(payload) {
+  if (payload.length < 10) {
     return { ok: false, error: 'Risposta troppo corta dal terminale' };
   }
-  if (buf[0] !== STX) {
-    return { ok: false, error: `Risposta non valida: primo byte ${buf[0].toString(16)} (atteso STX 0x02)` };
+
+  const msgCode = payload[9]; // posizione 10 (1-indexed)
+
+  // Status response
+  if (msgCode === 's') {
+    const status    = payload[30] || '0'; // posizione 31
+    const datetime  = payload.substring(20, 30); // posizione 21-30
+    const swRelease = payload.substring(31).trim();
+    const operative = status === '2';
+    return {
+      ok: operative,
+      msgCode,
+      status,
+      datetime,
+      swRelease,
+      error: operative ? null : `Terminale non operativo (status: ${status})`,
+    };
   }
 
-  const etxIdx = buf.indexOf(ETX, 1);
-  if (etxIdx === -1) {
-    return { ok: false, error: 'Risposta non valida: ETX mancante' };
+  // Payment response ('E' = normale, 'V' = currency exchange)
+  if (msgCode === 'E' || msgCode === 'V') {
+    const resultCode = payload.substring(10, 12); // posizione 11-12
+    const approved   = resultCode === '00';
+
+    if (approved) {
+      const pan      = payload.substring(12, 31).trimStart().replace(/^0+/, ''); // posizione 13-31
+      const txType   = payload.substring(31, 34).trim();   // posizione 32-34
+      const authCode = payload.substring(34, 40).trim();   // posizione 35-40
+      const cardType = payload[47] || '';                   // posizione 48
+      const stan     = payload.substring(59, 65).trim();   // posizione 60-65
+      return { ok: true, resultCode, authCode, pan, txType, cardType, stan, error: null };
+    } else {
+      const errorDesc = payload.substring(12, 36).trim();  // posizione 13-36
+      const stan      = payload.substring(59, 65).trim();  // posizione 60-65
+      return {
+        ok: false,
+        resultCode,
+        stan,
+        error: errorDesc || `Transazione rifiutata (codice: ${resultCode})`,
+      };
+    }
   }
 
-  const lrcReceived  = buf[etxIdx + 1];
-  const lrcExpected  = calcLRC([...buf.slice(1, etxIdx), ETX]);
-  if (lrcReceived !== lrcExpected) {
-    console.warn(`[ECR] LRC errato: ricevuto 0x${lrcReceived.toString(16)}, atteso 0x${lrcExpected.toString(16)}`);
-    // Non rifiutare: alcuni terminali calcolano LRC in modo leggermente diverso.
-    // Loggare l'anomalia e procedere.
-  }
-
-  const payload = buf.slice(1, etxIdx).toString('latin1');
-  const sep     = String.fromCharCode(FS);
-  const fields  = payload.split(sep);
-
-  const responseCode = (fields[0] || '').trim();
-  const approved     = responseCode === '00'; // [TODO-NEXI] Verificare codice successo Nexi
-
-  return {
-    ok:           approved,
-    responseCode,
-    authCode:     fields[1] || '',   // [TODO-NEXI] Verificare posizione codice autorizzazione
-    amount:       fields[2] || '',   // [TODO-NEXI] Verificare se il terminale rispecchia l'importo
-    rawPayload:   payload,
-    rawFields:    fields,
-    error: approved ? null : `Transazione rifiutata (codice: ${responseCode})`,
-  };
+  // Risposta sconosciuta — log grezzo
+  console.warn(`[ECR] Codice risposta sconosciuto: '${msgCode}', payload grezzo: ${payload}`);
+  return { ok: false, error: `Codice risposta sconosciuto: '${msgCode}'`, rawPayload: payload };
 }
 
 // ---------------------------------------------------------------------------
-// Comunicazione TCP con il terminale
+// Comunicazione TCP con il terminale (con ACK/NAK e retry)
 // ---------------------------------------------------------------------------
 
+/**
+ * Invia un frame al terminale PAX e attende la risposta applicativa.
+ *
+ * Flusso:
+ *   1. ECR invia frame → Terminale risponde con ACK o NAK
+ *   2. Se NAK → ritrasmette (max 3 volte)
+ *   3. Terminale elabora ed invia progress updates (SOH...EOT) → ignorati
+ *   4. Terminale invia risposta applicativa (STX...ETX) → ECR risponde con ACK
+ */
 function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
   return new Promise((resolve, reject) => {
-    const socket = new net.Socket();
-    let buf      = Buffer.alloc(0);
-    let settled  = false;
+    const socket  = new net.Socket();
+    let buf       = Buffer.alloc(0);
+    let settled   = false;
+    let retries   = 0;
+    // 'waiting_ack'      — aspetto ACK/NAK dopo il mio invio
+    // 'waiting_response' — aspetto la risposta applicativa del terminale
+    let state     = 'waiting_ack';
 
     const finish = (result) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimeout(globalTimer);
       socket.destroy();
       result instanceof Error ? reject(result) : resolve(result);
     };
 
-    const timer = setTimeout(() => {
+    const globalTimer = setTimeout(() => {
       finish(new Error(`Timeout: il terminale non ha risposto entro ${Math.round(timeoutMs / 1000)} secondi`));
     }, timeoutMs);
+
+    const sendMsg = () => {
+      state = 'waiting_ack';
+      socket.write(message);
+    };
 
     socket.setTimeout(CONNECT_TIMEOUT);
 
     socket.connect(PAX_PORT, PAX_HOST, () => {
       socket.setTimeout(0);
-      console.log(`[ECR] Connesso a ${PAX_HOST}:${PAX_PORT}, invio messaggio (${message.length} byte)`);
-      socket.write(message);
+      console.log(`[ECR] Connesso a ${PAX_HOST}:${PAX_PORT} (${message.length} byte)`);
+      sendMsg();
     });
 
     socket.on('data', (chunk) => {
       buf = Buffer.concat([buf, chunk]);
-      // Una risposta ECR17 è completa quando abbiamo ETX + LRC (almeno 2 byte dopo ETX)
-      const etxIdx = buf.indexOf(ETX);
-      if (etxIdx !== -1 && buf.length >= etxIdx + 2) {
-        finish(parseResponse(buf));
+
+      // Processa tutti i pacchetti completi nel buffer
+      let progress = true;
+      while (progress && buf.length > 0 && !settled) {
+        progress = false;
+        const first = buf[0];
+
+        // Progress update: SOH (0x01) + 20 char + EOT (0x04)
+        if (first === SOH) {
+          if (buf.length >= 22) {
+            const msg = buf.slice(1, 21).toString('latin1').trim();
+            console.log(`[ECR] Progress: ${msg}`);
+            buf = buf.slice(22);
+            progress = true;
+          }
+          continue;
+        }
+
+        // ACK dal terminale (conferma ricezione del nostro frame)
+        if (first === ACK && state === 'waiting_ack') {
+          if (buf.length >= 3) {
+            buf = buf.slice(3);
+            state = 'waiting_response';
+            console.log('[ECR] ACK ricevuto, attendo risposta...');
+            progress = true;
+          }
+          continue;
+        }
+
+        // NAK dal terminale (rifiuto del nostro frame)
+        if (first === NAK && state === 'waiting_ack') {
+          if (buf.length >= 3) {
+            buf = buf.slice(3);
+            retries++;
+            if (retries >= MAX_RETRIES) {
+              finish(new Error(`Terminale ha risposto con NAK dopo ${MAX_RETRIES} tentativi`));
+              return;
+            }
+            console.warn(`[ECR] NAK ricevuto, ritento (${retries}/${MAX_RETRIES})`);
+            sendMsg();
+            progress = true;
+          }
+          continue;
+        }
+
+        // Risposta applicativa: STX + payload + ETX + LRC
+        if (first === STX && state === 'waiting_response') {
+          const etxIdx = buf.indexOf(ETX, 1);
+          if (etxIdx !== -1 && buf.length >= etxIdx + 2) {
+            const lrcReceived = buf[etxIdx + 1];
+            const lrcExpected = calcLRC([...buf.slice(1, etxIdx), ETX]);
+            if (lrcReceived !== lrcExpected) {
+              console.warn(`[ECR] LRC errato: ricevuto 0x${lrcReceived.toString(16)}, atteso 0x${lrcExpected.toString(16)}`);
+              // Invia NAK e attendi ritrasmissione
+              socket.write(buildNak());
+              buf = buf.slice(etxIdx + 2);
+              progress = true;
+              continue;
+            }
+
+            const payload = buf.slice(1, etxIdx).toString('latin1');
+            buf = buf.slice(etxIdx + 2);
+
+            // Invia ACK al terminale
+            socket.write(buildAck());
+
+            finish(parseResponse(payload));
+            return;
+          }
+          continue;
+        }
+
+        // Byte inatteso — skip
+        console.warn(`[ECR] Byte inatteso 0x${first.toString(16)} in stato '${state}', scartato`);
+        buf = buf.slice(1);
+        progress = true;
       }
     });
 
