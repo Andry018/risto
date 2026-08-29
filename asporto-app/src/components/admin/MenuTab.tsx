@@ -1,4 +1,4 @@
-import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Search, X, EyeOff } from 'lucide-react';
 import type { Product } from '../../types/entities';
 import CategoryFilterBar from '../CategoryFilterBar';
 
@@ -19,12 +19,14 @@ interface MenuTabProps {
   onCategoryMoveUp: (cat: string) => void;
   onCategoryMoveDown: (cat: string) => void;
   onCategoryAdd: (name: string) => void;
+  onMarkAllUnavailable: () => void;
 }
 
 export default function MenuTab({
   products, allCategories, menuCategory, onMenuCategoryChange, menuSearch, onMenuSearchChange,
   canEditMenu, onNewProduct, onEditProduct, onDeleteProduct, onToggleAvailability,
   onCategoryRename, onCategoryDelete, onCategoryMoveUp, onCategoryMoveDown, onCategoryAdd,
+  onMarkAllUnavailable,
 }: MenuTabProps) {
   const productCard = (product: Product) => (
     <div key={product.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
@@ -82,6 +84,13 @@ export default function MenuTab({
               </button>
             )}
           </div>
+          <button
+            onClick={onMarkAllUnavailable}
+            className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold py-3 px-5 rounded-2xl flex items-center gap-2 transition-all active:scale-[0.98] whitespace-nowrap"
+            title="Segna tutto esaurito (escluse bevande)"
+          >
+            <EyeOff size={18} /> Tutto Esaurito
+          </button>
           {canEditMenu && (
             <button
                 onClick={onNewProduct}

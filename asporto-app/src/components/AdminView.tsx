@@ -178,6 +178,26 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     }
   };
 
+  const DRINK_CATEGORIES = ['Bevande', 'Caffè e Liquori'];
+
+  const markAllUnavailableExceptDrinks = async () => {
+    if (!supabase) return;
+    const toDisable = products.filter(p => !DRINK_CATEGORIES.includes(p.categoria) && p.disponibile);
+    if (toDisable.length === 0) {
+      addToast({ type: 'success', title: 'Già fatto', message: 'Tutti i piatti sono già non disponibili.' });
+      return;
+    }
+    setProducts(prev => prev.map(p => DRINK_CATEGORIES.includes(p.categoria) ? p : { ...p, disponibile: false }));
+    const ids = toDisable.map(p => p.id);
+    const { error } = await supabase.from('prodotti').update({ disponibile: false }).in('id', ids);
+    if (error) {
+      addToast({ type: 'error', title: 'Errore', message: 'Impossibile aggiornare la disponibilità.' });
+      fetchProducts();
+    } else {
+      addToast({ type: 'success', title: 'Fatto', message: `${toDisable.length} piatti impostati come non disponibili.` });
+    }
+  };
+
   const toggleIngredientAvailability = async (id: string, currentStatus: boolean) => {
     setIngredients(prev => prev.map(i => i.id === id ? { ...i, disponibile: !currentStatus } : i));
     if (!supabase) return;
@@ -419,6 +439,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               onEditProduct={(product) => { setEditingProduct(product); setIsModalOpen(true); }}
               onDeleteProduct={deleteProduct}
               onToggleAvailability={toggleAvailability}
+              onMarkAllUnavailable={markAllUnavailableExceptDrinks}
               onCategoryRename={(oldName, newName) => {
                 const newOrder = categoryOrder.map(c => c === oldName ? newName : c);
                 setCategoryOrderState(newOrder);
