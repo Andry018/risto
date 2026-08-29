@@ -5,7 +5,7 @@ import type { Tavolo, Reservation } from '../types/entities';
 import {
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   FilePlus, Zap, History, PauseCircle, Package, Users,
-  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock
+  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
@@ -134,7 +134,7 @@ export default function StaffDashboard() {
           </div>
 
           {/* Sezioni macro — riempiono lo spazio restante */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1 min-h-0">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 flex-1 min-h-0">
             <BigSectionCard
               title="Sala"
               desc="Tavoli, conto e POS"
@@ -155,6 +155,13 @@ export default function StaffDashboard() {
               icon={<Package size={36} strokeWidth={1.2} />}
               accent="blue"
               onClick={() => navigate('/magazzino')}
+            />
+            <BigSectionCard
+              title="HACCP"
+              desc="Etichette & tracciabilità"
+              icon={<ShieldCheck size={36} strokeWidth={1.2} />}
+              accent="green"
+              onClick={() => navigate('/haccp')}
             />
             <BigSectionCard
               title="Personale"

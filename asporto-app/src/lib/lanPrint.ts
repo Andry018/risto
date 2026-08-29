@@ -39,7 +39,14 @@ export type HaccpLabelData = {
   printerPort?: number;
 };
 
-type PrintJob = KitchenPrintJob | ReceiptPrintJob | SalaPrintJob | HaccpLabelData;
+type QuickLabelData = {
+  kind: 'quick_label';
+  nome: string;
+  printerIp?: string;
+  printerPort?: number;
+};
+
+type PrintJob = KitchenPrintJob | ReceiptPrintJob | SalaPrintJob | HaccpLabelData | QuickLabelData;
 
 function normalizeAgentUrl(agentUrl: string): string {
   const trimmed = agentUrl.trim();
@@ -81,6 +88,10 @@ export async function printSalaViaAgent(items: CustomizedItem[], tableName: stri
 
 export async function printLabelViaAgent(data: HaccpLabelData, agentUrl: string): Promise<void> {
   await sendPrintJob(data, agentUrl);
+}
+
+export async function printQuickLabelViaAgent(nome: string, agentUrl: string): Promise<void> {
+  await sendPrintJob({ kind: 'quick_label', nome }, agentUrl);
 }
 
 async function sendPrintJob(job: PrintJob, agentUrl: string): Promise<void> {

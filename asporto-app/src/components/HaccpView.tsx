@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
-import { printLabelViaAgent, type HaccpLabelData } from '../lib/lanPrint';
+import { printLabelViaAgent, printQuickLabelViaAgent, type HaccpLabelData } from '../lib/lanPrint';
 import { getPrintAgentUrl } from '../lib/printConfig';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { QRCodeCanvas } from 'qrcode.react';
-import { ShieldCheck, Save, Printer, Trash2, Edit2, X, Copy, Package, Truck, History } from 'lucide-react';
+import { ShieldCheck, Save, Printer, Trash2, Edit2, X, Copy, Package, Truck, History, Zap, Plus, ArrowLeft } from 'lucide-react';
 
 interface HaccpFornitore {
   id: string;
@@ -38,7 +39,7 @@ interface HaccpViewProps {
   isEmbedded: boolean;
 }
 
-type SubTab = 'recipes' | 'fornitori' | 'print' | 'storico';
+type SubTab = 'recipes' | 'fornitori' | 'print' | 'storico' | 'quick';
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -58,9 +59,10 @@ function generateLotto(): string {
 }
 
 export default function HaccpView({ isEmbedded }: HaccpViewProps) {
+  const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { addToast } = useToast();
-  const [subTab, setSubTab] = useState<SubTab>('print');
+  const [subTab, setSubTab] = useState<SubTab>('quick');
   const [prodotti, setProdotti] = useState<HaccpProdotto[]>([]);
   const [fornitori, setFornitori] = useState<HaccpFornitore[]>([]);
   const [prodottiFornitori, setProdottiFornitori] = useState<Record<string, string[]>>({});
@@ -79,6 +81,14 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const [storico, setStorico] = useState<HaccpEtichetta[]>([]);
   const [loadingStorico, setLoadingStorico] = useState(false);
+
+  // Quick label tab
+  const QUICK_BUTTONS_KEY = 'risto_haccp_quick_buttons';
+  const [quickButtons, setQuickButtons] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(QUICK_BUTTONS_KEY) || '[]'); } catch { return []; }
+  });
+  const [quickNewName, setQuickNewName] = useState('');
+  const [quickPrinting, setQuickPrinting] = useState<string | null>(null);
 
   const [fornEditId, setFornEditId] = useState<string | null>(null);
   const [fNome, setFNome] = useState('');
@@ -373,12 +383,56 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
     }
   }
 
+  function saveQuickButtons(buttons: string[]) {
+    setQuickButtons(buttons);
+    localStorage.setItem(QUICK_BUTTONS_KEY, JSON.stringify(buttons));
+  }
+
+  function addQuickButton() {
+    const name = quickNewName.trim();
+    if (!name || quickButtons.includes(name)) return;
+    saveQuickButtons([...quickButtons, name]);
+    setQuickNewName('');
+  }
+
+  function removeQuickButton(name: string) {
+    saveQuickButtons(quickButtons.filter(b => b !== name));
+  }
+
+  async function quickPrint(nome: string) {
+    if (quickPrinting) return;
+    setQuickPrinting(nome);
+    try {
+      await printQuickLabelViaAgent(nome, getPrintAgentUrl());
+      addToast({ type: 'success', title: 'Etichetta stampata', message: nome });
+    } catch (err) {
+      addToast({ type: 'error', title: 'Errore stampa', message: String(err) });
+    } finally {
+      setQuickPrinting(null);
+    }
+  }
+
   const selectedProdotto = prodotti.find(x => x.id === printProdottoId);
   const nowDate = new Date();
   const scadDate = selectedProdotto ? new Date(nowDate.getTime() + selectedProdotto.giorni_scadenza * 86400000) : null;
 
-  return (
+  const content = (
     <div>
+      {!isEmbedded && (
+        <div className="flex items-center gap-3 mb-8">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2.5 bg-surface border border-surface-light rounded-xl text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-white uppercase tracking-tight">HACCP</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Etichette & Tracciabilità</p>
+          </div>
+        </div>
+      )}
+
       <div className={`flex items-center gap-2 mb-6 ${isEmbedded ? 'text-gray-500' : 'text-slate-400'}`}>
         <ShieldCheck size={18} />
         <span className="text-xs font-black uppercase tracking-widest">Gestione Etichette HACCP</span>
@@ -386,7 +440,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
 
       {/* Sub-tabs */}
       <div className="flex gap-1 mb-8 p-1 rounded-2xl w-fit border border-surface-light">
-        {([['print', 'Stampa Etichetta', Printer], ['recipes', 'Ricette HACCP', Package], ['fornitori', 'Fornitori', Truck], ['storico', 'Storico', History]] as const).map(([key, label, Icon]) => (
+        {([['quick', 'Rapida', Zap], ['print', 'Etichetta HACCP', Printer], ['recipes', 'Ricette', Package], ['fornitori', 'Fornitori', Truck], ['storico', 'Storico', History]] as const).map(([key, label, Icon]) => (
           <button
             key={key}
             onClick={() => { setSubTab(key); if (key === 'storico') fetchStorico(); }}
@@ -396,6 +450,68 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
           </button>
         ))}
       </div>
+
+      {/* Quick label tab */}
+      {subTab === 'quick' && (
+        <div className="max-w-2xl">
+          {/* Quick buttons grid */}
+          {quickButtons.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+              {quickButtons.map(name => (
+                <div key={name} className="relative group">
+                  <button
+                    onClick={() => quickPrint(name)}
+                    disabled={quickPrinting !== null}
+                    className={`w-full ${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light hover:border-gold/50 rounded-2xl p-5 text-left transition-all active:scale-[0.97] disabled:opacity-50 ${quickPrinting === name ? 'border-gold/60 animate-pulse' : ''}`}
+                  >
+                    <Printer size={18} className="text-gold mb-3" />
+                    <p className="text-white font-black text-lg uppercase tracking-tight leading-tight">{name}</p>
+                    <p className="text-gray-600 text-xs mt-1">
+                      {quickPrinting === name ? 'Stampa...' : 'Tocca per stampare'}
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => removeQuickButton(name)}
+                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-charcoal text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {quickButtons.length === 0 && (
+            <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-2xl p-10 text-center mb-6`}>
+              <Zap size={36} className="mx-auto mb-3 text-gray-600" />
+              <p className="text-gray-500 font-bold">Nessun pulsante rapido.</p>
+              <p className="text-gray-600 text-sm mt-1">Aggiungine uno sotto.</p>
+            </div>
+          )}
+
+          {/* Add new button */}
+          <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-2xl p-5`}>
+            <p className="text-xs font-black text-gray-500 uppercase tracking-widest mb-3">Aggiungi pulsante</p>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={quickNewName}
+                onChange={e => setQuickNewName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addQuickButton()}
+                placeholder="es. Pomodorini, Ragù, Besciamella..."
+                className="flex-1 bg-charcoal border border-surface-light rounded-xl p-3 text-white font-bold text-sm outline-none focus:border-gold transition-colors"
+              />
+              <button
+                onClick={addQuickButton}
+                disabled={!quickNewName.trim()}
+                className="px-5 bg-gold hover:bg-gold-hover text-black font-black rounded-xl flex items-center gap-2 disabled:opacity-40 transition-all"
+              >
+                <Plus size={18} /> Aggiungi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print sub-tab */}
       {subTab === 'print' && (
@@ -761,4 +877,16 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       )}
     </div>
   );
+
+  if (!isEmbedded) {
+    return (
+      <div className="min-h-screen bg-charcoal text-white font-sans">
+        <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 }

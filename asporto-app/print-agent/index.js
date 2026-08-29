@@ -312,6 +312,30 @@ function normalizeDbOrderItems(order) {
   }));
 }
 
+async function printQuickLabelJob(job) {
+  const printer = createPrinter(resolvePrinterInterface(job));
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+  printer.println('');
+  printer.println('');
+  printer.alignCenter();
+  printer.setTextQuadArea();
+  printer.bold(true);
+  printer.println((job.nome || 'PRODOTTO').toUpperCase());
+  printer.bold(false);
+  printer.setTextNormal();
+  printer.drawLine();
+  printer.setTextDoubleWidth();
+  printer.println(`${dateStr}  ${timeStr}`);
+  printer.setTextNormal();
+  printer.println('');
+  printer.cut();
+  await executePrinter(printer, `Etichetta rapida ${job.nome}`);
+}
+
 async function stampaEtichettaHaccp(dati) {
   const printer = createPrinter(resolvePrinterInterface(dati));
 
@@ -362,13 +386,15 @@ async function stampaEtichettaHaccp(dati) {
     printer.println('');
     printer.drawLine();
 
-    // Footer: Preparato il + Lotto su stessa riga, Scadenza sotto
+    // Footer: Preparato il + Lotto su stessa riga, Scadenza sotto (solo se presente)
     const prepLabel = dati.data_preparazione ? `Preparato il ${dati.data_preparazione}` : '';
     const lottoLabel = dati.lotto ? `Lotto: ${dati.lotto}` : '';
     printer.leftRight(prepLabel, lottoLabel);
-    printer.bold(true);
-    printer.println(`Scadenza ${dati.data_scadenza || ''}`);
-    printer.bold(false);
+    if (dati.data_scadenza) {
+      printer.bold(true);
+      printer.println(`Scadenza ${dati.data_scadenza}`);
+      printer.bold(false);
+    }
 
     printer.println('');
     printer.cut();
@@ -416,6 +442,8 @@ const server = http.createServer(async (req, res) => {
           await printReceiptJob(job);
         } else if (job.kind === 'haccp_label') {
           await stampaEtichettaHaccp(job);
+        } else if (job.kind === 'quick_label') {
+          await printQuickLabelJob(job);
         } else {
           throw new Error('Unknown print job');
         }
