@@ -442,6 +442,39 @@ function sendToCustom(frame, timeoutMs = CUSTOM_TIMEOUT) {
 }
 
 /**
+ * Rapporto X — lettura parziale senza azzeramento (non fiscale).
+ * Utile per controllare i totali a metà giornata senza chiudere.
+ *
+ * [TODO-CUSTOM] Verificare nel manuale Custom Big Plus RT il codice corretto.
+ * Il comando è tipicamente nella sezione "Rapporti" del protocollo ECR.
+ * Codici comuni (da verificare): X-report potrebbe essere '6300' o 'RPTX'.
+ */
+async function performXReport() {
+  // [TODO-CUSTOM] Sostituire '6300' con il codice X-report corretto dal manuale.
+  console.log('[CUSTOM] Avvio Rapporto X...');
+  const resp = await sendToCustom(buildCustomFrame('A', '6300'));
+  console.log('[CUSTOM] Rapporto X completato:', resp.raw?.substring(0, 60));
+  return resp;
+}
+
+/**
+ * Chiusura Z — chiusura fiscale giornaliera obbligatoria (DM 7/12/2016).
+ * Azzera i contatori giornalieri e trasmette i corrispettivi all'AdE.
+ * OPERAZIONE IRREVERSIBILE — eseguire una sola volta al giorno, fine serata.
+ *
+ * [TODO-CUSTOM] Verificare nel manuale Custom Big Plus RT il codice corretto.
+ * Sezione del manuale: "Chiusura Fiscale" o "Invio Corrispettivi".
+ * Codici comuni (da verificare): Z-report potrebbe essere '6400' o 'RPTZ'.
+ */
+async function performZReport() {
+  // [TODO-CUSTOM] Sostituire '6400' con il codice Z-report corretto dal manuale.
+  console.log('[CUSTOM] Avvio Chiusura Z (OPERAZIONE FISCALE IRREVERSIBILE)...');
+  const resp = await sendToCustom(buildCustomFrame('A', '6400'));
+  console.log('[CUSTOM] Chiusura Z completata:', resp.raw?.substring(0, 60));
+  return resp;
+}
+
+/**
  * Stampa uno scontrino fiscale sulla cassa Custom Big Plus RT.
  *
  * @param {object} receipt
@@ -629,6 +662,34 @@ const server = http.createServer(async (req, res) => {
       const result = await sendToTerminal(msg, 15000);
       return jsonResponse(res, result.ok ? 200 : 422, { ok: result.ok, ...result });
     } catch (err) {
+      return jsonResponse(res, 503, { ok: false, error: err.message });
+    }
+  }
+
+  // GET /x-report — rapporto X (lettura senza azzeramento)
+  if (req.method === 'GET' && pathname === '/x-report') {
+    try {
+      const result = await performXReport();
+      return jsonResponse(res, 200, { ok: true, raw: result.raw });
+    } catch (err) {
+      console.error('[CUSTOM] Errore Rapporto X:', err.message);
+      return jsonResponse(res, 503, { ok: false, error: err.message });
+    }
+  }
+
+  // POST /z-report — chiusura Z fiscale (irreversibile, una volta al giorno)
+  if (req.method === 'POST' && pathname === '/z-report') {
+    if (currentTx) {
+      return jsonResponse(res, 409, { ok: false, error: 'Transazione carta in corso. Attendere il completamento prima di eseguire la Chiusura Z.' });
+    }
+    console.warn('[CUSTOM] *** CHIUSURA Z RICHIESTA — operazione fiscale irreversibile ***');
+    try {
+      const result = await performZReport();
+      const ts = new Date().toISOString();
+      console.log(`[CUSTOM] Chiusura Z eseguita alle ${ts}`);
+      return jsonResponse(res, 200, { ok: true, raw: result.raw, executedAt: ts });
+    } catch (err) {
+      console.error('[CUSTOM] Errore Chiusura Z:', err.message);
       return jsonResponse(res, 503, { ok: false, error: err.message });
     }
   }

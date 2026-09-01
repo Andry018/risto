@@ -78,6 +78,47 @@ export async function pingEcrAgent(): Promise<boolean> {
   }
 }
 
+export interface ZReportResult {
+  ok: boolean;
+  executedAt?: string;
+  raw?: string;
+  error?: string;
+}
+
+/**
+ * Stampa il Rapporto X (lettura corrispettivi senza azzeramento).
+ * Non è un atto fiscale — può essere eseguito più volte durante il giorno.
+ */
+export async function performXReport(): Promise<ZReportResult> {
+  try {
+    const res = await fetch(`${getEcrUrl()}/x-report`, {
+      signal: AbortSignal.timeout(15000),
+    });
+    return await res.json() as ZReportResult;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'ECR agent non raggiungibile' };
+  }
+}
+
+/**
+ * Esegue la Chiusura Z (chiusura fiscale giornaliera).
+ * IRREVERSIBILE — azzera i contatori e trasmette i corrispettivi all'AdE.
+ * Obbligatoria per legge (DM 7/12/2016) una volta al giorno, fine serata.
+ */
+export async function performZReport(): Promise<ZReportResult> {
+  try {
+    const res = await fetch(`${getEcrUrl()}/z-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(30000),
+    });
+    return await res.json() as ZReportResult;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'ECR agent non raggiungibile' };
+  }
+}
+
 export interface FiscalReceiptItem {
   nome: string;
   prezzo: number;

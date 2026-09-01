@@ -5,11 +5,12 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
-import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Menu, X } from 'lucide-react';
+import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Menu, X, Receipt } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
 import HaccpView from './HaccpView';
+import CassaFiscaleTab from './admin/CassaFiscaleTab';
 import MenuTab from './admin/MenuTab';
 import IngredientsTab from './admin/IngredientsTab';
 import RemovalsTab from './admin/RemovalsTab';
@@ -30,9 +31,9 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
-  const tabFromUrl = searchParams.get('tab') as 'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp' | null;
-  const validTabs = ['menu', 'ingredients', 'removals', 'variants', 'haccp'] as const;
-  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp'>(
+  const tabFromUrl = searchParams.get('tab') as 'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp' | 'cassa' | null;
+  const validTabs = ['menu', 'ingredients', 'removals', 'variants', 'haccp', 'cassa'] as const;
+  const [activeTab, setActiveTab] = useState<'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp' | 'cassa'>(
     tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'menu'
   );
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -105,7 +106,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   }, [activeTab]);
 
   useEffect(() => {
-    const urlTab = searchParams.get('tab') as 'menu' | 'ingredients' | 'removals' | 'variants' | null;
+    const urlTab = searchParams.get('tab') as 'menu' | 'ingredients' | 'removals' | 'variants' | 'cassa' | null;
     if (urlTab && validTabs.includes(urlTab) && urlTab !== activeTab) {
       setActiveTab(urlTab);
     }
@@ -407,6 +408,19 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 <span className="whitespace-nowrap">HACCP Etichette</span>
               </div>
             </button>
+            <button
+              onClick={() => setActiveTab('cassa')}
+              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
+                activeTab === 'cassa'
+                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
+                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3 font-medium">
+                <Receipt size={20} className={activeTab === 'cassa' ? 'text-gold' : ''} />
+                <span className="whitespace-nowrap">Cassa Fiscale</span>
+              </div>
+            </button>
           </nav>
 
           <div className={`mt-auto hidden md:flex p-4 ${'bg-gold/10 border-gold/20'} border rounded-xl items-center gap-3`}>
@@ -463,6 +477,13 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 >
                   <ShieldCheck size={20} className={activeTab === 'haccp' ? 'text-gold' : ''} />
                   <span className="font-medium">HACCP Etichette</span>
+                </button>
+                <button
+                  onClick={() => { setActiveTab('cassa'); setMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'cassa' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-500 hover:bg-charcoal hover:text-white'}`}
+                >
+                  <Receipt size={20} className={activeTab === 'cassa' ? 'text-gold' : ''} />
+                  <span className="font-medium">Cassa Fiscale</span>
                 </button>
               </div>
             </div>
@@ -549,6 +570,10 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
             <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
               <HaccpView isEmbedded={isEmbedded} />
             </div>
+          )}
+
+          {activeTab === 'cassa' && (
+            <CassaFiscaleTab />
           )}
 
           <ProductFormModal

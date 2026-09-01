@@ -90,6 +90,8 @@ export default function SettingsView() {
   const [agentUrl, setAgentUrl] = useSetting(SETTINGS_KEYS.printAgentUrl, getPrintAgentUrl());
   const [printerIp, setPrinterIp] = useSetting(SETTINGS_KEYS.printerIp, getPrinterIp());
   const [printerPort, setPrinterPort] = useSetting(SETTINGS_KEYS.printerPort, String(getPrinterPort()));
+  const [ecrAgentUrl, setEcrAgentUrl] = useState(() => localStorage.getItem('ecr_agent_url') || '/ecr-agent');
+  const saveEcrAgentUrl = (v: string) => { setEcrAgentUrl(v); localStorage.setItem('ecr_agent_url', v); };
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
 
@@ -396,6 +398,17 @@ export default function SettingsView() {
                       <Field label="Porta" value={printerPort} onChange={(v) => setPrinterPort(v.replace(/\D/g, '').slice(0, 5))} placeholder="9100" type="text" />
                     </div>
                   </div>
+                </Card>
+                <Card title="ECR Agent" subtitle="Servizio locale per il terminale carta (PAX A35) e la cassa fiscale (Custom RT).">
+                  <Field
+                    label="ECR Agent URL"
+                    value={ecrAgentUrl}
+                    onChange={saveEcrAgentUrl}
+                    placeholder="/ecr-agent"
+                  />
+                  <p className="text-[10px] text-gray-600 font-bold mt-2 leading-relaxed">
+                    Usa <code className="bg-charcoal px-1 py-0.5 rounded text-gray-400">/ecr-agent</code> (proxy Nginx, raccomandato su HTTPS) oppure <code className="bg-charcoal px-1 py-0.5 rounded text-gray-400">http://IP:8788</code> per LAN diretta.
+                  </p>
                 </Card>
                 <Card title="Test connessione" subtitle="Verifica che il Print Agent risponda e stampa una prova in cucina.">
                   <div className="flex items-center gap-2">
