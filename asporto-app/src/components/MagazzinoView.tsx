@@ -182,37 +182,38 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
 
   return (
     <div className="flex-1 flex flex-col bg-charcoal text-white h-full overflow-hidden p-8">
-      <header className="flex justify-between items-center mb-8 shrink-0">
-        <div className="flex items-center gap-6">
-          <button onClick={() => onNavigateHome ? onNavigateHome() : navigate('/')} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl" title="Torna indietro">
-            <ArrowLeft size={24} />
+      <header className="flex justify-between items-center mb-4 md:mb-8 shrink-0">
+        <div className="flex items-center gap-3 md:gap-6 min-w-0">
+          <button onClick={() => onNavigateHome ? onNavigateHome() : navigate('/')} className="p-2.5 md:p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl shrink-0" title="Torna indietro">
+            <ArrowLeft size={20} />
           </button>
-          <div>
-            <h2 className="text-sm text-gold font-black tracking-widest uppercase italic">Gestione Scorte</h2>
-            <h1 className="text-4xl font-black text-white uppercase italic">Magazzino</h1>
+          <div className="min-w-0">
+            <h2 className="hidden md:block text-sm text-gold font-black tracking-widest uppercase italic">Gestione Scorte</h2>
+            <h1 className="text-xl md:text-4xl font-black text-white uppercase italic truncate">Magazzino</h1>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
           <button
             onClick={() => setShowStorico(true)}
-            className="p-3.5 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all"
+            className="p-2.5 md:p-3.5 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all"
             title="Storico movimenti"
           >
-            <Clock size={20} />
+            <Clock size={18} />
           </button>
           <button
             onClick={() => setScannerOpen(true)}
             disabled={lookingUp}
-            className="p-3.5 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-gold transition-all disabled:opacity-50"
+            className="p-2.5 md:p-3.5 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-gold transition-all disabled:opacity-50"
             title="Scansiona codice a barre"
           >
-            <ScanBarcode size={20} />
+            <ScanBarcode size={18} />
           </button>
           <button
             onClick={openAddForm}
-            className="bg-gold hover:bg-gold-hover text-black px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center gap-2 active:scale-95 transition-all"
+            className="bg-gold hover:bg-gold-hover text-black p-2.5 md:px-6 md:py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center gap-2 active:scale-95 transition-all"
           >
-            <Plus size={20} /> Nuovo Articolo
+            <Plus size={20} />
+            <span className="hidden md:inline">Nuovo Articolo</span>
           </button>
         </div>
       </header>
@@ -288,7 +289,7 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
 
                       <div className="flex items-end justify-between mb-4">
                         <div>
-                          <p className={`text-3xl font-black italic ${low ? 'text-rose-400' : 'text-gold'}`}>
+                          <p className={`text-2xl md:text-3xl font-black italic ${low ? 'text-rose-400' : 'text-gold'}`}>
                             {a.quantita} <span className="text-sm font-bold not-italic">{a.unita_misura}</span>
                           </p>
                           <p className="text-[10px] text-gray-500 font-bold mt-1">Soglia minima: {a.soglia_minima} {a.unita_misura}</p>
