@@ -29,6 +29,7 @@ import { ConfirmProvider } from './components/ConfirmModal';
 import { PinProvider } from './components/PinModal';
 import { PromptProvider } from './components/PromptModal';
 import { WakeLockManager } from './components/WakeLockManager';
+import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 
 initTheme();
 
@@ -47,6 +48,7 @@ export default function App() {
         <PromptProvider>
         <ExitGuard>
         <WakeLockManager />
+        <PwaUpdatePrompt />
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
           <Route path="/menu" element={<PublicMenuView />} />
