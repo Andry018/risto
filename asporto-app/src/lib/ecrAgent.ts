@@ -3,8 +3,10 @@
  * Chiamato da POSView e CardPaymentModal per avviare pagamenti carta.
  */
 
+import { getSetting, SETTINGS_KEYS } from './appSettings';
+
 const getEcrUrl = (): string =>
-  localStorage.getItem('ecr_agent_url') || 'http://localhost:8788';
+  getSetting(SETTINGS_KEYS.ecrAgentUrl, '/ecr-agent');
 
 export interface PaymentResult {
   ok: boolean;

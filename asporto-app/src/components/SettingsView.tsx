@@ -90,8 +90,7 @@ export default function SettingsView() {
   const [agentUrl, setAgentUrl] = useSetting(SETTINGS_KEYS.printAgentUrl, getPrintAgentUrl());
   const [printerIp, setPrinterIp] = useSetting(SETTINGS_KEYS.printerIp, getPrinterIp());
   const [printerPort, setPrinterPort] = useSetting(SETTINGS_KEYS.printerPort, String(getPrinterPort()));
-  const [ecrAgentUrl, setEcrAgentUrl] = useState(() => localStorage.getItem('ecr_agent_url') || '/ecr-agent');
-  const saveEcrAgentUrl = (v: string) => { setEcrAgentUrl(v); localStorage.setItem('ecr_agent_url', v); };
+  const [ecrAgentUrl, setEcrAgentUrl] = useSetting(SETTINGS_KEYS.ecrAgentUrl, '/ecr-agent');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionTestMessage, setConnectionTestMessage] = useState<string | null>(null);
 
@@ -403,7 +402,7 @@ export default function SettingsView() {
                   <Field
                     label="ECR Agent URL"
                     value={ecrAgentUrl}
-                    onChange={saveEcrAgentUrl}
+                    onChange={setEcrAgentUrl}
                     placeholder="/ecr-agent"
                   />
                   <p className="text-[10px] text-gray-600 font-bold mt-2 leading-relaxed">
