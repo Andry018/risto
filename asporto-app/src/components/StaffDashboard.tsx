@@ -5,7 +5,7 @@ import type { Tavolo, Reservation } from '../types/entities';
 import {
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   FilePlus, Zap, History, PauseCircle, Package, Users,
-  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck
+  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
@@ -169,6 +169,20 @@ export default function StaffDashboard() {
               icon={<Users size={36} strokeWidth={1.2} />}
               accent="purple"
               onClick={() => navigate('/settings?section=personale')}
+            />
+            <BigSectionCard
+              title="Cassa Fiscale"
+              desc="Chiusura Z & Rapporto X"
+              icon={<Receipt size={36} strokeWidth={1.2} />}
+              accent="red"
+              onClick={() => navigate('/cassa')}
+              badge={(() => {
+                try {
+                  const log = JSON.parse(localStorage.getItem('risto_z_log') || '[]') as { date: string }[];
+                  const today = new Date().toISOString().slice(0, 10);
+                  return !log.find(e => e.date === today);
+                } catch { return false; }
+              })()}
             />
           </div>
         </div>
@@ -348,7 +362,7 @@ export default function StaffDashboard() {
   );
 }
 
-type Accent = 'gold' | 'green' | 'gray' | 'blue' | 'orange' | 'purple';
+type Accent = 'gold' | 'green' | 'gray' | 'blue' | 'orange' | 'purple' | 'red';
 
 const accentClasses: Record<Accent, { icon: string; border: string; glow: string; bg: string }> = {
   gold:   { icon: 'text-gold',        border: 'hover:border-gold/50',        glow: 'group-hover:bg-gold/10',        bg: 'bg-gold/10' },
@@ -357,6 +371,7 @@ const accentClasses: Record<Accent, { icon: string; border: string; glow: string
   orange: { icon: 'text-orange-400',  border: 'hover:border-orange-500/50',  glow: 'group-hover:bg-orange-500/10', bg: 'bg-orange-500/10' },
   purple: { icon: 'text-violet-400',  border: 'hover:border-violet-500/50',  glow: 'group-hover:bg-violet-500/10', bg: 'bg-violet-500/10' },
   gray:   { icon: 'text-gray-400',    border: 'hover:border-gray-500/50',    glow: 'group-hover:bg-gray-500/10',   bg: 'bg-gray-500/10' },
+  red:    { icon: 'text-red-400',     border: 'hover:border-red-500/50',     glow: 'group-hover:bg-red-500/10',    bg: 'bg-red-500/10' },
 };
 
 function KpiCard({ label, value, accent, icon }: { label: string; value: number; accent: Accent; icon: React.ReactNode }) {
@@ -374,15 +389,18 @@ function KpiCard({ label, value, accent, icon }: { label: string; value: number;
   );
 }
 
-function BigSectionCard({ title, desc, icon, accent, onClick }: {
-  title: string; desc: string; icon: React.ReactNode; accent: Accent; onClick: () => void;
+function BigSectionCard({ title, desc, icon, accent, onClick, badge }: {
+  title: string; desc: string; icon: React.ReactNode; accent: Accent; onClick: () => void; badge?: boolean;
 }) {
   const a = accentClasses[accent];
   return (
     <button
       onClick={onClick}
-      className={`group bg-surface border border-surface-light ${a.border} rounded-3xl p-7 flex flex-col justify-between transition-all duration-200 active:scale-[0.97] cursor-pointer h-full min-h-[180px]`}
+      className={`relative group bg-surface border border-surface-light ${a.border} rounded-3xl p-7 flex flex-col justify-between transition-all duration-200 active:scale-[0.97] cursor-pointer h-full min-h-[180px]`}
     >
+      {badge && (
+        <span className="absolute top-4 right-4 w-3 h-3 rounded-full bg-red-500 ring-2 ring-charcoal" />
+      )}
       <div className={`w-16 h-16 rounded-2xl ${a.bg} ${a.glow} flex items-center justify-center transition-colors duration-200 ${a.icon}`}>
         {icon}
       </div>

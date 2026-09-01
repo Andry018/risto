@@ -16,6 +16,7 @@ import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
 import MagazzinoView from './components/MagazzinoView';
 import HaccpView from './components/HaccpView';
+import CassaFiscalePage from './components/CassaFiscalePage';
 import SystemPanelView from './components/SystemPanelView';
 import ExitGuard from './components/ExitGuard';
 import StaffPinGuard from './components/StaffPinGuard';
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
           <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />
           <Route path="/haccp" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><HaccpView isEmbedded={false} /></StaffPinGuard>} />
+          <Route path="/cassa" element={<StaffPinGuard requiredRoles={['admin']}><CassaFiscalePage /></StaffPinGuard>} />
           <Route path="/servizi" element={<StaffPinGuard requiredRoles={['admin']}><SystemPanelView /></StaffPinGuard>} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
         </Routes>
