@@ -10,6 +10,7 @@ interface Props {
   selectedTable: Tavolo | null;
   now: number;
   tableApertura: Record<string, string>;
+  tableOrderCounts?: Record<string, number>;
   onSelectTable: (table: Tavolo) => void;
   onTransferTable?: (table: Tavolo) => void;
 }
@@ -39,10 +40,11 @@ function getStatusBadge(table: Tavolo, mins: number | null) {
   return { label: 'OCCUPATO', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' };
 }
 
-function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }: {
+function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTransferTable }: {
   table: Tavolo;
   now: number;
   tableApertura: Record<string, string>;
+  orderCount?: number;
   onSelectTable: (t: Tavolo) => void;
   onTransferTable?: (t: Tavolo) => void;
 }) {
@@ -124,6 +126,12 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }
               <Clock size={11} /> {elapsed}
             </div>
           )}
+          {table.status === 'OCCUPATO' && orderCount !== undefined && orderCount > 0 && (
+            <div className="flex items-center gap-1 text-[10px] font-black text-emerald-400/80 uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
+              {orderCount} piatti
+            </div>
+          )}
         </div>
 
         {table.status === 'LIBERO' && (
@@ -136,7 +144,7 @@ function TableCard({ table, now, tableApertura, onSelectTable, onTransferTable }
   );
 }
 
-export default function TableGrid({ tables, activeRoom, now, tableApertura, onSelectTable, onTransferTable }: Props) {
+export default function TableGrid({ tables, activeRoom, now, tableApertura, tableOrderCounts, onSelectTable, onTransferTable }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6 pt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {tables
@@ -153,6 +161,7 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, onSe
             table={table}
             now={now}
             tableApertura={tableApertura}
+            orderCount={tableOrderCounts?.[table.nome]}
             onSelectTable={onSelectTable}
             onTransferTable={onTransferTable}
           />

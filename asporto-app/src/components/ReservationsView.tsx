@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Reservation, Tavolo } from '../types/entities';
-import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, ArrowLeft } from 'lucide-react';
+import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, ArrowLeft, Phone } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { toLocalISODate } from '../lib/dateUtils';
@@ -23,6 +23,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   // New Reservation State
   const [newRes, setNewRes] = useState<Partial<Reservation>>({
     nome: '',
+    telefono: '',
     data: toLocalISODate(),
     ora: '20:00',
     persone: 2,
@@ -129,6 +130,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     setEditingReservation(null);
     setNewRes({
       nome: '',
+      telefono: '',
       data: selectedDate,
       ora: '20:00',
       persone: 2,
@@ -290,8 +292,16 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
           {/* Selected date info */}
           <div className="bg-surface border border-surface-light rounded-3xl p-5">
             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Giorno selezionato</p>
-            <p className="text-base font-black text-white capitalize">{selectedDateLabel}</p>
-            <p className="text-2xl font-black text-gold mt-1">{reservations.length} {reservations.length === 1 ? 'prenotazione' : 'prenotazioni'}</p>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <button onClick={() => changeDate(-1)} className="p-1.5 rounded-xl text-gray-500 hover:text-white hover:bg-charcoal transition-all">
+                <ChevronLeft size={16} />
+              </button>
+              <p className="text-sm font-black text-white capitalize text-center">{selectedDateLabel}</p>
+              <button onClick={() => changeDate(1)} className="p-1.5 rounded-xl text-gray-500 hover:text-white hover:bg-charcoal transition-all">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <p className="text-2xl font-black text-gold mt-2">{reservations.length} {reservations.length === 1 ? 'prenotazione' : 'prenotazioni'}</p>
           </div>
         </div>
 
@@ -319,10 +329,15 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                   
                   <div>
                     <h3 className="text-3xl font-black text-white mb-1">{res.nome}</h3>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <div className="flex items-center gap-2 px-3 py-1 bg-charcoal border border-surface-light rounded-full text-xs font-bold text-gray-400">
                         <Users size={14} /> {res.persone} persone
                       </div>
+                      {res.telefono && (
+                        <a href={`tel:${res.telefono}`} onClick={e => e.stopPropagation()} className="flex items-center gap-2 px-3 py-1 bg-charcoal border border-surface-light rounded-full text-xs font-bold text-gray-400 hover:text-gold hover:border-gold/30 transition-colors">
+                          <Phone size={14} /> {res.telefono}
+                        </a>
+                      )}
                       {res.tavolo_id && (
                         <div className="flex items-center gap-2 px-3 py-1 bg-gold/10 border border-gold/20 rounded-full text-xs font-bold text-gold">
                           <MapPin size={14} /> {tables.find(t => t.id === res.tavolo_id)?.nome || 'Tavolo'}
@@ -393,14 +408,26 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Cliente</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="es. Mario Rossi"
                       value={newRes.nome}
                       onChange={e => setNewRes({...newRes, nome: e.target.value})}
                       className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Telefono</label>
+                    <input
+                      type="tel"
+                      placeholder="es. 333 1234567"
+                      value={newRes.telefono || ''}
+                      onChange={e => setNewRes({...newRes, telefono: e.target.value})}
+                      className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
                     <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-2xl p-2 px-4">

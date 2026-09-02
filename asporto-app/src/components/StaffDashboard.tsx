@@ -179,8 +179,7 @@ export default function StaffDashboard() {
               badge={(() => {
                 try {
                   const log = JSON.parse(localStorage.getItem('risto_z_log') || '[]') as { date: string }[];
-                  const today = new Date().toISOString().slice(0, 10);
-                  return !log.find(e => e.date === today);
+                  return !log.find(e => e.date === toLocalISODate());
                 } catch { return false; }
               })()}
             />
@@ -244,7 +243,7 @@ export default function StaffDashboard() {
             <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
                 <PosBox icon={<FilePlus size={24} />} title="Nuovo Conto" desc="Apri un nuovo conto" onClick={() => { setShowNewOrderModal(true); setNewOrderName(''); }} />
                <PosBox icon={<Zap size={24} />} title="Vendita Rapida" desc="Piatti veloci, asporto" onClick={() => navigate('/pos')} />
-               <PosBox icon={<History size={24} />} title="Conti Recenti" desc="Visualizza transazioni" onClick={() => navigate('/pos')} />
+               <PosBox icon={<History size={24} />} title="Conti Recenti" desc="Visualizza transazioni" onClick={() => navigate('/pos?showBills=day')} />
                <PosBox icon={<PauseCircle size={24} />} title="Conti in Sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
             </div>
 

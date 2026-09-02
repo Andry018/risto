@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Database, RefreshCw, AlertCircle, X } from 'lucide-react';
+import { Database, RefreshCw, AlertCircle, X, WifiOff, CheckCircle2 } from 'lucide-react';
 import { supabase, IS_DEMO_MODE, toggleDemoMode } from '../lib/supabase';
 
 interface Props {
@@ -9,6 +9,29 @@ interface Props {
 export default function DatabaseStatusGuard({ children }: Props) {
   const [dbIssue, setDbIssue] = useState<'none' | 'not_configured' | 'unreachable'>('none');
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
+  const [justReconnected, setJustReconnected] = useState(false);
+
+  useEffect(() => {
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    function handleOffline() {
+      setIsOffline(true);
+      setJustReconnected(false);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    }
+    function handleOnline() {
+      setIsOffline(false);
+      setJustReconnected(true);
+      reconnectTimer = setTimeout(() => setJustReconnected(false), 3500);
+    }
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, []);
 
   const checkConnection = useCallback(async () => {
     if (IS_DEMO_MODE) {
@@ -44,6 +67,18 @@ export default function DatabaseStatusGuard({ children }: Props) {
 
   return (
     <>
+      {isOffline && (
+        <div className="fixed top-0 left-0 right-0 z-[210] flex items-center gap-3 px-4 py-2.5 text-sm font-semibold bg-amber-500/95 text-black shadow-lg backdrop-blur-sm">
+          <WifiOff size={17} className="shrink-0" />
+          <span className="flex-1">Rete assente — le modifiche verranno sincronizzate alla riconnessione.</span>
+        </div>
+      )}
+      {!isOffline && justReconnected && (
+        <div className="fixed top-0 left-0 right-0 z-[210] flex items-center gap-3 px-4 py-2.5 text-sm font-semibold bg-emerald-600/95 text-white shadow-lg backdrop-blur-sm">
+          <CheckCircle2 size={17} className="shrink-0" />
+          <span className="flex-1">Connessione ripristinata.</span>
+        </div>
+      )}
       {IS_DEMO_MODE && (
         <div className="fixed top-0 left-0 right-0 z-[200] flex items-center justify-between gap-3 px-4 py-2.5 text-xs font-bold bg-amber-500 text-black shadow-lg">
           <div className="flex items-center gap-2">

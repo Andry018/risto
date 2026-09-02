@@ -1,0 +1,1 @@
+ALTER TABLE prenotazioni ADD COLUMN IF NOT EXISTS telefono TEXT;

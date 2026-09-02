@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Palette, Printer, KeyRound,
@@ -12,7 +12,7 @@ import {
   pushStaffUserToDb, deleteStaffUserFromDb,
   type StaffUser, type StaffRole,
 } from '../lib/staffAuth';
-import { hasTurno, toggleTurno, type TurnoTipo } from '../lib/turni';
+import { hasTurno, toggleTurno, loadTurniFromDb, type TurnoTipo } from '../lib/turni';
 import { dbUtils } from '../lib/DatabaseUtils';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -72,6 +72,17 @@ function Field({ label, value, onChange, placeholder, type = 'text', suffix }: {
 
 const SECTION_IDS = SECTIONS.map(s => s.id);
 
+function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="border border-surface-light rounded-2xl p-5 md:p-6 bg-charcoal/40">
+      <h3 className="text-base font-black text-white">{title}</h3>
+      {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-4">{subtitle}</p>}
+      {!subtitle && <div className="mb-4" />}
+      {children}
+    </div>
+  );
+}
+
 export default function SettingsView() {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
@@ -104,6 +115,10 @@ export default function SettingsView() {
 
   const [turniDate, setTurniDate] = useState(() => toLocalISODate());
   const [turniTick, setTurniTick] = useState(0);
+
+  useEffect(() => {
+    void loadTurniFromDb().then(() => setTurniTick(t => t + 1));
+  }, []);
   const handleToggleTurno = (userId: string, turno: TurnoTipo) => {
     toggleTurno(userId, turniDate, turno);
     setTurniTick(t => t + 1);
@@ -255,15 +270,6 @@ export default function SettingsView() {
     finally { setLoadingAction(null); }
   };
 
-  const Card = ({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) => (
-    <div className="border border-surface-light rounded-2xl p-5 md:p-6 bg-charcoal/40">
-      <h3 className="text-base font-black text-white">{title}</h3>
-      {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-4">{subtitle}</p>}
-      {!subtitle && <div className="mb-4" />}
-      {children}
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-charcoal text-white font-sans flex flex-col h-dvh overflow-hidden">
       {/* Header */}
@@ -327,7 +333,7 @@ export default function SettingsView() {
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Info</p>
               </div>
               <p className="text-[11px] text-gray-500 leading-relaxed">
-                Le impostazioni si salvano automaticamente su questo dispositivo.
+                Le impostazioni si salvano automaticamente e si sincronizzano su tutti i dispositivi.
               </p>
             </div>
           </div>

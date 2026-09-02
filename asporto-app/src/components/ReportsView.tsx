@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
+import { getCurrentUser, getDefaultRouteForRole, getStaffUsers } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, OrderCarrelloItem } from '../types/entities';
 import { MOCK_ORDERS } from '../lib/MockData';
-import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, LogOut, AlertTriangle, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, LogOut, AlertTriangle, ArrowUpRight, ArrowDownRight, Minus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 
@@ -47,6 +47,12 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
   const [period, setPeriod] = useState<Period>('today');
   const [loading, setLoading] = useState(true);
   const [weekComparison, setWeekComparison] = useState<WeekComparison | null>(null);
+  const [view, setView] = useState<'stats' | 'turni'>('stats');
+  const [turniMonth, setTurniMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [turniData, setTurniData] = useState<{ user_id: string; data: string; turno: string }[]>([]);
 
   async function fetchOrders() {
     if (IS_DEMO_MODE) {
@@ -97,6 +103,17 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
   }
 
   useEffect(() => { void fetchWeekComparison(); }, []);
+
+  async function fetchTurni(month: string) {
+    if (!supabase) return;
+    const [y, m] = month.split('-').map(Number);
+    const start = `${month}-01`;
+    const end = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+    const { data } = await supabase.from('turni').select('user_id, data, turno').gte('data', start).lte('data', end);
+    if (data) setTurniData(data as { user_id: string; data: string; turno: string }[]);
+  }
+
+  useEffect(() => { if (view === 'turni') void fetchTurni(turniMonth); }, [view, turniMonth]);
 
   const stats = useMemo(() => {
     const completed = orders.filter(o => o.status === 'COMPLETATO');
@@ -175,14 +192,22 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
               <p className="text-xs font-black text-gray-500 uppercase tracking-widest mt-1">{periodLabel}</p>
             </div>
           </div>
-          <div className="flex gap-2 bg-surface p-1.5 rounded-2xl border border-surface-light">
-            {(['today', 'week', 'month'] as Period[]).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${period === p ? 'bg-gold text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}
-              >
-                {p === 'today' ? 'Oggi' : p === 'week' ? 'Settimana' : 'Mese'}
-              </button>
-            ))}
+          <div className="flex gap-3 flex-wrap justify-end">
+            <div className="flex gap-1 bg-surface p-1.5 rounded-2xl border border-surface-light">
+              <button onClick={() => setView('stats')} className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${view === 'stats' ? 'bg-gold text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}>Statistiche</button>
+              <button onClick={() => setView('turni')} className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${view === 'turni' ? 'bg-gold text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}><Users size={13} className="inline mr-1" />Turni</button>
+            </div>
+            {view === 'stats' && (
+              <div className="flex gap-2 bg-surface p-1.5 rounded-2xl border border-surface-light">
+                {(['today', 'week', 'month'] as Period[]).map(p => (
+                  <button key={p} onClick={() => setPeriod(p)}
+                    className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${period === p ? 'bg-gold text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                  >
+                    {p === 'today' ? 'Oggi' : p === 'week' ? 'Settimana' : 'Mese'}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </header>
 
@@ -431,6 +456,86 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
             <span className="text-xs font-black text-gray-500 group-hover:text-gold uppercase tracking-widest transition-all">Apri →</span>
           </Link>
         )}
+
+        {view === 'turni' && (() => {
+          const staffUsers = getStaffUsers();
+          const [ty, tm] = turniMonth.split('-').map(Number);
+          const monthLabel = new Date(ty, tm - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+          const daysInMonth = new Date(ty, tm, 0).getDate();
+          const shiftMonth = (delta: number) => {
+            const d = new Date(ty, tm - 1 + delta, 1);
+            setTurniMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          };
+
+          const summary = staffUsers.map(u => {
+            const userTurni = turniData.filter(t => t.user_id === u.id);
+            const pranzi = userTurni.filter(t => t.turno === 'pranzo').length;
+            const sere = userTurni.filter(t => t.turno === 'sera').length;
+            const giorni = new Set(userTurni.map(t => t.data)).size;
+            return { ...u, pranzi, sere, giorni };
+          });
+
+          return (
+            <div className="bg-surface border border-surface-light rounded-[40px] p-8 mb-10">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-lg font-black italic uppercase tracking-tighter text-white flex items-center gap-3">
+                  <Users className="text-gold" size={20} /> Turni Mensili
+                </h2>
+                <div className="flex items-center gap-2 bg-charcoal border border-surface-light rounded-2xl px-2 py-1">
+                  <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-xl text-gray-500 hover:text-white transition-all"><ChevronLeft size={16} /></button>
+                  <span className="text-sm font-black text-white capitalize px-2">{monthLabel}</span>
+                  <button onClick={() => shiftMonth(1)} className="p-1.5 rounded-xl text-gray-500 hover:text-white transition-all"><ChevronRight size={16} /></button>
+                </div>
+              </div>
+
+              {staffUsers.length === 0 ? (
+                <p className="text-xs text-gray-500 font-bold text-center py-8">Nessun operatore configurato in Impostazioni → Personale.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-surface-light">
+                        <th className="pb-4 pr-6">Operatore</th>
+                        <th className="pb-4 pr-6 text-center">Giorni</th>
+                        <th className="pb-4 pr-6 text-center">Pranzi</th>
+                        <th className="pb-4 pr-6 text-center">Sere</th>
+                        <th className="pb-4 text-center">Totale Turni</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-surface-light">
+                      {summary.map(u => (
+                        <tr key={u.id}>
+                          <td className="py-4 pr-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 bg-gold/10 rounded-xl flex items-center justify-center text-gold font-black text-xs shrink-0">{u.name.charAt(0).toUpperCase()}</div>
+                              <div>
+                                <p className="font-bold text-white text-sm">{u.name}</p>
+                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">{u.role}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 pr-6 text-center">
+                            <span className={`text-2xl font-black ${u.giorni > 0 ? 'text-white' : 'text-gray-600'}`}>{u.giorni}</span>
+                            <p className="text-[10px] text-gray-600">/ {daysInMonth}</p>
+                          </td>
+                          <td className="py-4 pr-6 text-center">
+                            <span className={`text-xl font-black ${u.pranzi > 0 ? 'text-gold' : 'text-gray-600'}`}>{u.pranzi}</span>
+                          </td>
+                          <td className="py-4 pr-6 text-center">
+                            <span className={`text-xl font-black ${u.sere > 0 ? 'text-blue-400' : 'text-gray-600'}`}>{u.sere}</span>
+                          </td>
+                          <td className="py-4 text-center">
+                            <span className={`px-3 py-1.5 rounded-xl text-sm font-black ${u.pranzi + u.sere > 0 ? 'bg-gold/10 text-gold' : 'text-gray-600'}`}>{u.pranzi + u.sere}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <footer className="text-center py-8">
           <p className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.5em]">Il Girasole · Reports</p>

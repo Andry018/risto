@@ -100,6 +100,26 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const toast = useToast();
   const { confirm } = useConfirm();
+
+  async function handleBack() {
+    if (cart.length > 0) {
+      const ok = await confirm({
+        title: 'Carrello non vuoto',
+        message: 'Hai articoli nel carrello. Uscire ora li perderà. Continuare?',
+        confirmLabel: 'Esci',
+        cancelLabel: 'Rimani',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    if (onNavigateHome) {
+      onNavigateHome();
+    } else if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  }
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
   const localUpdateRef = useRef(false);
@@ -252,9 +272,8 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   }, [tableId, products.length]);
 
   useEffect(() => {
-    if (searchParams.get('showHold') === 'true') {
-      setBillsSuspendedOpen(true);
-    }
+    if (searchParams.get('showHold') === 'true') setBillsSuspendedOpen(true);
+    if (searchParams.get('showBills') === 'day') setBillsDayOpen(true);
   }, [searchParams]);
 
   /** Sync conto tavolo da altri dispositivi (es. telefono cameriere) senza ricaricare. */
@@ -983,18 +1002,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         <header className="mb-8 flex flex-col gap-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-6">
-              {onNavigateHome ? (
-                <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
-                   <LayoutDashboard size={24} />
-                </button>
-              ) : (
-                <button
-                  onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
-                  className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl"
-                >
-                   <LayoutDashboard size={24} />
-                </button>
-              )}
+              <button
+                onClick={() => void handleBack()}
+                className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl"
+              >
+                <LayoutDashboard size={24} />
+              </button>
               <div>
                 <div className="flex items-center gap-3">
                   <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Comanda & Conto</h2>

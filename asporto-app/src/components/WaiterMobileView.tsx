@@ -66,6 +66,7 @@ export default function WaiterMobileView() {
   const [transferBusy, setTransferBusy] = useState(false);
   const currentUser = getCurrentUser();
   const [tableDrafts, setTableDrafts] = useState<Record<string, { cart: CustomizedItem[]; covers: number }>>({});
+  const [tableOrderCounts, setTableOrderCounts] = useState<Record<string, number>>({});
   const [paninoModalOpen, setPaninoModalOpen] = useState(false);
   const [customItemModalOpen, setCustomItemModalOpen] = useState(false);
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
@@ -229,6 +230,19 @@ export default function WaiterMobileView() {
         }
       }));
       setTableApertura(prev => ({ ...prev, ...aperturaMap }));
+
+      // Conteggio piatti per tavolo (ordini IN_ATTESA)
+      const { data: activeOrders } = await sb
+        .from('ordini')
+        .select('nome_cliente, carrello')
+        .eq('status', 'IN_ATTESA');
+      if (activeOrders) {
+        const counts: Record<string, number> = {};
+        for (const o of activeOrders as { nome_cliente: string; carrello: { quantity: number }[] }[]) {
+          counts[o.nome_cliente] = (o.carrello || []).reduce((s, i) => s + (i.quantity || 1), 0);
+        }
+        setTableOrderCounts(counts);
+      }
     }
   }
 
@@ -983,6 +997,7 @@ export default function WaiterMobileView() {
               selectedTable={selectedTable}
               now={now}
               tableApertura={tableApertura}
+              tableOrderCounts={tableOrderCounts}
               onSelectTable={selectTable}
               onTransferTable={(table) => {
                 if (table.status === 'OCCUPATO' || table.status === 'PRENOTATO') {

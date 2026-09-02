@@ -73,6 +73,7 @@ export type Reservation = {
   data: string;
   ora: string;
   persone: number;
+  telefono?: string;
   tavolo_id?: string;
   status: 'CONFERMATA' | 'ANNULLATA' | 'ARRIVATA';
   note?: string;
