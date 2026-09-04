@@ -73,6 +73,7 @@ export default function WaiterMobileView() {
   const [turnoModalOpen, setTurnoModalOpen] = useState(false);
   const [turnoTick, setTurnoTick] = useState(0);
   const [allergieNote, setAllergieNote] = useState('');
+  const [tableAllergie, setTableAllergie] = useState<Record<string, string>>({});
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
@@ -96,6 +97,13 @@ export default function WaiterMobileView() {
     window.addEventListener('sync-status-changed', handleSyncChange);
     return () => window.removeEventListener('sync-status-changed', handleSyncChange);
   }, []);
+
+  // Persiste allergieNote per tavolo — sopravvive a chiudi/riapri pannello
+  useEffect(() => {
+    if (selectedTable) {
+      setTableAllergie(prev => ({ ...prev, [selectedTable.id]: allergieNote }));
+    }
+  }, [allergieNote, selectedTable?.id]);
 
   const handlePrint = async () => {
     if (cart.length === 0) return;
@@ -449,7 +457,7 @@ export default function WaiterMobileView() {
   }, []);
 
   const selectTable = async (table: Tavolo) => {
-    setAllergieNote('');
+    setAllergieNote(tableAllergie[table.id] || '');
     const draft = tableDrafts[table.id];
 
     // Restore draft for any table status
@@ -518,6 +526,7 @@ export default function WaiterMobileView() {
 
     setTables(prev => prev.map(t => t.id === table.id ? { ...t, status: 'LIBERO', clienti: 0, note: newNote } : t));
     setTableApertura(prev => { const n = { ...prev }; delete n[table.id]; return n; });
+    setTableAllergie(prev => { const n = { ...prev }; delete n[table.id]; return n; });
 
     if (selectedTable?.id === table.id) {
       setSelectedTable(null);
