@@ -498,6 +498,36 @@ export default function WaiterMobileView() {
     })();
   };
 
+  const closeTable = async (table: Tavolo) => {
+    const ok = await confirm({
+      title: `Chiudi ${table.nome}`,
+      message: 'Vuoi liberare il tavolo? Gli eventuali ordini in attesa verranno eliminati.',
+      confirmLabel: 'Libera Tavolo',
+      cancelLabel: 'Annulla',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    if (!IS_DEMO_MODE && supabase) {
+      await supabase.from('ordini').delete().eq('nome_cliente', table.nome).eq('status', 'IN_ATTESA');
+    }
+
+    const newNote = clearAperturaInNote(table.note);
+    localUpdateTavoliRef.current = true;
+    await syncManager.pushTableUpdate(table.id, { status: 'LIBERO', clienti: 0, note: newNote });
+
+    setTables(prev => prev.map(t => t.id === table.id ? { ...t, status: 'LIBERO', clienti: 0, note: newNote } : t));
+    setTableApertura(prev => { const n = { ...prev }; delete n[table.id]; return n; });
+
+    if (selectedTable?.id === table.id) {
+      setSelectedTable(null);
+      setCart([]);
+      setActiveOrderId(null);
+    }
+
+    toast.addToast({ type: 'success', title: 'Tavolo liberato', message: `${table.nome} è stato liberato.`, duration: 2500 });
+  };
+
   const confirmCovers = async () => {
     if (!selectedTable) return;
     
@@ -1046,6 +1076,7 @@ export default function WaiterMobileView() {
                   toast.addToast({ type: 'info', title: 'Trasferimento Tavolo', message: `${table.nome} non ha un conto aperto`, duration: 3000 });
                 }
               }}
+              onCloseTable={closeTable}
             />
           </div>
         )

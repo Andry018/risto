@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Tavolo } from '../types/entities';
-import { Users, Clock, MoreVertical, ArrowRightLeft } from 'lucide-react';
+import { Users, Clock, MoreVertical, ArrowRightLeft, DoorOpen } from 'lucide-react';
 
 const ATTENTION_MINUTES = 20;
 
@@ -13,6 +14,7 @@ interface Props {
   tableOrderCounts?: Record<string, number>;
   onSelectTable: (table: Tavolo) => void;
   onTransferTable?: (table: Tavolo) => void;
+  onCloseTable?: (table: Tavolo) => void;
 }
 
 function elapsedStr(t: Tavolo, tableApertura: Record<string, string>, now: number): string | null {
@@ -40,26 +42,39 @@ function getStatusBadge(table: Tavolo, mins: number | null) {
   return { label: 'OCCUPATO', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' };
 }
 
-function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTransferTable }: {
+function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTransferTable, onCloseTable }: {
   table: Tavolo;
   now: number;
   tableApertura: Record<string, string>;
   orderCount?: number;
   onSelectTable: (t: Tavolo) => void;
   onTransferTable?: (t: Tavolo) => void;
+  onCloseTable?: (t: Tavolo) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (!panelRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
         setMenuOpen(false);
       }
     }
     if (menuOpen) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [menuOpen]);
+
+  const handleToggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!menuOpen) {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect) setDropdownPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setMenuOpen(m => !m);
+  };
 
   const mins = getElapsedMins(table, tableApertura, now);
   const badge = getStatusBadge(table, mins);
@@ -84,32 +99,13 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
             {badge.label}
           </span>
           {(table.status === 'OCCUPATO' || table.status === 'PRENOTATO') && (
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-                className="p-1.5 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
-              >
-                <MoreVertical size={16} />
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-8 z-50 w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
-                  <div className="py-1">
-                    <p className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-gray-800">
-                      {table.nome} · Azioni
-                    </p>
-                    {onTransferTable && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onTransferTable(table); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
-                      >
-                        <ArrowRightLeft size={15} className="text-amber-400" />
-                        Trasferisci Tavolo
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <button
+              ref={triggerRef}
+              onClick={handleToggleMenu}
+              className="p-1.5 rounded-xl hover:bg-white/5 text-gray-500 hover:text-white transition-colors"
+            >
+              <MoreVertical size={16} />
+            </button>
           )}
         </div>
 
@@ -140,11 +136,43 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
           </div>
         )}
       </button>
+
+      {/* Dropdown via portale — evita clipping da overflow-y-auto del grid */}
+      {menuOpen && dropdownPos && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: dropdownPos.top, right: dropdownPos.right, zIndex: 9999 }}
+          className="w-52 bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden"
+        >
+          <p className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-gray-800">
+            {table.nome} · Azioni
+          </p>
+          {onTransferTable && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onTransferTable(table); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              <ArrowRightLeft size={15} className="text-amber-400" />
+              Trasferisci Tavolo
+            </button>
+          )}
+          {onCloseTable && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onCloseTable(table); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors border-t border-gray-800"
+            >
+              <DoorOpen size={15} className="text-rose-400" />
+              Chiudi Tavolo
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
 
-export default function TableGrid({ tables, activeRoom, now, tableApertura, tableOrderCounts, onSelectTable, onTransferTable }: Props) {
+export default function TableGrid({ tables, activeRoom, now, tableApertura, tableOrderCounts, onSelectTable, onTransferTable, onCloseTable }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6 pt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {tables
@@ -164,6 +192,7 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, tabl
             orderCount={tableOrderCounts?.[table.nome]}
             onSelectTable={onSelectTable}
             onTransferTable={onTransferTable}
+            onCloseTable={onCloseTable}
           />
         ))}
     </div>
