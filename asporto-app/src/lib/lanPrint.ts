@@ -47,7 +47,24 @@ type QuickLabelData = {
   printerPort?: number;
 };
 
-type PrintJob = KitchenPrintJob | ReceiptPrintJob | SalaPrintJob | HaccpLabelData | QuickLabelData;
+type PreContoJob = {
+  kind: 'pre_conto';
+  tableName: string;
+  covers?: number;
+  total: number;
+  items: {
+    nome: string;
+    quantity: number;
+    prezzo: number;
+    addedIngredients: { nome: string; prezzo: number }[];
+    removedIngredients: string[];
+    notes: string;
+  }[];
+  printerIp?: string;
+  printerPort?: number;
+};
+
+type PrintJob = KitchenPrintJob | ReceiptPrintJob | SalaPrintJob | HaccpLabelData | QuickLabelData | PreContoJob;
 
 function normalizeAgentUrl(agentUrl: string): string {
   const trimmed = agentUrl.trim();
@@ -83,6 +100,25 @@ export async function printSalaViaAgent(items: CustomizedItem[], tableName: stri
     kind: 'sala',
     tableName,
     items,
+    printerIp,
+    printerPort,
+  }, agentUrl);
+}
+
+export async function printPreContoViaAgent(items: CustomizedItem[], tableName: string, total: number, agentUrl: string, printerIp?: string, printerPort?: number, covers?: number): Promise<void> {
+  await sendPrintJob({
+    kind: 'pre_conto',
+    tableName,
+    covers,
+    total,
+    items: items.map(i => ({
+      nome: i.nome,
+      quantity: i.quantity,
+      prezzo: i.prezzo,
+      addedIngredients: i.addedIngredients,
+      removedIngredients: i.removedIngredients,
+      notes: i.notes,
+    })),
     printerIp,
     printerPort,
   }, agentUrl);

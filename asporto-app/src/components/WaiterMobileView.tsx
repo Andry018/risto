@@ -8,7 +8,7 @@ import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
 import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck, AlertTriangle } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
-import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
@@ -168,6 +168,24 @@ export default function WaiterMobileView() {
 
   const toast = useToast();
   const { confirm } = useConfirm();
+
+  const handlePreConto = async () => {
+    if (cart.length === 0) return;
+    try {
+      await printPreContoViaAgent(
+        cart,
+        selectedTable?.nome || 'Tavolo',
+        total,
+        getPrintAgentUrl(),
+        getPrinterIp(),
+        getPrinterPort(),
+        selectedTable?.clienti,
+      );
+      toast.addToast({ type: 'success', title: 'Pre-conto stampato', message: 'Conto non fiscale inviato alla stampante.', duration: 2500 });
+    } catch {
+      toast.addToast({ type: 'error', title: 'Stampa non riuscita', message: 'Controlla print agent e rete LAN.', duration: 4000 });
+    }
+  };
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
   const selectedTableRef = useRef(selectedTable);
@@ -1248,6 +1266,14 @@ export default function WaiterMobileView() {
 
           {/* Sticky Footer Action Bar */}
           <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 bg-surface/90 backdrop-blur-xl border-t border-white/5 z-40">
+            {cart.length > 0 && (
+              <button
+                onClick={handlePreConto}
+                className="w-full mb-2 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-blue-500/20"
+              >
+                <Receipt size={13} /> PRE-CONTO CLIENTE
+              </button>
+            )}
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={handlePrint}

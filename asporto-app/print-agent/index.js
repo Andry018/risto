@@ -286,6 +286,74 @@ async function printReceiptJob(job) {
   await executePrinter(printer, `Ricevuta ${job.tableName}`);
 }
 
+async function printPreContoJob(job) {
+  const printer = createPrinter(resolvePrinterInterface(job));
+  setReadableText(printer);
+  const now = formatDateTime(new Date());
+
+  topPadding(printer);
+  printer.alignCenter();
+  printer.setTextDoubleWidth();
+  printer.bold(true);
+  printer.leftRight(truncate(job.tableName || 'TAVOLO', 18), now);
+  printer.bold(false);
+  printer.setTextNormal();
+
+  printer.bold(true);
+  printer.setTextDoubleWidth();
+  printer.println('IL CONTO');
+  printer.setTextNormal();
+  printer.bold(false);
+  printer.println('- NON FISCALE -');
+  printer.drawLine();
+
+  printer.alignLeft();
+  for (const item of job.items || []) {
+    const basePrice = Number(item.prezzo || 0);
+    const variant = (item.addedIngredients || []).find(a => PIZZA_VARIANTS.has(a.nome));
+    const extras = (item.addedIngredients || []).filter(a => !PIZZA_VARIANTS.has(a.nome) && !VARIANT_NOISE.includes(a.nome));
+    const removed = item.removedIngredients || [];
+    const note = normalizeVariantNotes(item.notes || '');
+
+    // Riga principale: Nx NomePiatto [VARIANTE]    €basePrice×qty
+    const variantSuffix = variant ? ` [${variant.nome.toUpperCase()}]` : '';
+    printer.leftRight(
+      `${item.quantity}x ${truncate(getDisplayName(item) + variantSuffix, 24)}`,
+      `\u20AC${(basePrice * item.quantity).toFixed(2)}`
+    );
+    // Aggiunte con prezzo individuale
+    for (const a of extras) {
+      const extraPrice = Number(a.prezzo || 0);
+      if (extraPrice > 0) {
+        printer.leftRight(`  + ${truncate(a.nome, 28)}`, `\u20AC${extraPrice.toFixed(2)}`);
+      } else {
+        printer.println(`  + ${truncate(a.nome, 38)}`);
+      }
+    }
+    if (removed.length > 0) printer.println(`  - ${truncate(removed.join(', '), 38)}`);
+    if (note) printer.println(`  ${truncate(note, 40)}`);
+  }
+
+  printer.drawLine();
+  printer.alignRight();
+  printer.setTextDoubleWidth();
+  printer.bold(true);
+  printer.println(`TOTALE: \u20AC${Number(job.total || 0).toFixed(2)}`);
+  printer.bold(false);
+  printer.setTextNormal();
+
+  if (job.covers && job.covers > 0) {
+    printer.alignCenter();
+    printer.println(`${job.covers} coperti`);
+  }
+  printer.alignCenter();
+  printer.println('');
+  printer.println('Grazie per la visita!');
+  printer.println('');
+  printer.cut();
+  await executePrinter(printer, `Pre-conto ${job.tableName}`);
+}
+
 async function printSalaJob(job) {
   const printer = createPrinter(resolvePrinterInterface(job));
   setReadableText(printer);
@@ -460,6 +528,8 @@ const server = http.createServer(async (req, res) => {
           await printKitchenJob(job);
         } else if (job.kind === 'sala') {
           await printSalaJob(job);
+        } else if (job.kind === 'pre_conto') {
+          await printPreContoJob(job);
         } else if (job.kind === 'receipt') {
           await printReceiptJob(job);
         } else if (job.kind === 'haccp_label') {
