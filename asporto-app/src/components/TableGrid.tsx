@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Tavolo } from '../types/entities';
-import { Users, Clock, MoreVertical, ArrowRightLeft, DoorOpen } from 'lucide-react';
+import { Users, Clock, MoreVertical, ArrowRightLeft, DoorOpen, Receipt } from 'lucide-react';
 
 const ATTENTION_MINUTES = 20;
 
@@ -15,6 +15,7 @@ interface Props {
   onSelectTable: (table: Tavolo) => void;
   onTransferTable?: (table: Tavolo) => void;
   onCloseTable?: (table: Tavolo) => void;
+  onPreConto?: (table: Tavolo) => void;
 }
 
 function elapsedStr(t: Tavolo, tableApertura: Record<string, string>, now: number): string | null {
@@ -42,7 +43,7 @@ function getStatusBadge(table: Tavolo, mins: number | null) {
   return { label: 'OCCUPATO', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' };
 }
 
-function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTransferTable, onCloseTable }: {
+function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTransferTable, onCloseTable, onPreConto }: {
   table: Tavolo;
   now: number;
   tableApertura: Record<string, string>;
@@ -50,6 +51,7 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
   onSelectTable: (t: Tavolo) => void;
   onTransferTable?: (t: Tavolo) => void;
   onCloseTable?: (t: Tavolo) => void;
+  onPreConto?: (t: Tavolo) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
@@ -156,6 +158,15 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
               Trasferisci Tavolo
             </button>
           )}
+          {onPreConto && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onPreConto(table); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              <Receipt size={15} className="text-blue-400" />
+              Pre-Conto Cliente
+            </button>
+          )}
           {onCloseTable && (
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onCloseTable(table); }}
@@ -172,7 +183,7 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
   );
 }
 
-export default function TableGrid({ tables, activeRoom, now, tableApertura, tableOrderCounts, onSelectTable, onTransferTable, onCloseTable }: Props) {
+export default function TableGrid({ tables, activeRoom, now, tableApertura, tableOrderCounts, onSelectTable, onTransferTable, onCloseTable, onPreConto }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6 pt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {tables
@@ -193,6 +204,7 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, tabl
             onSelectTable={onSelectTable}
             onTransferTable={onTransferTable}
             onCloseTable={onCloseTable}
+            onPreConto={onPreConto}
           />
         ))}
     </div>

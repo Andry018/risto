@@ -1104,6 +1104,13 @@ export default function WaiterMobileView() {
                 }
               }}
               onCloseTable={closeTable}
+              onPreConto={async (table) => {
+                if (selectedTable?.id !== table.id || cart.length === 0) {
+                  toast.addToast({ type: 'info', title: 'Apri il tavolo', message: 'Apri prima il tavolo per stampare il pre-conto.', duration: 3000 });
+                  return;
+                }
+                await handlePreConto();
+              }}
             />
           </div>
         )
@@ -1266,14 +1273,6 @@ export default function WaiterMobileView() {
 
           {/* Sticky Footer Action Bar */}
           <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 bg-surface/90 backdrop-blur-xl border-t border-white/5 z-40">
-            {cart.length > 0 && (
-              <button
-                onClick={handlePreConto}
-                className="w-full mb-2 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-blue-500/20"
-              >
-                <Receipt size={13} /> PRE-CONTO CLIENTE
-              </button>
-            )}
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={handlePrint}
