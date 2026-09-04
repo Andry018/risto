@@ -1104,12 +1104,8 @@ export default function WaiterMobileView() {
                 }
               }}
               onCloseTable={closeTable}
-              onPreConto={async (table) => {
-                if (selectedTable?.id !== table.id || cart.length === 0) {
-                  toast.addToast({ type: 'info', title: 'Apri il tavolo', message: 'Apri prima il tavolo per stampare il pre-conto.', duration: 3000 });
-                  return;
-                }
-                await handlePreConto();
+              onPreConto={() => {
+                toast.addToast({ type: 'info', title: 'Apri il tavolo', message: 'Apri prima il tavolo per stampare il pre-conto.', duration: 3000 });
               }}
             />
           </div>
