@@ -188,10 +188,18 @@ function printModLines(printer, item, maxNote = 44) {
 }
 
 function printItemWithHeader(printer, item, maxName) {
+  const variant = (item.addedIngredients || []).find(a => PIZZA_VARIANTS.has(a.nome));
   // Testo GIGANTE per i nomi dei piatti (Altezza e Larghezza doppie)
   printer.setTextQuadArea();
   printer.println(`${item.quantity}x ${truncate(getDisplayName(item), maxName)}`);
   printer.setTextNormal();
+  if (variant) {
+    printer.bold(true);
+    printer.setTextDoubleWidth();
+    printer.println(`  *** ${variant.nome.toUpperCase()} ***`);
+    printer.setTextNormal();
+    printer.bold(false);
+  }
   printModLines(printer, item);
 }
 
@@ -210,6 +218,20 @@ async function printKitchenJob(job) {
   printer.bold(false);
   printer.setTextNormal();
   printer.drawLine();
+
+  if (job.allergieNote && job.allergieNote.trim()) {
+    printer.alignCenter();
+    printer.bold(true);
+    printer.setTextDoubleWidth();
+    printer.println('!!! ALLERGIE !!!');
+    printer.setTextNormal();
+    printer.bold(false);
+    printer.alignLeft();
+    printer.setTextDoubleWidth();
+    printer.println(truncate(job.allergieNote.trim(), 46));
+    printer.setTextNormal();
+    printer.drawLine();
+  }
 
   printer.alignLeft();
   for (const [portata, items] of grouped) {

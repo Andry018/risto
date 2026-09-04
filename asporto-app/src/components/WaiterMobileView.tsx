@@ -5,7 +5,7 @@ import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Po
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck, AlertTriangle } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent } from '../lib/lanPrint';
@@ -72,6 +72,7 @@ export default function WaiterMobileView() {
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [turnoModalOpen, setTurnoModalOpen] = useState(false);
   const [turnoTick, setTurnoTick] = useState(0);
+  const [allergieNote, setAllergieNote] = useState('');
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
@@ -88,6 +89,8 @@ export default function WaiterMobileView() {
     return () => clearInterval(id);
   }, []);
 
+  const lastMenuFetchRef = useRef(0);
+
   useEffect(() => {
     const handleSyncChange = () => setPendingSyncCount(syncManager.getPendingCount());
     window.addEventListener('sync-status-changed', handleSyncChange);
@@ -97,23 +100,53 @@ export default function WaiterMobileView() {
   const handlePrint = async () => {
     if (cart.length === 0) return;
     const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
-    const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
-    const salaItems = cart.filter(i => salaCats.includes(i.categoria));
     const tableName = selectedTable?.nome || 'Tavolo';
+    const isUpdate = !!activeOrderId;
+    const printDeltaQty = localStorage.getItem('risto_print_delta_qty') === 'true';
+
+    // Prima stampa: tutto il carrello. Stampe successive: solo piatti nuovi/aggiunti.
+    let itemsToPrint = cart;
+    if (isUpdate) {
+      const deltaItems: CustomizedItem[] = [];
+      for (const item of cart) {
+        const key = getItemKey(item);
+        const oldQty = savedItemQtysRef.current.get(key) || 0;
+        if (item.quantity > oldQty) {
+          const deltaQty = item.quantity - oldQty;
+          deltaItems.push(printDeltaQty && oldQty > 0 ? { ...item, quantity: deltaQty } : item);
+        }
+      }
+      itemsToPrint = deltaItems;
+    }
+
+    if (itemsToPrint.length === 0) {
+      const forceReprint = await confirm({
+        title: 'Nessuna novità',
+        message: 'Tutti i piatti sono già stati inviati. Vuoi ristampare tutta la comanda per emergenza?',
+        confirmLabel: 'Ristampa tutto',
+        cancelLabel: 'Annulla',
+      });
+      if (!forceReprint) return;
+      itemsToPrint = cart;
+    }
+
+    const cucinaItems = itemsToPrint.filter(i => !salaCats.includes(i.categoria));
+    const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
     try {
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       if (cucinaItems.length > 0) {
-        await printKitchenViaAgent(cucinaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime);
+        await printKitchenViaAgent(cucinaItems, isUpdate ? `${tableName} (AGGIUNTA)` : tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined);
       }
       if (salaItems.length > 0) {
-        await printSalaViaAgent(salaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
+        await printSalaViaAgent(salaItems, isUpdate ? `${tableName} (AGGIUNTA)` : tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
       }
       toast.addToast({
         type: 'success',
         title: 'Comanda stampata',
-        message: 'Cucina e sala inviate alla stampante LAN.',
+        message: isUpdate ? 'Aggiunta inviata alla stampante.' : 'Cucina e sala inviate alla stampante LAN.',
         duration: 2500,
       });
+      await saveOrder(true);
     } catch (error) {
       console.error('Print failed:', error);
       toast.addToast({
@@ -416,6 +449,7 @@ export default function WaiterMobileView() {
   }, []);
 
   const selectTable = async (table: Tavolo) => {
+    setAllergieNote('');
     const draft = tableDrafts[table.id];
 
     // Restore draft for any table status
@@ -572,6 +606,12 @@ export default function WaiterMobileView() {
   };
 
   const addToCart = (product: Product) => {
+    const now = Date.now();
+    if (now - lastMenuFetchRef.current > 15_000) {
+      lastMenuFetchRef.current = now;
+      void fetchProducts();
+      void fetchIngredients();
+    }
     setCart(prev => {
       const existingIdx = prev.findIndex(item =>
         item.id === product.id &&
@@ -634,7 +674,7 @@ export default function WaiterMobileView() {
     [cart, ingredients]
   );
 
-  const saveOrder = async () => {
+  const saveOrder = async (skipPrint = false) => {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
     if (IS_DEMO_MODE) {
@@ -715,7 +755,7 @@ export default function WaiterMobileView() {
       }
       savedItemQtysRef.current = newMap;
 
-      if (printItems.length > 0) {
+      if (!skipPrint && printItems.length > 0) {
         const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
         const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
         const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
@@ -1096,6 +1136,25 @@ export default function WaiterMobileView() {
               </div>
 
               <div className="p-5 space-y-6">
+                {/* Allergie / avviso cucina */}
+                <div className={`rounded-2xl border px-4 py-3 flex items-start gap-3 transition-colors ${allergieNote ? 'bg-red-500/10 border-red-500/40' : 'bg-charcoal border-surface-light'}`}>
+                  <AlertTriangle size={16} className={`mt-0.5 flex-shrink-0 ${allergieNote ? 'text-red-400' : 'text-gray-600'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${allergieNote ? 'text-red-400' : 'text-gray-600'}`}>Allergie / Avviso Cucina</p>
+                    <input
+                      type="text"
+                      value={allergieNote}
+                      onChange={e => setAllergieNote(e.target.value)}
+                      placeholder="es. NOCI, GLUTINE, LACTOSIO..."
+                      className="w-full bg-transparent text-sm font-bold text-white placeholder-gray-700 outline-none"
+                    />
+                  </div>
+                  {allergieNote && (
+                    <button onClick={() => setAllergieNote('')} className="text-gray-600 hover:text-white transition-colors">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
                 {cart.length === 0 ? (
                   <div className="py-16 text-center">
                     <p className="text-gray-600 text-base font-bold">Nessun articolo</p>
@@ -1116,11 +1175,15 @@ export default function WaiterMobileView() {
                     return sortedGroups.map(([portataKey, items]) => {
                       const portataInfo = PORTATE.find(p => p.value === portataKey);
                       const groupTotal = items.reduce((s, i) => s + calculateItemPrice(i, ingredients), 0);
+                      const groupCount = items.reduce((s, i) => s + i.quantity, 0);
                       return (
                         <div key={portataKey}>
                           <div className={`flex items-center justify-between mb-3 px-3 py-2 rounded-2xl border ${portataInfo?.color || 'border-surface-light bg-charcoal'}`}>
                             <span className="font-black text-sm uppercase tracking-wider">{portataInfo?.label || 'SENZA USCITA'}</span>
-                            <span className="font-black text-sm opacity-80">€{groupTotal.toFixed(2)}</span>
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{groupCount} {groupCount === 1 ? 'piatto' : 'piatti'}</span>
+                              <span className="font-black text-sm opacity-80">€{groupTotal.toFixed(2)}</span>
+                            </div>
                           </div>
                           <div className="space-y-2 pl-2">
                             {items.map(item => (

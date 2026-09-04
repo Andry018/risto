@@ -5,6 +5,7 @@ type KitchenPrintJob = {
   tableName: string;
   orderTime?: string;
   items: CustomizedItem[];
+  allergieNote?: string;
   printerIp?: string;
   printerPort?: number;
 };
@@ -54,12 +55,13 @@ function normalizeAgentUrl(agentUrl: string): string {
   return trimmed.replace(/\/+$/, '');
 }
 
-export async function printKitchenViaAgent(items: CustomizedItem[], tableName: string, agentUrl: string, printerIp?: string, printerPort?: number, orderTime?: string): Promise<void> {
+export async function printKitchenViaAgent(items: CustomizedItem[], tableName: string, agentUrl: string, printerIp?: string, printerPort?: number, orderTime?: string, allergieNote?: string): Promise<void> {
   await sendPrintJob({
     kind: 'kitchen',
     tableName,
     orderTime,
     items,
+    allergieNote,
     printerIp,
     printerPort,
   }, agentUrl);
