@@ -93,6 +93,9 @@ export default function SettingsView() {
   const [section, setSection] = useState<SectionId>(
     sectionFromUrl && (SECTION_IDS as string[]).includes(sectionFromUrl) ? (sectionFromUrl as SectionId) : 'ristorante'
   );
+  const [mobileShowContent, setMobileShowContent] = useState(
+    !!(sectionFromUrl && (SECTION_IDS as string[]).includes(sectionFromUrl))
+  );
 
   const [restaurantName, setRestaurantName] = useSetting(SETTINGS_KEYS.restaurantName, 'IL GIRASOLE');
   const [restaurantTagline, setRestaurantTagline] = useSetting(SETTINGS_KEYS.restaurantTagline, 'Ristorante Italiano');
@@ -301,7 +304,7 @@ export default function SettingsView() {
       {/* Body: sidebar + content */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
-        <aside className="w-full md:w-72 border-r border-surface-light bg-surface/30 overflow-y-auto custom-scrollbar shrink-0 md:flex md:flex-col">
+        <aside className={`w-full md:w-72 border-r border-surface-light bg-surface/30 overflow-y-auto custom-scrollbar shrink-0 flex flex-col ${mobileShowContent ? 'hidden md:flex' : ''}`}>
           <nav className="p-3 md:p-4 space-y-1.5">
             {SECTIONS.map((s) => {
               const Icon = s.icon;
@@ -309,7 +312,7 @@ export default function SettingsView() {
               return (
                 <button
                   key={s.id}
-                  onClick={() => setSection(s.id)}
+                  onClick={() => { setSection(s.id); setMobileShowContent(true); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all cursor-pointer ${
                     isActive
                       ? 'bg-gold text-black shadow-lg shadow-gold/20'
@@ -340,7 +343,14 @@ export default function SettingsView() {
         </aside>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-5 md:p-8">
+        <main className={`flex-1 overflow-y-auto custom-scrollbar p-5 md:p-8 ${!mobileShowContent ? 'hidden md:block' : ''}`}>
+          {/* Back button — mobile only */}
+          <button
+            onClick={() => setMobileShowContent(false)}
+            className="md:hidden flex items-center gap-2 text-gray-400 hover:text-white mb-4 text-sm font-bold"
+          >
+            <ChevronLeft size={18} /> {SECTIONS.find(s => s.id === section)?.label}
+          </button>
           <div className="max-w-2xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300" key={section}>
 
             {/* ===== RISTORANTE ===== */}
