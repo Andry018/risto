@@ -235,13 +235,9 @@ async function printKitchenJob(job) {
     printer.alignCenter();
     printer.bold(true);
     printer.setTextDoubleWidth();
-    printer.println('!!! ALLERGIE !!!');
+    printer.println(`!!! ALLERGIE: ${truncate(job.allergieNote.trim(), 28)} !!!`);
     printer.setTextNormal();
     printer.bold(false);
-    printer.alignLeft();
-    printer.setTextDoubleWidth();
-    printer.println(truncate(job.allergieNote.trim(), 46));
-    printer.setTextNormal();
     printer.drawLine();
   }
 
