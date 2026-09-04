@@ -204,18 +204,14 @@ function printModLines(printer, item, maxNote = 44) {
 
 function printItemWithHeader(printer, item, maxName) {
   const variantIng = (item.addedIngredients || []).find(a => isPizzaVariant(a.nome));
+  const variantLabel = variantIng ? (getPizzaVariantLabel(variantIng.nome) || variantIng.nome.toUpperCase()) : null;
   // Testo GIGANTE per i nomi dei piatti (Altezza e Larghezza doppie)
   printer.setTextQuadArea();
-  printer.println(`${item.quantity}x ${truncate(getDisplayName(item), maxName)}`);
+  // Variante sulla stessa riga: "1x Girasole ROSSA"
+  const suffix = variantLabel ? ` ${variantLabel}` : '';
+  const nameMax = variantLabel ? Math.max(maxName - variantLabel.length - 1, 6) : maxName;
+  printer.println(`${item.quantity}x ${truncate(getDisplayName(item), nameMax)}${suffix}`);
   printer.setTextNormal();
-  if (variantIng) {
-    const label = getPizzaVariantLabel(variantIng.nome) || variantIng.nome.toUpperCase();
-    printer.bold(true);
-    printer.setTextDoubleWidth();
-    printer.println(`  *** ${label} ***`);
-    printer.setTextNormal();
-    printer.bold(false);
-  }
   printModLines(printer, item);
 }
 
