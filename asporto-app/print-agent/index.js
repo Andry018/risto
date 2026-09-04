@@ -64,6 +64,21 @@ const VARIANT_NOISE = ['Pizze Bianca', 'Pizze Rosse', 'Pizze', 'Impasto'];
 const PIZZA_VARIANTS = new Set(['Bianca', 'Rossa', 'Rosè', 'Rose']);
 const PRIORITY_MODS = ['', ''];
 
+/** Ritorna il nome breve della variante pizza (es. 'BIANCA', 'ROSSA', 'ROSÈ')
+ *  oppure null se l'ingrediente non è una variante. Matching case-insensitive
+ *  e gestisce nomi composti come 'Pizze Bianca', 'Pizze Rosse', 'Rosé', ecc. */
+function getPizzaVariantLabel(nome) {
+  const n = (nome || '').trim().toLowerCase();
+  if (n.includes('bianca')) return 'BIANCA';
+  if (n.includes('rosse') || n === 'rossa') return 'ROSSA';
+  if (n.startsWith('ros')) return (nome || '').trim().toUpperCase().replace(/^PIZZE\s+/i, '');
+  return null;
+}
+
+function isPizzaVariant(nome) {
+  return getPizzaVariantLabel(nome) !== null;
+}
+
 function createPrinter(printerInterface) {
   return new ThermalPrinter({
     type: PrinterTypes.EPSON,
@@ -166,7 +181,7 @@ function setReadableText(printer) {
 }
 
 function printModLines(printer, item, maxNote = 44) {
-  const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !PIZZA_VARIANTS.has(a.nome));
+  const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !isPizzaVariant(a.nome));
   const removed = item.removedIngredients || [];
   const note = normalizeVariantNotes(item.notes);
 
@@ -188,15 +203,16 @@ function printModLines(printer, item, maxNote = 44) {
 }
 
 function printItemWithHeader(printer, item, maxName) {
-  const variant = (item.addedIngredients || []).find(a => PIZZA_VARIANTS.has(a.nome));
+  const variantIng = (item.addedIngredients || []).find(a => isPizzaVariant(a.nome));
   // Testo GIGANTE per i nomi dei piatti (Altezza e Larghezza doppie)
   printer.setTextQuadArea();
   printer.println(`${item.quantity}x ${truncate(getDisplayName(item), maxName)}`);
   printer.setTextNormal();
-  if (variant) {
+  if (variantIng) {
+    const label = getPizzaVariantLabel(variantIng.nome) || variantIng.nome.toUpperCase();
     printer.bold(true);
     printer.setTextDoubleWidth();
-    printer.println(`  *** ${variant.nome.toUpperCase()} ***`);
+    printer.println(`  *** ${label} ***`);
     printer.setTextNormal();
     printer.bold(false);
   }
@@ -310,13 +326,14 @@ async function printPreContoJob(job) {
   printer.alignLeft();
   for (const item of job.items || []) {
     const basePrice = Number(item.prezzo || 0);
-    const variant = (item.addedIngredients || []).find(a => PIZZA_VARIANTS.has(a.nome));
-    const extras = (item.addedIngredients || []).filter(a => !PIZZA_VARIANTS.has(a.nome) && !VARIANT_NOISE.includes(a.nome));
+    const variantIng = (item.addedIngredients || []).find(a => isPizzaVariant(a.nome));
+    const extras = (item.addedIngredients || []).filter(a => !isPizzaVariant(a.nome) && !VARIANT_NOISE.includes(a.nome));
     const removed = item.removedIngredients || [];
     const note = normalizeVariantNotes(item.notes || '');
 
     // Riga principale: Nx NomePiatto [VARIANTE]    €basePrice×qty
-    const variantSuffix = variant ? ` [${variant.nome.toUpperCase()}]` : '';
+    const variantLabel = variantIng ? (getPizzaVariantLabel(variantIng.nome) || variantIng.nome.toUpperCase()) : null;
+    const variantSuffix = variantLabel ? ` [${variantLabel}]` : '';
     printer.leftRight(
       `${item.quantity}x ${truncate(getDisplayName(item) + variantSuffix, 24)}`,
       `\u20AC${(basePrice * item.quantity).toFixed(2)}`

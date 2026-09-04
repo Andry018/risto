@@ -818,7 +818,7 @@ export default function WaiterMobileView() {
         const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
         const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
         if (cucinaItems.length > 0) {
-          await printKitchenViaAgent(cucinaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime).catch(() => {});
+          await printKitchenViaAgent(cucinaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined).catch(() => {});
         }
         if (salaItems.length > 0) {
           await printSalaViaAgent(salaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort()).catch(() => {});
