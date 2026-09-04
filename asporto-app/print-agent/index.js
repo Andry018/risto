@@ -178,6 +178,8 @@ function topPadding(printer) {
 
 function setReadableText(printer) {
   if (typeof printer.setTextNormal === 'function') printer.setTextNormal();
+  // ESC/POS GS ( E: imposta densità stampa al massimo (8/8)
+  printer.raw(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
 }
 
 function printModLines(printer, item, maxNote = 44) {
@@ -413,6 +415,7 @@ function normalizeDbOrderItems(order) {
 
 async function printQuickLabelJob(job) {
   const printer = createPrinter(resolvePrinterInterface(job));
+  printer.raw(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
 
   const now = new Date();
   const dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -437,6 +440,7 @@ async function printQuickLabelJob(job) {
 
 async function stampaEtichettaHaccp(dati) {
   const printer = createPrinter(resolvePrinterInterface(dati));
+  printer.raw(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
 
   try {
     printer.println('');
