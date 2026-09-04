@@ -1286,6 +1286,13 @@ export default function WaiterMobileView() {
               >
                 {orderActionBusy ? 'INVIO...' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
               </button>
+              <button
+                onClick={handlePreConto}
+                disabled={cart.length === 0}
+                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-surface-light disabled:opacity-30"
+              >
+                <Receipt size={14} /> CONTO
+              </button>
             </div>
             {IS_DEMO_MODE && (
                <div className="mt-2 text-center">
