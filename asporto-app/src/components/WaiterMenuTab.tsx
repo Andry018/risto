@@ -95,31 +95,8 @@ export default function WaiterMenuTab({
   return (
     <div className="flex h-full min-h-0 flex-col bg-gradient-to-b from-charcoal via-charcoal to-surface">
       <div className="px-3 pt-3 pb-2 shrink-0 border-b border-surface-light/70 bg-surface/40 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-500">Waiter menu</p>
-            <h3 className="text-lg font-black italic uppercase text-white leading-none mt-1">Selezione rapida</h3>
-          </div>
-          {onOpenPaninoBuilder && (
-            <button
-              onClick={onOpenPaninoBuilder}
-              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 active:scale-95 transition-all flex items-center gap-1.5 bg-gold/5"
-            >
-              <Sandwich size={14} /> PANINO
-            </button>
-          )}
-          {onOpenCustomItem && (
-            <button
-              onClick={onOpenCustomItem}
-              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-emerald-400/30 text-emerald-400/90 hover:text-emerald-300 hover:border-emerald-400/60 active:scale-95 transition-all flex items-center gap-1.5 bg-emerald-500/5"
-            >
-              <UtensilsCrossed size={14} /> PERSONALIZZATO
-            </button>
-          )}
-        </div>
-
-        <div className="mt-3 flex items-center gap-3">
-          <span className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-500">Portata</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-500 shrink-0">Portata</span>
           <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
             <button
               type="button"
@@ -128,11 +105,11 @@ export default function WaiterMenuTab({
                 onPortataChange(PORTATA_OPTIONS[Math.max(idx - 1, 0)].value);
               }}
               disabled={currentPortata === PORTATA_OPTIONS[0].value}
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
             >
-              <Minus size={18} />
+              <Minus size={16} />
             </button>
-            <span className={`min-w-[64px] text-center px-2 py-2 rounded-xl border text-sm font-black tracking-wider ${activePortataMeta.color} border-current`}>
+            <span className={`min-w-[52px] text-center px-2 py-1.5 rounded-xl border text-sm font-black tracking-wider ${activePortataMeta.color} border-current`}>
               {activePortataMeta.label}
             </span>
             <button
@@ -142,11 +119,27 @@ export default function WaiterMenuTab({
                 onPortataChange(PORTATA_OPTIONS[Math.min(idx + 1, PORTATA_OPTIONS.length - 1)].value);
               }}
               disabled={currentPortata === PORTATA_OPTIONS[PORTATA_OPTIONS.length - 1].value}
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
             >
-              <Plus size={18} />
+              <Plus size={16} />
             </button>
           </div>
+          {onOpenPaninoBuilder && (
+            <button
+              onClick={onOpenPaninoBuilder}
+              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 active:scale-95 transition-all flex items-center gap-1.5 bg-gold/5"
+            >
+              <Sandwich size={13} /> PANINO
+            </button>
+          )}
+          {onOpenCustomItem && (
+            <button
+              onClick={onOpenCustomItem}
+              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-emerald-400/30 text-emerald-400/90 hover:text-emerald-300 hover:border-emerald-400/60 active:scale-95 transition-all flex items-center gap-1.5 bg-emerald-500/5"
+            >
+              <UtensilsCrossed size={13} /> PERS.
+            </button>
+          )}
         </div>
       </div>
 

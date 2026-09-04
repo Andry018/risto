@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { syncManager } from '../lib/OfflineSync';
 
-export default function SyncStatusIndicator() {
+export default function SyncStatusIndicator({ compact = false }: { compact?: boolean }) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(syncManager.getIsSyncing());
   const [pendingCount, setPendingCount] = useState(syncManager.getPendingCount());
@@ -24,6 +24,12 @@ export default function SyncStatusIndicator() {
       window.removeEventListener('sync-status-changed', handleStatusChange);
     };
   }, []);
+
+  if (compact) {
+    if (!isOnline) return <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse inline-block" title="Offline" />;
+    if (isSyncing || pendingCount > 0) return <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse inline-block" title={`Sincronizzazione (${pendingCount})`} />;
+    return <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" title="Online" />;
+  }
 
   if (!isOnline) {
     return (

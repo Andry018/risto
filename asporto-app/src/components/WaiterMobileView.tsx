@@ -1134,12 +1134,10 @@ export default function WaiterMobileView() {
                     })()}
                   </span>
                 )}
-                <SyncStatusIndicator />
+                <SyncStatusIndicator compact />
               </div>
             </div>
-            <div className="w-10 h-10 bg-gold rounded-xl flex items-center justify-center text-black font-black shadow-lg">
-                 €{total.toFixed(0)}
-              </div>
+            <div className="w-10" />
             </div>
 
           {/* Tab Switcher */}
