@@ -22,24 +22,34 @@ function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
     const socket = new net.Socket();
     let done = false;
 
-    const finish = (err) => {
+    const fail = (err) => {
       if (done) return;
       done = true;
       socket.destroy();
-      err ? reject(err) : resolve();
+      reject(err);
     };
 
     // Timeout globale sull'intera operazione
-    const timer = setTimeout(() => finish(new Error('Socket timeout')), timeoutMs);
+    const timer = setTimeout(() => fail(new Error('Socket timeout')), timeoutMs);
 
     socket.connect(port, host, () => {
       clearTimeout(timer);
-      socket.write(buffer, null, () => finish(null));
+      // Disabilita timeout di inattività ora che la connessione è stabilita:
+      // buffer grandi (cucina con testo quad) possono richiedere più tempo.
+      socket.setTimeout(0);
+
+      socket.write(buffer, null, (writeErr) => {
+        if (writeErr) return fail(writeErr);
+        // Chiusura graceful: FIN viene inviato solo dopo che tutti i byte
+        // sono stati ricevuti dalla stampante (evita troncamenti su buffer grandi).
+        socket.end();
+        if (!done) { done = true; resolve(); }
+      });
     });
 
-    socket.on('error', finish);
-    socket.on('timeout', () => finish(new Error('Socket connect timeout')));
-    socket.setTimeout(5000); // solo per la fase di connessione
+    socket.on('error', fail);
+    socket.on('timeout', () => fail(new Error('Socket connect timeout')));
+    socket.setTimeout(5000); // solo per la fase di connect
   });
 }
 
