@@ -109,49 +109,23 @@ export default function WaiterMobileView() {
     if (cart.length === 0) return;
     const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
     const tableName = selectedTable?.nome || 'Tavolo';
-    const isUpdate = !!activeOrderId;
-    const printDeltaQty = localStorage.getItem('risto_print_delta_qty') === 'true';
 
-    // Prima stampa: tutto il carrello. Stampe successive: solo piatti nuovi/aggiunti.
-    let itemsToPrint = cart;
-    if (isUpdate) {
-      const deltaItems: CustomizedItem[] = [];
-      for (const item of cart) {
-        const key = getItemKey(item);
-        const oldQty = savedItemQtysRef.current.get(key) || 0;
-        if (item.quantity > oldQty) {
-          const deltaQty = item.quantity - oldQty;
-          deltaItems.push(printDeltaQty && oldQty > 0 ? { ...item, quantity: deltaQty } : item);
-        }
-      }
-      itemsToPrint = deltaItems;
-    }
-
-    if (itemsToPrint.length === 0) {
-      const forceReprint = await confirm({
-        title: 'Nessuna novità',
-        message: 'Tutti i piatti sono già stati inviati. Vuoi ristampare tutta la comanda per emergenza?',
-        confirmLabel: 'Ristampa tutto',
-        cancelLabel: 'Annulla',
-      });
-      if (!forceReprint) return;
-      itemsToPrint = cart;
-    }
-
+    // STAMPA = ristampa SEMPRE tutto il carrello (escluso Servizio/Coperto)
+    const itemsToPrint = cart.filter(i => i.categoria !== 'Servizio');
     const cucinaItems = itemsToPrint.filter(i => !salaCats.includes(i.categoria));
     const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
     try {
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       if (cucinaItems.length > 0) {
-        await printKitchenViaAgent(cucinaItems, isUpdate ? `${tableName} (AGGIUNTA)` : tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined);
+        await printKitchenViaAgent(cucinaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined);
       }
       if (salaItems.length > 0) {
-        await printSalaViaAgent(salaItems, isUpdate ? `${tableName} (AGGIUNTA)` : tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
+        await printSalaViaAgent(salaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
       }
       toast.addToast({
         type: 'success',
         title: 'Comanda stampata',
-        message: isUpdate ? 'Aggiunta inviata alla stampante.' : 'Cucina e sala inviate alla stampante LAN.',
+        message: 'Cucina e sala inviate alla stampante LAN.',
         duration: 2500,
       });
       await saveOrder(true);
@@ -748,21 +722,22 @@ export default function WaiterMobileView() {
     const isUpdate = !!activeOrderId;
     const printDeltaQty = localStorage.getItem('risto_print_delta_qty') === 'true';
 
+    // AGGIORNA: calcola differenza e stampa solo novità (silenzioso)
     let printItems: CustomizedItem[] = [];
-    if (isUpdate) {
-      const seen = new Map<string, number>();
-      for (const item of cart) {
-        const key = getItemKey(item);
-        const oldQty = savedItemQtysRef.current.get(key) || 0;
-        seen.set(key, (seen.get(key) || 0) + item.quantity);
-        if (item.quantity > oldQty) {
-          const deltaQty = item.quantity - oldQty;
-          if (printDeltaQty && oldQty > 0) {
-            printItems.push({ ...item, quantity: deltaQty });
-          } else if (oldQty === 0) {
-            printItems.push(item);
+    if (!skipPrint) {
+      if (isUpdate) {
+        for (const item of cart) {
+          if (item.categoria === 'Servizio') continue;
+          const key = getItemKey(item);
+          const oldQty = savedItemQtysRef.current.get(key) || 0;
+          if (item.quantity > oldQty) {
+            const deltaQty = item.quantity - oldQty;
+            printItems.push({ ...item, quantity: printDeltaQty && oldQty > 0 ? deltaQty : item.quantity });
           }
         }
+      } else {
+        // Prima volta: tutti i piatti sono nuovi
+        printItems = cart.filter(i => i.categoria !== 'Servizio');
       }
     }
 
@@ -817,11 +792,12 @@ export default function WaiterMobileView() {
         const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
         const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
         const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
+        const label = isUpdate ? `${selectedTable.nome} (AGGIUNTA)` : selectedTable.nome;
         if (cucinaItems.length > 0) {
-          await printKitchenViaAgent(cucinaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined).catch(() => {});
+          await printKitchenViaAgent(cucinaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined).catch(() => {});
         }
         if (salaItems.length > 0) {
-          await printSalaViaAgent(salaItems, `${selectedTable.nome} (AGGIUNTA)`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort()).catch(() => {});
+          await printSalaViaAgent(salaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort()).catch(() => {});
         }
       }
 
