@@ -32,3 +32,4 @@ logs/nginx.pid
 nginx/logs/error.log
 log_stampante.txt
 .claude/settings.local.json
+.claude/settings.local.json

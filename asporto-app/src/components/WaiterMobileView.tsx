@@ -803,7 +803,6 @@ export default function WaiterMobileView() {
 
       clearDraft(selectedTable.id);
       setSuccess(true);
-      setTimeout(() => setSuccess(false), 2000);
     } catch {
       localUpdateOrdiniRef.current = false;
       localUpdateTavoliRef.current = false;

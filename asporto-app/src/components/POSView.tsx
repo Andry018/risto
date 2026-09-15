@@ -123,8 +123,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const productsRef = useRef(products);
   const ingredientsRef = useRef(ingredients);
   const localUpdateRef = useRef(false);
+  const savedItemQtysRef = useRef<Map<string, number>>(new Map());
   productsRef.current = products;
   ingredientsRef.current = ingredients;
+
+  const getItemKey = (item: CustomizedItem): string => {
+    const adds = [...item.addedIngredients].map(a => a.nome).sort().join(',');
+    const rems = [...item.removedIngredients].sort().join(',');
+    return `${item.nome}|${item.portata || ''}|${adds}|${rems}|${item.notes}`;
+  };
 
   useEffect(() => {
     setCurrentPortata('1');
@@ -219,6 +226,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         };
       });
       setCart(mappedCart);
+      const qtyMap = new Map<string, number>();
+      for (const i of mappedCart) {
+        const k = getItemKey(i);
+        qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
+      }
+      savedItemQtysRef.current = qtyMap;
       if (mappedCart.length > 0) setShowBillReview(true);
     } else if (tableId) {
       const { data: table } = await supabase.from('tavoli').select('clienti').eq('id', tableId).single();
@@ -229,14 +242,21 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           const copertoProd = prods || MOCK_PRODUCTS.find(p => p.nome === 'COPERTO');
 
           if (copertoProd) {
-            setCart([{
+            const initialCart = [{
               ...copertoProd,
               quantity: table.clienti,
               addedIngredients: [],
               removedIngredients: [],
               notes: '',
               uniqueId: 'initial-coperto'
-            }]);
+            }];
+            setCart(initialCart);
+            const qtyMap = new Map<string, number>();
+            for (const i of initialCart) {
+              const k = getItemKey(i);
+              qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
+            }
+            savedItemQtysRef.current = qtyMap;
           }
         }
       }
@@ -509,8 +529,63 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     }
   };
 
+  const handlePrintFull = async () => {
+    if (cart.length === 0) return;
+    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+    const tableLabel = tableName || 'Tavolo';
+
+    // STAMPA = ristampa SEMPRE tutto il carrello (escluso Servizio/Coperto)
+    const itemsToPrint = cart.filter(i => i.categoria !== 'Servizio');
+    const cucinaItems = itemsToPrint.filter(i => !salaCats.includes(i.categoria));
+    const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
+    try {
+      const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      if (cucinaItems.length > 0) {
+        await printKitchenViaAgent(cucinaItems, tableLabel, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime);
+      }
+      if (salaItems.length > 0) {
+        await printSalaViaAgent(salaItems, tableLabel, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
+      }
+      toast.addToast({
+        type: 'success',
+        title: 'Comanda stampata',
+        message: 'Cucina e sala inviate alla stampante LAN.',
+        duration: 2500,
+      });
+    } catch (error) {
+      console.error('Print failed:', error);
+      toast.addToast({
+        type: 'error',
+        title: 'Stampa non riuscita',
+        message: 'Controlla print agent, IP stampante e rete LAN.',
+        duration: 4500,
+      });
+    }
+  };
+
   const handleUpdateBill = async () => {
     if (cart.length === 0 || !tableId) return;
+    
+    const isUpdate = !!activeOrderId;
+    const printDeltaQty = localStorage.getItem('risto_print_delta_qty') === 'true';
+
+    // Calculate delta items to print (only new items since last save)
+    let printItems: CustomizedItem[] = [];
+    if (isUpdate) {
+      for (const item of cart) {
+        if (item.categoria === 'Servizio') continue;
+        const key = getItemKey(item);
+        const oldQty = savedItemQtysRef.current.get(key) || 0;
+        if (item.quantity > oldQty) {
+          const deltaQty = item.quantity - oldQty;
+          printItems.push({ ...item, quantity: printDeltaQty && oldQty > 0 ? deltaQty : item.quantity });
+        }
+      }
+    } else {
+      // First time: all items are new
+      printItems = cart.filter(i => i.categoria !== 'Servizio');
+    }
+
     localUpdateRef.current = true;
     try {
       const orderData = {
@@ -539,15 +614,37 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         ...(scontoTipo ? { sconto_tipo: scontoTipo, sconto_valore: scontoValore } : {}),
       };
 
-      if (activeOrderId) {
+      if (isUpdate) {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
         await syncManager.pushOrder(orderData);
         await syncManager.pushTableUpdate(tableId, { status: 'OCCUPATO' });
       }
+
+      // Update saved quantities after successful save
+      const newMap = new Map<string, number>();
+      for (const item of cart) {
+        const key = getItemKey(item);
+        newMap.set(key, (newMap.get(key) || 0) + item.quantity);
+      }
+      savedItemQtysRef.current = newMap;
+
+      // Print delta items if any
+      if (printItems.length > 0) {
+        const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+        const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
+        const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
+        const label = isUpdate ? `${tableName || 'Tavolo'} (AGGIUNTA)` : tableName || 'Tavolo';
+        if (cucinaItems.length > 0) {
+          await printKitchenViaAgent(cucinaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime).catch(() => {});
+        }
+        if (salaItems.length > 0) {
+          await printSalaViaAgent(salaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort()).catch(() => {});
+        }
+      }
       
       setOrderSuccess(true);
-      setTimeout(() => setOrderSuccess(false), 2000);
     } catch (error) {
       console.error('Error updating bill:', error);
       toast.addToast({ type: 'error', title: 'Errore', message: 'Errore durante l\'aggiornamento del conto.' });
@@ -1271,6 +1368,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
           ) : (
               <div className="flex flex-col gap-2">
+                {/* STAMPA button - prints everything */}
+                <button
+                  onClick={handlePrintFull}
+                  disabled={cart.length === 0}
+                  className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                >
+                  <Printer size={14} /> STAMPA
+                </button>
                 {(() => {
                   const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
                   const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
