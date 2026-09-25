@@ -5,11 +5,12 @@ import type { Tavolo, Reservation } from '../types/entities';
 import {
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   FilePlus, Zap, History, PauseCircle, Package, Users,
-  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt
+  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt, Info
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
+import ChangelogModal from './ChangelogModal';
 
 type Section = 'hub' | 'sala';
 
@@ -34,6 +35,7 @@ export default function StaffDashboard() {
   // Settings State
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [newOrderName, setNewOrderName] = useState('');
+  const [showChangelog, setShowChangelog] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -113,6 +115,13 @@ export default function StaffDashboard() {
           </div>
           <PrinterStatusBadge />
           <button
+            onClick={() => setShowChangelog(true)}
+            className="text-white hover:text-gold transition-colors cursor-pointer"
+            title="Novità e changelog"
+          >
+            <Info size={28} strokeWidth={1.5} />
+          </button>
+          <button
             onClick={() => navigate('/settings')}
             className="text-white hover:text-gold transition-colors cursor-pointer"
             title="Impostazioni"
@@ -121,6 +130,8 @@ export default function StaffDashboard() {
           </button>
         </div>
       </div>
+
+      <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
 
       {section === 'hub' && (
         <div className="flex-1 min-h-0 flex flex-col px-5 md:px-8 pb-5 gap-4 overflow-hidden">

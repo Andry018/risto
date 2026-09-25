@@ -5,8 +5,9 @@ import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Po
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
+import ChangelogModal from './ChangelogModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
@@ -81,6 +82,7 @@ export default function WaiterMobileView() {
 
   // Reservation state
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reservationModal, setReservationModal] = useState<{ table?: Tavolo; reservation?: Reservation; open: boolean }>({ open: false });
   const [resForm, setResForm] = useState<Partial<Reservation>>({ nome: '', data: toLocalISODate(), ora: '20:00', persone: 2, note: '' });
@@ -954,6 +956,13 @@ export default function WaiterMobileView() {
                     </div>
                   )}
                   <button
+                    onClick={() => setShowChangelog(true)}
+                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-gold transition-colors"
+                    title="Novità e changelog"
+                  >
+                    <Info size={20} />
+                  </button>
+                  <button
                     type="button"
                     onClick={async () => {
                       const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
@@ -1428,6 +1437,7 @@ export default function WaiterMobileView() {
          }}
       />
 
+      <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
       <BillsHistoryModal open={billsDayOpen} onClose={() => setBillsDayOpen(false)} variant="day" />
       <BillsHistoryModal
         open={billsTableOpen}
