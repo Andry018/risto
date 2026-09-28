@@ -5,14 +5,16 @@ import {
   BarChart3, Trash2, RotateCcw, Sun, Store, UtensilsCrossed,
   Smartphone, MonitorCog, Info, Save, Check, Wifi, Database, FileText,
   Users, Plus, Edit3, X, CalendarClock, ChevronLeft, Globe, UploadCloud,
+  Download
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import {
   requireManagerPin, setManagerPin,
   getStaffUsers, addStaffUser, updateStaffUser, removeStaffUser,
   pushStaffUserToDb, deleteStaffUserFromDb,
   type StaffUser, type StaffRole,
 } from '../lib/staffAuth';
-import { hasTurno, toggleTurno, loadTurniFromDb, type TurnoTipo } from '../lib/turni';
+import { hasTurno, toggleTurno, loadTurniFromDb, readTurni, type TurnoTipo, type TurnoEntry } from '../lib/turni';
 import { dbUtils } from '../lib/DatabaseUtils';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
@@ -22,6 +24,8 @@ import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 import { SETTINGS_KEYS, useSetting, useBooleanSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
 import { publishMenu } from '../lib/publicMenuSync';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const SECTIONS = [
   { id: 'ristorante', label: 'Ristorante', icon: Store, desc: 'Nome e identità' },
@@ -122,8 +126,9 @@ export default function SettingsView() {
   useEffect(() => {
     void loadTurniFromDb().then(() => setTurniTick(t => t + 1));
   }, []);
-  const handleToggleTurno = (userId: string, turno: TurnoTipo) => {
-    toggleTurno(userId, turniDate, turno);
+  const handleToggleTurno = async (userId: string, turno: TurnoTipo) => {
+    const ok = await toggleTurno(userId, turniDate, turno);
+    if (!ok) addToast({ type: 'error', title: 'Sync fallito', message: 'Impossibile salvare il turno sul server. Riprova.' });
     setTurniTick(t => t + 1);
   };
   const shiftTurniDate = (days: number) => {
@@ -197,6 +202,137 @@ export default function SettingsView() {
     void deleteStaffUserFromDb(user.id);
     refreshStaffUsers();
     addToast({ type: 'success', title: 'Operatore eliminato' });
+  };
+
+  // --- Turni Report PDF Export ---
+  const exportTurniMonthPDF = async (month: string) => {
+    const [y, monthNum] = month.split('-').map(Number);
+    const start = `${month}-01`;
+    const endDay = new Date(y, monthNum, 0).getDate();
+    const end = `${month}-${String(endDay).padStart(2, '0')}`;
+
+    let turniData: { user_id: string; data: string; turno: string }[] = [];
+    try {
+      if (supabase) {
+        const { data, error } = await supabase.from('turni').select('user_id, data, turno').gte('data', start).lte('data', end);
+        if (error) throw error;
+        turniData = data as { user_id: string; data: string; turno: string }[];
+      }
+    } catch {
+      // fallback to localStorage
+      const allTurni = readTurni();
+      turniData = allTurni
+        .filter((t: TurnoEntry) => t.data >= start && t.data <= end)
+        .map(t => ({ user_id: t.userId, data: t.data, turno: t.turno }));
+    }
+
+    const staffUsersList = getStaffUsers();
+    const monthLabel = new Date(y, monthNum - 1, 1).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+
+    // Build summary per user
+    const summary = staffUsersList.map(u => {
+      const userTurni = turniData.filter(t => t.user_id === u.id);
+      const pranzi = userTurni.filter(t => t.turno === 'pranzo').length;
+      const sere = userTurni.filter(t => t.turno === 'sera').length;
+      const giorni = new Set(userTurni.map(t => t.data)).size;
+      return { ...u, pranzi, sere, giorni };
+    });
+
+    // Create PDF
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pw = 190;
+    const margin = 10;
+
+    // Title
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.setTextColor(20, 20, 20);
+    pdf.text('Report Turni Mensile', pw / 2, 20, { align: 'center' });
+
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(80, 80, 80);
+    pdf.text(monthLabel, pw / 2, 28, { align: 'center' });
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(120, 120, 120);
+    pdf.text(`Generato il ${new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}`, pw / 2, 34, { align: 'center' });
+
+    // Summary table
+    const tableHead = [['Operatore', 'Ruolo', 'Giorni', 'Pranzi', 'Sere', 'Tot. Turni']];
+    const tableBody = summary.map(u => [
+      u.name,
+      u.role === 'admin' ? 'Admin/Cassa' : u.role === 'waiter' ? 'Cameriere' : 'Cucina',
+      u.giorni.toString(),
+      u.pranzi.toString(),
+      u.sere.toString(),
+      (u.pranzi + u.sere).toString(),
+    ]);
+
+    autoTable(pdf, {
+      head: tableHead,
+      body: tableBody,
+      startY: 40,
+      theme: 'striped',
+      headStyles: { fillColor: [255, 193, 7], textColor: [0, 0, 0], fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 20, halign: 'center' },
+        3: { cellWidth: 20, halign: 'center' },
+        4: { cellWidth: 20, halign: 'center' },
+        5: { cellWidth: 25, halign: 'center' },
+      },
+    });
+
+    // Daily detail table
+    const daysInMonth = endDay;
+    const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = new Date(y, monthNum - 1, i + 1);
+      return `${String(i + 1).padStart(2, '0')}\n${['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.getDay()]}`;
+    });
+
+    const detailHead = [['Operatore', ...dayHeaders]];
+    const detailBody = staffUsersList.map(u => {
+      const userTurni = turniData.filter(t => t.user_id === u.id);
+      const row = [u.name];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayStr = `${month}-${String(day).padStart(2, '0')}`;
+        const hasPranzo = userTurni.some(t => t.data === dayStr && t.turno === 'pranzo');
+        const hasSera = userTurni.some(t => t.data === dayStr && t.turno === 'sera');
+        let cell = '';
+        if (hasPranzo && hasSera) cell = 'P+S';
+        else if (hasPranzo) cell = 'P';
+        else if (hasSera) cell = 'S';
+        row.push(cell);
+      }
+      return row;
+    });
+
+    const finalY = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY || 40;
+    autoTable(pdf, {
+      head: detailHead,
+      body: detailBody,
+      startY: finalY + 10,
+      theme: 'grid',
+      headStyles: { fillColor: [50, 50, 50], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+      styles: { fontSize: 7, cellPadding: 1.5, halign: 'center' },
+      columnStyles: {
+        0: { cellWidth: 30, halign: 'left', fontStyle: 'bold' },
+      },
+    });
+
+    // Legend
+    const legendY = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY + 5 || finalY + 10;
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text('Legenda: P = Pranzo, S = Sera, P+S = Entrambi', margin, legendY);
+
+    // Save
+    const fileName = `Turni_${month.replace('-', '-')}.pdf`;
+    pdf.save(fileName);
+    addToast({ type: 'success', title: 'PDF generato', message: `Report turni ${monthLabel} scaricato.` });
   };
 
   const ROLE_LABELS: Record<StaffRole, string> = { admin: 'Amministratore / Cassa', waiter: 'Cameriere', kitchen: 'Cucina' };
@@ -631,9 +767,18 @@ export default function SettingsView() {
                       <button onClick={() => setTurniDate(toLocalISODate())} className="text-[10px] font-black text-gold uppercase tracking-widest mt-0.5">Torna a oggi</button>
                     )}
                   </div>
-                  <button onClick={() => shiftTurniDate(1)} className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-surface-light transition-all">
-                    <ArrowRight size={18} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => exportTurniMonthPDF(turniDate.slice(0, 7))}
+                      className="p-2.5 rounded-xl bg-gold/10 text-gold hover:bg-gold/20 border border-gold/30 transition-all active:scale-95"
+                      title="Esporta report mensile PDF"
+                    >
+                      <Download size={18} />
+                    </button>
+                    <button onClick={() => shiftTurniDate(1)} className="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-surface-light transition-all">
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
                 </div>
 
                 <div key={turniTick} className="space-y-2">
@@ -712,11 +857,11 @@ export default function SettingsView() {
                                 <td key={day} className="py-2.5 text-center">
                                   <div className="flex flex-col items-center gap-0.5">
                                     <button
-                                      onClick={() => { toggleTurno(user.id, day, 'pranzo'); setTurniTick(t => t + 1); }}
+                                      onClick={() => { handleToggleTurno(user.id, 'pranzo'); }}
                                       className={`w-7 h-5 rounded text-[9px] font-black uppercase transition-all active:scale-90 ${p ? 'bg-gold text-black' : 'bg-surface border border-surface-light text-gray-600'}`}
                                     >P</button>
                                     <button
-                                      onClick={() => { toggleTurno(user.id, day, 'sera'); setTurniTick(t => t + 1); }}
+                                      onClick={() => { handleToggleTurno(user.id, 'sera'); }}
                                       className={`w-7 h-5 rounded text-[9px] font-black uppercase transition-all active:scale-90 ${s ? 'bg-blue-500 text-white' : 'bg-surface border border-surface-light text-gray-600'}`}
                                     >S</button>
                                   </div>

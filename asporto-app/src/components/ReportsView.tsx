@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole, getStaffUsers } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
+import { reloadTurniFromDb } from '../lib/turni';
 import type { Order, OrderCarrelloItem } from '../types/entities';
 import { MOCK_ORDERS } from '../lib/MockData';
-import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, LogOut, AlertTriangle, ArrowUpRight, ArrowDownRight, Minus, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, ShoppingBag, DollarSign, Clock, Package, Award, FileText, LogOut, AlertTriangle, ArrowUpRight, ArrowDownRight, Minus, Users, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 
@@ -486,6 +487,21 @@ export default function ReportsView({ onNavigateHome }: { onNavigateHome?: () =>
                   <span className="text-sm font-black text-white capitalize px-2">{monthLabel}</span>
                   <button onClick={() => shiftMonth(1)} className="p-1.5 rounded-xl text-gray-500 hover:text-white transition-all"><ChevronRight size={16} /></button>
                 </div>
+                <button
+                  onClick={async () => {
+                    const result = await reloadTurniFromDb();
+                    if (result.success) {
+                      await fetchTurni(turniMonth);
+                      addToast({ type: 'success', title: 'Turni ricaricati', message: `${result.count} turni caricati dal database` });
+                    } else {
+                      addToast({ type: 'error', title: 'Errore', message: 'Impossibile ricaricare i turni dal database' });
+                    }
+                  }}
+                  className="p-2 bg-charcoal border border-surface-light rounded-xl text-gray-400 hover:text-gold hover:border-gold/40 transition-all active:scale-90"
+                  title="Ricarica turni dal database"
+                >
+                  <RefreshCw size={18} />
+                </button>
               </div>
 
               {staffUsers.length === 0 ? (

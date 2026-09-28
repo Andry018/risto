@@ -1482,7 +1482,11 @@ export default function WaiterMobileView() {
             </p>
             <div key={turnoTick} className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => { toggleTurno(currentUser.id, toLocalISODate(), 'pranzo'); setTurnoTick(t => t + 1); }}
+                onClick={async () => {
+                  const ok = await toggleTurno(currentUser.id, toLocalISODate(), 'pranzo');
+                  if (!ok) toast.addToast({ type: 'error', title: 'Sync fallito', message: 'Impossibile salvare il turno sul server. Riprova.' });
+                  setTurnoTick(t => t + 1);
+                }}
                 className={`py-6 rounded-2xl border-2 font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
                   hasTurno(currentUser.id, toLocalISODate(), 'pranzo') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
                 }`}
@@ -1490,7 +1494,11 @@ export default function WaiterMobileView() {
                 Pranzo
               </button>
               <button
-                onClick={() => { toggleTurno(currentUser.id, toLocalISODate(), 'sera'); setTurnoTick(t => t + 1); }}
+                onClick={async () => {
+                  const ok = await toggleTurno(currentUser.id, toLocalISODate(), 'sera');
+                  if (!ok) toast.addToast({ type: 'error', title: 'Sync fallito', message: 'Impossibile salvare il turno sul server. Riprova.' });
+                  setTurnoTick(t => t + 1);
+                }}
                 className={`py-6 rounded-2xl border-2 font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
                   hasTurno(currentUser.id, toLocalISODate(), 'sera') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
                 }`}

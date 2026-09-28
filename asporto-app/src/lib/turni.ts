@@ -12,7 +12,7 @@ export interface TurnoEntry {
 
 // ── localStorage (lettura sincrona per il render) ──────────────────────────
 
-function readTurni(): TurnoEntry[] {
+export function readTurni(): TurnoEntry[] {
   try {
     const raw = localStorage.getItem(TURNI_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as TurnoEntry[]) : [];
@@ -41,7 +41,7 @@ export function getTurniForDate(data: string): TurnoEntry[] {
 
 // ── Toggle con sync Supabase ───────────────────────────────────────────────
 
-export function toggleTurno(userId: string, data: string, turno: TurnoTipo): void {
+export async function toggleTurno(userId: string, data: string, turno: TurnoTipo): Promise<boolean> {
   const turni = readTurni();
   const idx = turni.findIndex(t => t.userId === userId && t.data === data && t.turno === turno);
   const removing = idx > -1;
@@ -53,17 +53,35 @@ export function toggleTurno(userId: string, data: string, turno: TurnoTipo): voi
   }
   writeTurni(turni);
 
-  // Supabase async fire-and-forget
+  // Supabase sync con error handling
   if (supabase) {
-    if (removing) {
-      void supabase.from('turni').delete()
-        .eq('user_id', userId)
-        .eq('data', data)
-        .eq('turno', turno);
-    } else {
-      void supabase.from('turni').upsert({ user_id: userId, data, turno });
+    try {
+      if (removing) {
+        const { error } = await supabase.from('turni').delete()
+          .eq('user_id', userId)
+          .eq('data', data)
+          .eq('turno', turno);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('turni').upsert({ user_id: userId, data, turno });
+        if (error) throw error;
+      }
+      return true;
+    } catch (error) {
+      console.error('Turno sync failed:', error);
+      // Rollback localStorage on DB failure
+      const rollback = readTurni();
+      if (removing) {
+        rollback.push({ userId, data, turno });
+      } else {
+        const rollbackIdx = rollback.findIndex(t => t.userId === userId && t.data === data && t.turno === turno);
+        if (rollbackIdx > -1) rollback.splice(rollbackIdx, 1);
+      }
+      writeTurni(rollback);
+      return false;
     }
   }
+  return true;
 }
 
 // ── Caricamento iniziale da DB ─────────────────────────────────────────────
@@ -80,4 +98,23 @@ export async function loadTurniFromDb(): Promise<void> {
     turno: r.turno,
   }));
   writeTurni(entries);
+}
+
+/** Forza ricarica turni da DB (utile per risolvere conflitti). */
+export async function reloadTurniFromDb(): Promise<{ success: boolean; count: number }> {
+  if (!supabase) return { success: false, count: 0 };
+  try {
+    const { data, error } = await supabase.from('turni').select('user_id, data, turno');
+    if (error) throw error;
+    const entries: TurnoEntry[] = (data as { user_id: string; data: string; turno: TurnoTipo }[]).map(r => ({
+      userId: r.user_id,
+      data: r.data.slice(0, 10),
+      turno: r.turno,
+    }));
+    writeTurni(entries);
+    return { success: true, count: entries.length };
+  } catch (error) {
+    console.error('Reload turni failed:', error);
+    return { success: false, count: 0 };
+  }
 }
