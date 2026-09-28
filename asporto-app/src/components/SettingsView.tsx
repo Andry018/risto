@@ -5,9 +5,10 @@ import {
   BarChart3, Trash2, RotateCcw, Sun, Store, UtensilsCrossed,
   Smartphone, MonitorCog, Info, Save, Check, Wifi, Database, FileText,
   Users, Plus, Edit3, X, CalendarClock, ChevronLeft, Globe, UploadCloud,
-  Download
+  Download, FolderOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import FileManagerView from './FileManagerView';
 import {
   requireManagerPin, setManagerPin,
   getStaffUsers, addStaffUser, updateStaffUser, removeStaffUser,
@@ -37,6 +38,7 @@ const SECTIONS = [
   { id: 'personale', label: 'Personale', icon: CalendarClock, desc: 'Turni pranzo/sera' },
   { id: 'menu-online', label: 'Menu Online', icon: Globe, desc: 'Pubblica il menu su internet' },
   { id: 'sistema', label: 'Sistema', icon: MonitorCog, desc: 'Database e manutenzione' },
+  { id: 'files', label: 'File Manager', icon: FolderOpen, desc: 'Gestisci file server' },
 ] as const;
 
 type SectionId = typeof SECTIONS[number]['id'];
@@ -980,6 +982,11 @@ export default function SettingsView() {
                   </p>
                 </div>
               </>
+            )}
+
+            {/* ===== FILE MANAGER ===== */}
+            {section === 'files' && (
+              <FileManagerView />
             )}
 
           </div>
