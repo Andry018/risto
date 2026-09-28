@@ -54,8 +54,9 @@ export default function WaiterMobileView() {
   // Customization state
   const [editingItem, setEditingItem] = useState<CustomizedItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCoversModalOpen, setIsCoversModalOpen] = useState(false);
-  const [tempCovers, setTempCovers] = useState(2);
+  const [showInlineCovers, setShowInlineCovers] = useState(false);
+  const [inlineCoversTable, setInlineCoversTable] = useState<Tavolo | null>(null);
+  const [inlineCovers, setInlineCovers] = useState(2);
 
   const [billsDayOpen, setBillsDayOpen] = useState(false);
   const [billsTableOpen, setBillsTableOpen] = useState(false);
@@ -78,7 +79,28 @@ export default function WaiterMobileView() {
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
+  const swipeStartX = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStartSwipe = (e: React.TouchEvent) => {
+    swipeStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMoveSwipe = (e: React.TouchEvent) => {
+    if (!selectedTable) return;
+    const diff = e.touches[0].clientX - swipeStartX.current;
+    if (diff > 50) {
+      // Swipe right detected - go back to table map
+      if (cart.length > 0) {
+        saveDraft(selectedTable.id, cart, selectedTable.clienti || 2);
+      }
+      setSelectedTable(null);
+    }
+  };
+
+  const handleTouchEndSwipe = (_e?: React.TouchEvent) => {
+    swipeStartX.current = 0;
+  };
 
   // Reservation state
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
@@ -325,7 +347,7 @@ export default function WaiterMobileView() {
     }
   };
 
-  const handleTouchEndPull = () => {
+  const handleTouchEndPull = (_e?: React.TouchEvent) => {
     if (pullRefreshDistance >= 70 && !selectedTable) {
       void handleRefresh();
     }
@@ -471,9 +493,9 @@ export default function WaiterMobileView() {
     }
 
     if (table.status === 'LIBERO') {
-      setSelectedTable(table);
-      setTempCovers(2);
-      setIsCoversModalOpen(true);
+      // Show inline covers picker instead of modal
+      setInlineCoversTable(table);
+      setShowInlineCovers(true);
       return;
     }
 
@@ -531,22 +553,24 @@ export default function WaiterMobileView() {
     toast.addToast({ type: 'success', title: 'Tavolo liberato', message: `${table.nome} è stato liberato.`, duration: 2500 });
   };
 
-  const confirmCovers = async () => {
-    if (!selectedTable) return;
+  const confirmInlineCovers = async (covers: number) => {
+    const table = inlineCoversTable;
+    if (!table) return;
     
     const nowISO = new Date().toISOString();
-    const newNote = setAperturaInNote(selectedTable.note, nowISO);
+    const newNote = setAperturaInNote(table.note, nowISO);
     
     // Update table with guests and mark as occupied
-    const updatedTable = { ...selectedTable, clienti: tempCovers, status: 'OCCUPATO' as const, note: newNote };
-    setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
+    const updatedTable = { ...table, clienti: covers, status: 'OCCUPATO' as const, note: newNote };
+    setTables(prev => prev.map(t => t.id === table.id ? updatedTable : t));
     setSelectedTable(updatedTable);
-    setIsCoversModalOpen(false);
-    setTableApertura(prev => ({ ...prev, [selectedTable.id]: nowISO }));
+    setShowInlineCovers(false);
+    setInlineCoversTable(null);
+    setTableApertura(prev => ({ ...prev, [table.id]: nowISO }));
 
     localUpdateTavoliRef.current = true;
     if (!IS_DEMO_MODE) {
-      await syncManager.pushTableUpdate(selectedTable.id, { clienti: tempCovers, status: 'OCCUPATO', note: newNote });
+      await syncManager.pushTableUpdate(table.id, { clienti: covers, status: 'OCCUPATO', note: newNote });
     }
 
     // Automatically add "Coperto" to cart
@@ -554,7 +578,7 @@ export default function WaiterMobileView() {
     if (copertoProd) {
       setCart([{
         ...copertoProd,
-        quantity: tempCovers,
+        quantity: covers,
         addedIngredients: [],
         removedIngredients: [],
         notes: '',
@@ -562,6 +586,11 @@ export default function WaiterMobileView() {
       }]);
     }
     setActiveTab('RIEPILOGO');
+  };
+
+  const cancelInlineCovers = () => {
+    setShowInlineCovers(false);
+    setInlineCoversTable(null);
   };
 
   /** Trasferisce ordini aperti, bozza e coperti dal tavolo sorgente al tavolo destinazione. */
@@ -906,9 +935,9 @@ export default function WaiterMobileView() {
   return (
     <div
       ref={containerRef}
-      onTouchStart={handleTouchStartPull}
-      onTouchMove={handleTouchMovePull}
-      onTouchEnd={handleTouchEndPull}
+      onTouchStart={(e) => { handleTouchStartPull(e); handleTouchStartSwipe(e); }}
+      onTouchMove={(e) => { handleTouchMovePull(e); handleTouchMoveSwipe(e); }}
+      onTouchEnd={(e) => { handleTouchEndPull(e); handleTouchEndSwipe(e); }}
       className="h-dvh overflow-hidden bg-charcoal text-white font-sans flex flex-col max-w-2xl mx-auto relative border-x border-surface"
     >
       
@@ -1255,14 +1284,14 @@ export default function WaiterMobileView() {
               <button
                 onClick={handlePrint}
                 disabled={cart.length === 0}
-                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
+                className="min-h-[44px] py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
               >
                 <Printer size={14} /> STAMPA
               </button>
               <button
                 onClick={() => saveOrder()}
                 disabled={cart.length === 0 || orderActionBusy}
-                className={`py-3 rounded-xl border font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                className={`min-h-[44px] py-3 rounded-xl border font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
                   success
                     ? 'bg-emerald-500 border-emerald-500 text-black'
                     : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
@@ -1273,7 +1302,7 @@ export default function WaiterMobileView() {
               <button
                 onClick={handlePreConto}
                 disabled={cart.length === 0}
-                className="py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-surface-light disabled:opacity-30"
+                className="min-h-[44px] py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-surface-light disabled:opacity-30"
               >
                 <Receipt size={14} /> CONTO
               </button>
@@ -1287,44 +1316,43 @@ export default function WaiterMobileView() {
         </div>
       )}
 
-      {/* Covers Modal */}
-      {isCoversModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden p-8">
-            <h2 className="text-2xl font-black italic uppercase text-white mb-2 text-center">Numero Coperti</h2>
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-8 text-center">{selectedTable?.nome}</p>
-            
-            <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-3xl p-4 mb-4">
-              <button 
-                onClick={() => setTempCovers(Math.max(1, tempCovers - 1))}
-                className="w-14 h-14 bg-surface rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
-              >
-                <Minus size={24} />
+      {/* Inline Covers Picker */}
+      {showInlineCovers && inlineCoversTable && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-in fade-in duration-150" onClick={cancelInlineCovers}>
+          <div className="fixed bottom-0 left-0 right-0 z-[101] bg-surface border-t border-surface-light rounded-t-[32px] p-6 animate-in slide-in-from-bottom-4 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-black italic uppercase text-white">Numero Coperti</h2>
+              <button onClick={cancelInlineCovers} className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white">
+                <X size={20} />
               </button>
-              <span className="text-5xl font-black italic text-white">{tempCovers}</span>
+            </div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6 text-center">{inlineCoversTable.nome}</p>
+            
+            <div className="flex items-center justify-center gap-6 mb-6">
               <button 
-                onClick={() => setTempCovers(tempCovers + 1)}
-                className="w-14 h-14 bg-surface rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
+                onClick={() => setInlineCovers(Math.max(1, inlineCovers - 1))}
+                className="w-16 h-16 bg-charcoal rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
               >
-                <Plus size={24} />
+                <Minus size={28} />
+              </button>
+              <span className="text-7xl font-black italic text-white tabular-nums">{inlineCovers}</span>
+              <button 
+                onClick={() => setInlineCovers(inlineCovers + 1)}
+                className="w-16 h-16 bg-charcoal rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
+              >
+                <Plus size={28} />
               </button>
             </div>
 
             <button 
-              onClick={confirmCovers}
-              className="w-full bg-gold hover:bg-gold-hover text-black font-black py-5 rounded-2xl text-xl shadow-xl shadow-gold/20 active:scale-95 transition-all"
+              onClick={() => confirmInlineCovers(inlineCovers)}
+              className="w-full bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl text-xl shadow-xl shadow-gold/20 active:scale-95 transition-all mb-3"
             >
               INIZIA ORDINE
             </button>
             <button 
-              onClick={() => { setOrderHistoryOpen(true); }}
-              className="w-full mt-3 bg-charcoal border border-white/10 text-gray-400 font-bold py-3 rounded-2xl text-xs uppercase tracking-widest hover:text-white hover:border-white/20 active:scale-95 transition-all"
-            >
-              <Clock size={14} className="inline mr-2" />STORICO ORDINI
-            </button>
-            <button 
-              onClick={() => { setSelectedTable(null); setIsCoversModalOpen(false); }}
-              className="w-full mt-4 text-gray-500 font-bold uppercase text-[10px] tracking-widest hover:text-white"
+              onClick={cancelInlineCovers}
+              className="w-full bg-charcoal border border-white/10 text-gray-400 font-bold py-3 rounded-2xl text-xs uppercase tracking-widest hover:text-white hover:border-white/20 active:scale-95 transition-all"
             >
               ANNULLA
             </button>

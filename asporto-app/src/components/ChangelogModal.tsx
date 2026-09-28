@@ -15,6 +15,21 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: '2.1.1',
+    date: '2026-09-28',
+    type: 'feature',
+    title: 'UX Tablet: meno click, più velocità',
+    description: 'Apertura tavolo inline, swipe per tornare, touch target ≥44px',
+    details: [
+      'Apri tavolo libero → picker coperti inline (bottom sheet) invece di modal full-screen',
+      'Swipe right da comanda → torna a mappa tavoli (salva bozza automatica)',
+      'Pulsanti azione (STAMPA/AGGIORNA/CONTO) ora min-h-[44px] per touch target',
+      'Add-to-cart single tap confermato (double tap = personalizza)',
+      'Turni: toggle async con rollback su errore DB, toast "Sync fallito", reload da Reports',
+      'Export PDF turni mensile da Impostazioni → Personale',
+    ],
+  },
+  {
     version: '2.1.0',
     date: '2026-09-16',
     type: 'feature',
