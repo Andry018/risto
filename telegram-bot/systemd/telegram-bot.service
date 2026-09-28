@@ -1,0 +1,18 @@
+[Unit]
+Description=Telegram Bot Risto
+After=network.target ollama.service
+Requires=ollama.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/risto/telegram-bot
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/risto/telegram-bot/.env
+User=risto
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
