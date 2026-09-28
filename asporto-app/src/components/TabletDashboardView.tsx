@@ -126,37 +126,37 @@ export default function TabletDashboardView() {
 
   if (activeView === 'DASHBOARD') {
     return (
-      <div className="min-h-screen bg-charcoal text-white p-6 md:p-12 overflow-hidden relative">
+      <div className="h-dvh bg-charcoal text-white p-4 md:p-6 lg:p-12 overflow-hidden relative">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-gold/5 blur-[120px] rounded-full pointer-events-none" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none" />
 
         <div className="max-w-7xl mx-auto relative z-10 flex flex-col min-h-full">
-          <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
+          <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 md:mb-12 lg:mb-16">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-surface rounded-xl border border-surface-light shadow-xl">
-                   <LayoutDashboard className="text-gold" size={24} />
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="p-1.5 bg-surface rounded-xl border border-surface-light shadow-xl">
+                   <LayoutDashboard className="text-gold w-5 h-5 md:w-6 md:h-6" />
                 </div>
-                <span className="text-xs font-black uppercase tracking-[0.3em] text-gray-500">Control Center</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Control Center</span>
               </div>
-              <h1 className="text-5xl md:text-6xl font-black italic uppercase tracking-tighter">
+              <h1 className="text-3xl md:text-5xl lg:text-6xl font-black italic uppercase tracking-tighter">
                Risto<span className="text-gold">Premium</span>
               </h1>
               {currentUser && (
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-2">
+                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-1">
                   {currentUser.name} • <span className="text-gold">{currentUser.role.toUpperCase()}</span>
                 </p>
               )}
             </div>
 
-            <div className="flex gap-4">
-               <div className="bg-surface/50 backdrop-blur-md border border-surface-light p-4 px-6 rounded-3xl shadow-xl flex items-center gap-4">
-                  <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400">
-                     <Clock size={20} className="animate-pulse" />
-                  </div>
+            <div className="flex gap-3">
+<div className="bg-surface/50 backdrop-blur-md border border-surface-light p-3 px-4 rounded-2xl shadow-xl flex items-center gap-3">
+                   <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400">
+                      <Clock className="w-4 h-4 md:w-5 md:h-5 animate-pulse" />
+                   </div>
                   <div>
-                     <p className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Orario Locale</p>
-                     <p className="text-2xl font-black italic">
+                     <p className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Orario Locale</p>
+                     <p className="text-xl md:text-2xl font-black italic">
                         {currentTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                      </p>
                   </div>
@@ -164,61 +164,61 @@ export default function TabletDashboardView() {
             </div>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12">
             {allModules.map((m, idx) => (
               <button
                 key={idx}
                 onClick={() => setActiveView(m.view)}
-                className={`group relative bg-surface border border-surface-light rounded-[40px] p-8 transition-all hover:scale-[1.02] active:scale-95 shadow-2xl overflow-hidden flex flex-col h-72 text-left`}
+                className={`group relative bg-surface border border-surface-light rounded-[32px] lg:rounded-[40px] p-6 md:p-8 transition-all hover:scale-[1.02] active:scale-95 shadow-2xl overflow-hidden flex flex-col h-64 md:h-72 text-left`}
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${m.color} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
 
                 <div className="relative z-10 flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className={`p-4 rounded-3xl bg-charcoal border border-surface-light shadow-inner ${m.iconColor}`}>
-                      <m.icon size={32} />
+                  <div className="flex justify-between items-start mb-4 md:mb-6">
+                    <div className={`p-3 md:p-4 rounded-2xl md:rounded-3xl bg-charcoal border border-surface-light shadow-inner ${m.iconColor}`}>
+                      <m.icon className="w-7 h-7 md:w-8 md:h-8" />
                     </div>
                     {m.badge && (
-                      <span className="bg-charcoal px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-surface-light text-gray-400 group-hover:text-white transition-colors">
+                      <span className="bg-charcoal px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-surface-light text-gray-400 group-hover:text-white transition-colors">
                         {m.badge}
                       </span>
                     )}
                   </div>
 
                   <div className="mt-auto">
-                    <h3 className="text-2xl font-black italic uppercase tracking-tight text-white mb-2 group-hover:text-gold transition-colors">{m.title}</h3>
-                    <p className="text-sm text-gray-500 font-medium leading-relaxed max-w-[80%]">{m.desc}</p>
+                    <h3 className="text-xl md:text-2xl font-black italic uppercase tracking-tight text-white mb-1 group-hover:text-gold transition-colors">{m.title}</h3>
+                    <p className="text-xs md:text-sm text-gray-500 font-medium leading-relaxed max-w-[80%]">{m.desc}</p>
                   </div>
 
-                  <div className="absolute bottom-8 right-8 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 translate-x-4 transition-all duration-300">
-                     <ArrowRight className={m.iconColor} size={28} />
+                  <div className="absolute bottom-6 md:bottom-8 right-6 md:right-8 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 translate-x-4 transition-all duration-300">
+                     <ArrowRight className={`${m.iconColor} w-6 h-6 md:w-7 md:h-7`} />
                   </div>
                 </div>
               </button>
             ))}
           </div>
 
-          <footer className="mt-auto flex flex-col md:flex-row items-center justify-between gap-8 py-8 border-t border-surface-light">
-             <div className="flex items-center gap-6">
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                   <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Sistema Operativo</span>
+          <footer className="mt-auto flex flex-col md:flex-row items-center justify-between gap-6 py-6 border-t border-surface-light">
+             <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                   <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Sistema Operativo</span>
                 </div>
-                <div className="h-4 w-px bg-surface-light" />
-                <div className="flex items-center gap-3">
-                   <Activity size={16} className="text-gold" />
-                   <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Database Connesso</span>
+                <div className="h-3 w-px bg-surface-light" />
+                <div className="flex items-center gap-2">
+                   <Activity size={14} className="text-gold" />
+                   <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Database Connesso</span>
                 </div>
              </div>
 
-             <div className="flex items-center gap-4">
-                <button
-                  onClick={() => { setStaffUsers(getStaffUsers()); setIsSettingsOpen(true); }}
-                  className="p-3 bg-charcoal hover:bg-surface-light border border-surface-light rounded-2xl text-gray-500 transition-all hover:text-gold active:scale-95"
-                >
-                  <Settings size={20} />
-                </button>
-             </div>
+<div className="flex items-center gap-3">
+                 <button
+                   onClick={() => { setStaffUsers(getStaffUsers()); setIsSettingsOpen(true); }}
+                   className="p-2.5 bg-charcoal hover:bg-surface-light border border-surface-light rounded-xl text-gray-500 transition-all hover:text-gold active:scale-95"
+                 >
+                   <Settings className="w-4.5 h-4.5" />
+                 </button>
+              </div>
           </footer>
         </div>
 
@@ -227,15 +227,15 @@ export default function TabletDashboardView() {
             <div className="bg-surface border border-surface-light w-full max-w-xl rounded-[40px] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden">
               <div className="p-8 md:p-12">
                 <div className="flex justify-between items-center mb-10">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light shadow-xl">
-                      <Settings size={24} />
-                    </div>
-                    <h2 className="text-3xl font-black italic tracking-tighter uppercase">Impostazioni <span className="text-gold">Sistema</span></h2>
-                  </div>
-                  <button onClick={() => setIsSettingsOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors text-gray-500">
-                    <X size={24} />
-                  </button>
+<div className="flex items-center gap-4">
+                     <div className="p-3 bg-charcoal rounded-2xl text-gold border border-surface-light shadow-xl">
+                       <Settings className="w-6 h-6" />
+                     </div>
+                     <h2 className="text-3xl font-black italic tracking-tighter uppercase">Impostazioni <span className="text-gold">Sistema</span></h2>
+                   </div>
+                   <button onClick={() => setIsSettingsOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors text-gray-500">
+                     <X className="w-6 h-6" />
+                   </button>
                 </div>
 
                 <div className="space-y-8">

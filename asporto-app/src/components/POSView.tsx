@@ -1096,47 +1096,47 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
       {/* Colonna centrale: Menu Prodotti */}
       <div className="flex-1 flex flex-col min-w-0 p-4 md:p-6 lg:p-8 min-h-0">
-        <header className="mb-8 flex flex-col gap-6">
+        <header className="mb-4 sm:mb-6 lg:mb-8 flex flex-col gap-4 sm:gap-6">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 sm:gap-6">
               <button
                 onClick={() => void handleBack()}
-                className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl"
+                className="p-2.5 bg-surface border border-surface-light rounded-xl text-gray-500 hover:text-white transition-all shadow-xl sm:p-3 sm:rounded-2xl"
               >
-                <LayoutDashboard size={24} />
+                <LayoutDashboard className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase italic">Comanda & Conto</h2>
+                  <h2 className="text-xs sm:text-sm text-gray-400 font-bold tracking-widest uppercase italic">Comanda & Conto</h2>
                   {pendingSyncCount > 0 && (
                     <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500 text-white text-[9px] font-black rounded uppercase animate-pulse">
                       <WifiOff size={8} /> Sincronizzazione in corso ({pendingSyncCount})
                     </span>
                   )}
                 </div>
-                <h1 className="text-4xl font-black text-white mt-1">POS <span className="text-gold italic">TERMINAL</span></h1>
-                <div className="flex flex-wrap gap-2 mt-3">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white mt-0.5">POS <span className="text-gold italic">TERMINAL</span></h1>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">
                   <button
                     type="button"
                     onClick={() => setBillsDayOpen(true)}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-charcoal border border-surface-light text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
                   >
-                    <Receipt size={14} /> Conti oggi
+                    <Receipt className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Conti oggi
                   </button>
                   <button
                     type="button"
                     onClick={() => setBillsSuspendedOpen(true)}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/30 transition-all"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-charcoal border border-surface-light text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/30 transition-all"
                   >
-                    <Pause size={14} /> Conti Sospesi
+                    <Pause className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Conti Sospesi
                   </button>
                   {tableName && (
                     <button
                       type="button"
                       onClick={() => setBillsTableOpen(true)}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-charcoal border border-surface-light text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-charcoal border border-surface-light text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-gray-300 hover:text-gold hover:border-gold/30 transition-all"
                     >
-                      <Receipt size={14} /> Storico tavolo
+                      <Receipt className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Storico tavolo
                     </button>
                   )}
                 </div>
@@ -1281,26 +1281,26 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         {/* Decor */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 blur-3xl pointer-events-none" />
 
-        <header className="p-8 border-b border-surface-light flex justify-between items-center bg-surface-light/20 relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-charcoal rounded-2xl flex items-center justify-center text-gold border border-surface-light shadow-xl">
-              <Calculator size={24} />
+        <header className="p-4 sm:p-6 lg:p-8 border-b border-surface-light flex justify-between items-center bg-surface-light/20 relative z-10">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-charcoal rounded-xl sm:rounded-2xl flex items-center justify-center text-gold border border-surface-light shadow-xl">
+              <Calculator className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <h2 className="text-xl font-black text-white uppercase italic">SCONTRINO</h2>
+            <h2 className="text-lg sm:text-xl font-black text-white uppercase italic">SCONTRINO</h2>
           </div>
           <button 
             onClick={clearCart}
-            className="p-4 bg-charcoal border border-surface-light rounded-2xl text-gray-500 hover:text-red-500 hover:border-red-500/20 transition-all active:scale-90"
+            className="p-3 sm:p-4 bg-charcoal border border-surface-light rounded-xl sm:rounded-2xl text-gray-500 hover:text-red-500 hover:border-red-500/20 transition-all active:scale-90"
             title="Svuota carrello"
           >
-            <Trash2 size={22} />
+            <Trash2 className="w-4.5 h-4.5 sm:w-5.5 sm:h-5.5" />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-10">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 custom-scrollbar relative z-10">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50">
-              <ShoppingCart size={64} className="mb-4" />
+              <ShoppingCart className="w-16 h-16 mb-4" />
               <p className="font-black uppercase tracking-widest text-[10px]">Aggiungi prodotti</p>
             </div>
           ) : (
@@ -1317,17 +1317,17 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                       </div>
                     </div>
                     <button onClick={() => removeEntireItem(item.uniqueId)} className="p-3 text-gray-600 hover:text-red-500 transition-colors active:scale-90">
-                      <Trash2 size={18} />
+                      <Trash2 className="w-4.5 h-4.5" />
                     </button>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-surface-light/50">
                     <button onClick={() => editCartItem(item)} className="px-3 py-2 text-[10px] font-black uppercase text-gray-500 hover:text-white flex items-center gap-1.5 bg-charcoal rounded-xl border border-surface-light hover:border-gold/30 transition-all active:scale-90">
-                      <Edit3 size={14} /> MODIFICA
+                      <Edit3 className="w-3.5 h-3.5" /> MODIFICA
                     </button>
                     <div className="flex items-center gap-3 bg-surface p-1.5 rounded-xl border border-surface-light shadow-lg">
-                      <button onClick={() => removeFromCart(item.uniqueId)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Minus size={18} /></button>
+                      <button onClick={() => removeFromCart(item.uniqueId)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Minus className="w-4.5 h-4.5" /></button>
                       <span className="w-8 text-center font-black text-white text-lg">{item.quantity}</span>
-                      <button onClick={() => addToCart(item)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Plus size={18} /></button>
+                      <button onClick={() => addToCart(item)} className="w-10 h-10 flex items-center justify-center bg-charcoal hover:bg-gold/20 hover:text-gold rounded-xl text-gray-500 transition-all active:scale-90"><Plus className="w-4.5 h-4.5" /></button>
                     </div>
                     <p className="text-white font-black text-base">€{calculateItemPrice(item, ingredients).toFixed(2)}</p>
                   </div>
@@ -1338,20 +1338,20 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         </div>
 
         {/* Total & Checkout */}
-        <div className="p-4 border-t border-surface-light bg-surface-light/10 relative z-10">
+        <div className="p-3 sm:p-4 border-t border-surface-light bg-surface-light/10 relative z-10">
 
           <div className="flex justify-between items-end mb-1">
             <span className="text-[10px] font-black text-gray-400 uppercase tracking-[.3em]">Totale</span>
             {scontoTipo ? (
               <div className="flex flex-col items-end">
                 <span className="text-sm font-black text-gray-500 line-through">€{total.toFixed(2)}</span>
-                <span className="text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{discountedTotal.toFixed(2)}</span></span>
+                <span className="text-3xl sm:text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{discountedTotal.toFixed(2)}</span></span>
               </div>
             ) : (
-              <span className="text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{total.toFixed(2)}</span></span>
+              <span className="text-3xl sm:text-4xl font-black text-white italic tracking-tighter leading-none">€<span className="text-gold">{total.toFixed(2)}</span></span>
             )}
           </div>
-          <div className="flex justify-end mb-3">
+          <div className="flex justify-end mb-2 sm:mb-3">
             <button
               type="button"
               onClick={openDiscountModal}
@@ -1363,18 +1363,18 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           </div>
 
           {orderSuccess ? (
-            <div className="w-full bg-emerald-500 text-black font-black text-lg py-4 rounded-2xl flex items-center justify-center gap-3 animate-in zoom-in">
-              <CheckCircle size={20} /> OPERAZIONE COMPLETATA!
+            <div className="w-full bg-emerald-500 text-black font-black text-base sm:text-lg py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-3 animate-in zoom-in">
+              <CheckCircle className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> OPERAZIONE COMPLETATA!
             </div>
           ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5 sm:gap-2">
                 {/* STAMPA button - prints everything */}
                 <button
                   onClick={handlePrintFull}
                   disabled={cart.length === 0}
-                  className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                  className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                 >
-                  <Printer size={14} /> STAMPA
+                  <Printer className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> STAMPA
                 </button>
                 {(() => {
                   const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
@@ -1387,14 +1387,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                         disabled={cucinaItems.length === 0}
                         className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                       >
-                        <Printer size={14} /> CUCINA
+                        <Printer className="w-3.5 h-3.5" /> CUCINA
                       </button>
                         <button
                           onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
                           disabled={salaItems.length === 0}
                           className="w-full bg-charcoal hover:bg-surface-light text-sky-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                         >
-                          <Printer size={14} /> SALA
+                          <Printer className="w-3.5 h-3.5" /> SALA
                         </button>
                       </div>
                     );

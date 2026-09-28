@@ -329,61 +329,61 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     <div className="h-dvh min-h-0 flex flex-col bg-charcoal text-white overflow-hidden p-3 sm:p-5 lg:p-8">
 
       {/* View Header & Toggles */}
-      <header className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-start shrink-0 mb-3 sm:mb-4">
-        <div className="flex gap-4">
+      <header className="flex flex-col gap-3 lg:flex-row lg:justify-between lg:items-start shrink-0 mb-2 sm:mb-3 lg:mb-4">
+        <div className="flex gap-3">
           {onNavigateHome ? (
-            <button onClick={onNavigateHome} className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
-               <LayoutDashboard size={24} />
+            <button onClick={onNavigateHome} className="p-2.5 bg-surface border border-surface-light rounded-xl text-gray-500 hover:text-white transition-all shadow-xl lg:p-3">
+               <LayoutDashboard className="w-5 h-5 lg:w-6 lg:h-6" />
             </button>
           ) : (
-            <Link to="/" className="p-3 bg-surface border border-surface-light rounded-2xl text-gray-500 hover:text-white transition-all shadow-xl">
-               <LayoutDashboard size={24} />
+            <Link to="/" className="p-2.5 bg-surface border border-surface-light rounded-xl text-gray-500 hover:text-white transition-all shadow-xl lg:p-3">
+               <LayoutDashboard className="w-5 h-5 lg:w-6 lg:h-6" />
             </Link>
           )}
           <div>
-            <h2 className="text-sm text-gray-400 font-bold tracking-widest uppercase">Gestione Sala</h2>
-            <h1 className="text-3xl font-black text-white mt-1">MAPPA TAVOLI</h1>
+            <h2 className="text-xs lg:text-sm text-gray-400 font-bold tracking-widest uppercase">Gestione Sala</h2>
+            <h1 className="text-2xl lg:text-3xl font-black text-white mt-0.5 lg:mt-1">MAPPA TAVOLI</h1>
           </div>
         </div>
 
         {/* Sala Selector Tabs */}
-        <div className="flex items-center gap-2 bg-surface p-1.5 rounded-2xl border border-surface-light shadow-xl">
+        <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl lg:rounded-2xl border border-surface-light shadow-xl lg:shadow-none">
           {SALE.map(sala => (
             <button
               key={sala}
               onClick={() => setActiveSala(sala)}
-              className={`px-4 py-2 rounded-xl font-bold transition-all text-sm ${activeSala === sala ? 'bg-charcoal text-gold border border-gold/20 shadow-lg' : 'text-gray-500 hover:text-white'}`}
+              className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg lg:rounded-xl font-bold text-xs lg:text-sm transition-all ${activeSala === sala ? 'bg-charcoal text-gold border border-gold/20 shadow-lg' : 'text-gray-500 hover:text-white'}`}
             >
               {sala}
             </button>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-surface p-1.5 rounded-2xl border border-surface-light shadow-xl w-full lg:w-auto justify-center lg:justify-end">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 lg:gap-3 bg-surface p-1 lg:p-1.5 rounded-xl lg:rounded-2xl border border-surface-light shadow-xl lg:shadow-none w-full lg:w-auto justify-center lg:justify-end">
           <button
             onClick={() => setViewMode('MAP')}
-            className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-sm transition-all ${viewMode === 'MAP' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 lg:px-6 py-1.5 lg:py-2 rounded-lg lg:rounded-xl font-bold text-xs lg:text-sm transition-all ${viewMode === 'MAP' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
           >
-            <MapIcon size={18} /> MAPPA
+            <MapIcon className="w-4 h-4 lg:w-4.5 lg:h-4.5" /> <span className="hidden lg:inline">MAPPA</span>
           </button>
           <button
             onClick={() => setViewMode('LIST')}
-            className={`flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-sm transition-all ${viewMode === 'LIST' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 lg:px-6 py-1.5 lg:py-2 rounded-lg lg:rounded-xl font-bold text-xs lg:text-sm transition-all ${viewMode === 'LIST' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'}`}
           >
-            <List size={18} /> LISTA
+            <List className="w-4 h-4 lg:w-4.5 lg:h-4.5" /> <span className="hidden lg:inline">LISTA</span>
           </button>
-          <div className="hidden sm:block w-px h-8 bg-surface-light mx-1" />
+          <div className="hidden lg:block w-px h-6 lg:h-8 bg-surface-light mx-1" />
           <button
             onClick={() => setIsReservationsOpen(true)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-surface border border-surface-light text-gold rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 lg:px-4 py-1.5 lg:py-2.5 bg-surface border border-surface-light text-gold rounded-lg lg:rounded-xl font-bold text-xs lg:text-sm transition-all shadow-lg active:scale-95"
           >
-            <BookOpen size={18} /> <span className="hidden sm:inline">PRENOTAZIONI</span>
+            <BookOpen className="w-4 h-4 lg:w-4.5 lg:h-4.5" /> <span className="hidden lg:inline">PRENOTAZIONI</span>
           </button>
           <button
             onClick={addTable}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 lg:px-4 py-1.5 lg:py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg lg:rounded-xl font-bold text-xs lg:text-sm transition-all shadow-lg active:scale-95"
           >
-            <Plus size={18} /> <span className="hidden sm:inline">AGGIUNGI</span>
+            <Plus className="w-4 h-4 lg:w-4.5 lg:h-4.5" /> <span className="hidden lg:inline">AGGIUNGI</span>
           </button>
         </div>
       </header>
@@ -414,7 +414,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
               onPointerMove={handlePointerMove}
               className="relative touch-none shadow-2xl rounded-[16px] sm:rounded-[20px] bg-charcoal/50 w-full max-w-[1600px] aspect-[12/7]"
               style={{ 
-                maxHeight: 'min(calc(100dvh - 13rem), 78vh)',
+                maxHeight: 'min(calc(100dvh - 8rem), 82vh)',
                 backgroundImage: 'radial-gradient(#2A2A2A 1.5px, transparent 0)',
                 backgroundSize: '40px 40px',
                 border: '1px solid rgba(207, 160, 85, 0.1)'

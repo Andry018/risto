@@ -65,8 +65,8 @@
   .h-\\[100dvh\\] {
     height: 100vh !important;
   }
-  .max-h-\\[min\\(calc\\(100dvh-13rem\\),78vh\\)\\] {
-    max-height: min(calc(100vh - 13rem), 78vh) !important;
+  .max-h-\\[min\\(calc\\(100dvh-8rem\\),82vh\\)\\] {
+    max-height: min(calc(100vh - 8rem), 82vh) !important;
   }
   .max-h-\\[min\\(90dvh\\,900px\\)\\] {
     max-height: min(100vh, 900px) !important;
