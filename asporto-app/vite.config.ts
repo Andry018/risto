@@ -89,9 +89,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          icons: ['lucide-react'],
-          pdf: ['jspdf', 'jspdf-autotable'],
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
+          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-qr': ['html5-qrcode', 'qrcode.react'],
         },
       },
     },

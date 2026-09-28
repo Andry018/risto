@@ -1,23 +1,16 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
 import WaiterMobileView from './components/WaiterMobileView';
 import StaffDashboard from './components/StaffDashboard';
 import CustomerView from './components/CustomerView';
 import TableMapView from './components/TableMapView';
-import AdminView from './components/AdminView';
 import POSView from './components/POSView';
 import TakeawayTabletView from './components/TakeawayTabletView';
 import PublicMenuView from './components/PublicMenuView';
 import MenuQRView from './components/MenuQRView';
 import MenuQRPrint from './components/MenuQRPrint';
-import ReportsView from './components/ReportsView';
-import FattureView from './components/FattureView';
 import ReservationsView from './components/ReservationsView';
-import SettingsView from './components/SettingsView';
 import EtichettaPage from './components/EtichettaPage';
-import MagazzinoView from './components/MagazzinoView';
-import HaccpView from './components/HaccpView';
-import CassaFiscalePage from './components/CassaFiscalePage';
-import SystemPanelView from './components/SystemPanelView';
 import ExitGuard from './components/ExitGuard';
 import StaffPinGuard from './components/StaffPinGuard';
 import { isTablet } from './lib/DeviceUtils';
@@ -31,10 +24,33 @@ import { PromptProvider } from './components/PromptModal';
 import { WakeLockManager } from './components/WakeLockManager';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 
+// Lazy load heavy admin/feature routes
+const AdminView = lazy(() => import('./components/AdminView'));
+const ReportsView = lazy(() => import('./components/ReportsView'));
+const FattureView = lazy(() => import('./components/FattureView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const MagazzinoView = lazy(() => import('./components/MagazzinoView'));
+const HaccpView = lazy(() => import('./components/HaccpView'));
+const CassaFiscalePage = lazy(() => import('./components/CassaFiscalePage'));
+const SystemPanelView = lazy(() => import('./components/SystemPanelView'));
+
 initTheme();
 
 function RootRoute() {
   return isTablet() ? <StaffDashboard /> : <StaffPinGuard><WaiterMobileView /></StaffPinGuard>;
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-charcoal flex items-center justify-center">
+      <div className="relative">
+        <div className="w-12 h-12 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-2 h-2 bg-gold rounded-full animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -49,6 +65,7 @@ export default function App() {
         <ExitGuard>
         <WakeLockManager />
         <PwaUpdatePrompt />
+        <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="/asporto" element={<CustomerView />} />
           <Route path="/menu" element={<PublicMenuView />} />
@@ -70,6 +87,7 @@ export default function App() {
           <Route path="/servizi" element={<StaffPinGuard requiredRoles={['admin']}><SystemPanelView /></StaffPinGuard>} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
         </Routes>
+        </Suspense>
         </ExitGuard>
         </PromptProvider>
         </PinProvider>
