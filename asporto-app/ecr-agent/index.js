@@ -3,7 +3,7 @@
  *
  * Espone un'API HTTP locale per:
  *   POST /pay          — avvia pagamento carta sul terminale PAX A35
- *   POST /cancel       — storna l'ultima transazione PAX
+ *   POST /cancel       — storna una transazione PAX (richiede STAN)
  *   POST /print-receipt — stampa scontrino fiscale su cassa Custom Big Plus RT
  *   GET  /status       — verifica connettività terminale PAX
  *   GET  /health       — health check agente
@@ -14,6 +14,8 @@
 require('dotenv').config();
 const net  = require('node:net');
 const http = require('node:http');
+const fs   = require('node:fs');
+const path = require('node:path');
 const { URL } = require('node:url');
 
 // ---------------------------------------------------------------------------
@@ -111,19 +113,50 @@ function buildPurchaseRequest(amountCents) {
 }
 
 /**
- * Reversal (storno ultima transazione)
+ * Reversal (storno) — doc Nexi "Reversal", 26 caratteri
  * Pos 1-8:   Terminal ID
  * Pos 9:     Reserved '0'
  * Pos 10:    Message code 'S'
  * Pos 11-18: Cash register ID
- * Pos 19-24: STAN (6 cifre). '000000' = nessun controllo, storna l'ultima tx.
+ * Pos 19-24: STAN della transazione da stornare (6 cifre, restituito nella risposta 'E')
  * Pos 25:    Additional data '0'
  * Pos 26:    Reserved '0'
  */
-function buildCancelRequest(stan = '') {
-  const stanField = stan ? stan.padStart(6, '0') : '000000';
-  const payload = TERMINAL_ID + '0S' + CASH_REG_ID + stanField + '0' + '0';
+function buildCancelRequest(stan) {
+  if (!/^\d{1,6}$/.test(String(stan || ''))) throw new Error('STAN mancante o non valido (6 cifre)');
+  const payload = TERMINAL_ID + '0S' + CASH_REG_ID + String(stan).padStart(6, '0') + '0' + '0';
   return buildFrame(payload);
+}
+
+/**
+ * Send Last Result 'G' — doc Nexi "Send last result", 22 caratteri.
+ * Il terminale rimanda ESATTAMENTE l'ultimo messaggio di esito salvato (stesso formato di 'E').
+ * Serve quando la risposta a un pagamento si è persa.
+ * Pos 1-8:   Terminal ID
+ * Pos 9:     Reserved '0'
+ * Pos 10:    Message code 'G'
+ * Pos 11-18: Cash register ID
+ * Pos 19:    Additional data '0'
+ * Pos 20-22: Reserved '000'
+ */
+function buildLastResultRequest() {
+  return buildFrame(TERMINAL_ID + '0G' + CASH_REG_ID + '0' + '000');
+}
+
+// ---------------------------------------------------------------------------
+// Ultimo STAN visto (persistito): serve a capire se l'esito recuperato con 'G'
+// riguarda il pagamento appena tentato o uno precedente
+// ---------------------------------------------------------------------------
+const STATE_FILE = path.join(__dirname, 'ecr-state.json');
+
+function loadLastStan() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')).lastStan || null; } catch { return null; }
+}
+
+function saveLastStan(stan) {
+  if (!stan) return;
+  try { fs.writeFileSync(STATE_FILE, JSON.stringify({ lastStan: stan, at: new Date().toISOString() })); }
+  catch (e) { console.warn('[ECR] Impossibile salvare ecr-state.json:', e.message); }
 }
 
 // ---------------------------------------------------------------------------
@@ -240,13 +273,21 @@ function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
     // 'waiting_ack'      — aspetto ACK/NAK dopo il mio invio
     // 'waiting_response' — aspetto la risposta applicativa del terminale
     let state     = 'waiting_ack';
+    // true appena il messaggio è stato scritto sul socket: da lì in poi un errore
+    // NON garantisce che il terminale non abbia eseguito l'operazione
+    let delivered = false;
 
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(globalTimer);
       socket.destroy();
-      result instanceof Error ? reject(result) : resolve(result);
+      if (result instanceof Error) {
+        result.delivered = delivered;
+        reject(result);
+      } else {
+        resolve(result);
+      }
     };
 
     const globalTimer = setTimeout(() => {
@@ -255,6 +296,7 @@ function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
 
     const sendMsg = () => {
       state = 'waiting_ack';
+      delivered = true;
       socket.write(message);
     };
 
@@ -353,6 +395,44 @@ function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
       if (!settled) finish(new Error('Connessione chiusa prima della risposta'));
     });
   });
+}
+
+/**
+ * Dopo un pagamento con esito perso, chiede al terminale l'ultimo esito ('G').
+ * - STAN nuovo (diverso da quello visto prima del pagamento) e importo coerente → è il nostro esito
+ * - STAN uguale a prima → il terminale non ha registrato nessuna nuova transazione → nessun addebito
+ * - altrimenti → esito non verificabile
+ */
+async function recoverLastResult(txId, amountCents, stanBefore) {
+  // Breve pausa: il terminale potrebbe essere ancora in chiusura della transazione
+  await new Promise(r => setTimeout(r, 2000));
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`[ECR] ${txId}: recupero ultimo esito ('G'), tentativo ${attempt}`);
+      const last = await sendToTerminal(buildLastResultRequest(), 8000);
+      if (!last.stan) return {};
+      if (stanBefore && last.stan === stanBefore) {
+        console.log(`[ECR] ${txId}: ultimo esito è ancora STAN ${last.stan} (precedente) → nessuna nuova transazione`);
+        return { notCharged: true };
+      }
+      const hostAmount = last.hostAmount != null ? Number(last.hostAmount) : null;
+      if (hostAmount != null && hostAmount !== amountCents && last.ok) {
+        console.warn(`[ECR] ${txId}: esito recuperato con importo diverso (${hostAmount} vs ${amountCents}), non attribuibile`);
+        return {};
+      }
+      if (!stanBefore) {
+        // Nessun riferimento precedente (primo pagamento o stato perso): non possiamo esserne certi
+        console.warn(`[ECR] ${txId}: STAN precedente sconosciuto, esito recuperato non attribuibile con certezza`);
+        return {};
+      }
+      console.log(`[ECR] ${txId}: esito recuperato — ${last.ok ? 'APPROVATO' : 'RIFIUTATO'} (STAN ${last.stan})`);
+      return { result: last };
+    } catch (e) {
+      console.warn(`[ECR] ${txId}: recupero fallito (${e.message})`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  return {};
 }
 
 // ---------------------------------------------------------------------------
@@ -618,47 +698,76 @@ const server = http.createServer(async (req, res) => {
     const partLabel = partNumber && totalParts ? ` [quota ${partNumber}/${totalParts}]` : '';
     console.log(`[ECR] Avvio pagamento ${txId}: €${rawAmount.toFixed(2)}${partLabel}`);
 
+    let stanBefore = loadLastStan();
+    if (!stanBefore) {
+      // Nessun riferimento: leggi l'ultimo esito PRIMA di pagare, per poter riconoscere dopo quello nuovo
+      try {
+        const last = await sendToTerminal(buildLastResultRequest(), 5000);
+        if (last.stan) { stanBefore = last.stan; saveLastStan(last.stan); }
+      } catch (e) {
+        console.warn(`[ECR] Riferimento STAN non disponibile (${e.message})`);
+      }
+    }
+    const reply = (code, result, extra = {}) => jsonResponse(res, code, {
+      ok:           result.ok,
+      txId,
+      amount:       rawAmount,
+      amountCents,
+      authCode:     result.authCode,
+      responseCode: result.resultCode,
+      stan:         result.stan || null,
+      description,
+      partNumber,
+      totalParts,
+      completedAt:  new Date().toISOString(),
+      error:        result.error || null,
+      ...extra,
+    });
+
     try {
-      const msg    = buildPurchaseRequest(amountCents);
-      const result = await sendToTerminal(msg);
-
-      const response = {
-        ok:          result.ok,
-        txId,
-        amount:      rawAmount,
-        amountCents,
-        authCode:    result.authCode,
-        responseCode: result.responseCode,
-        description,
-        partNumber,
-        totalParts,
-        completedAt: new Date().toISOString(),
-        error:       result.error,
-      };
-
-      console.log(`[ECR] ${txId}: ${result.ok ? 'APPROVATO' : 'RIFIUTATO'} (codice ${result.responseCode}, auth ${result.authCode})`);
-      return jsonResponse(res, result.ok ? 200 : 402, response);
+      const result = await sendToTerminal(buildPurchaseRequest(amountCents));
+      saveLastStan(result.stan);
+      console.log(`[ECR] ${txId}: ${result.ok ? 'APPROVATO' : 'RIFIUTATO'} (esito ${result.resultCode}, auth ${result.authCode}, STAN ${result.stan})`);
+      return reply(result.ok ? 200 : 402, result);
     } catch (err) {
       console.error(`[ECR] Errore ${txId}:`, err.message);
-      return jsonResponse(res, 503, {
-        ok: false, txId,
-        amount: rawAmount, amountCents,
-        error: err.message,
-      });
+
+      // Il terminale non ha mai ricevuto la richiesta: sicuramente nessun addebito
+      if (!err.delivered) {
+        return reply(503, { ok: false, error: `Terminale non raggiungibile: ${err.message}. Nessun addebito.` });
+      }
+
+      // Richiesta consegnata ma esito perso: chiedi l'ultimo esito al terminale ('G')
+      const recovered = await recoverLastResult(txId, amountCents, stanBefore);
+      if (recovered.result) {
+        saveLastStan(recovered.result.stan);
+        return reply(recovered.result.ok ? 200 : 402, recovered.result, { recovered: true });
+      }
+      if (recovered.notCharged) {
+        return reply(402, { ok: false, error: 'Pagamento non completato sul terminale. Nessun addebito.' }, { recovered: true });
+      }
+      // Esito impossibile da verificare: NON far ripetere il pagamento alla cieca
+      return reply(409, {
+        ok: false,
+        error: `Esito sconosciuto (${err.message}). Controlla sul terminale o sullo scontrino del POS se il pagamento è passato PRIMA di riprovare.`,
+      }, { uncertain: true });
     } finally {
       currentTx = null;
     }
   }
 
-  // POST /cancel — storna l'ultima transazione (opzionale)
+  // POST /cancel — storna una transazione (serve lo STAN restituito da /pay)
   if (req.method === 'POST' && pathname === '/cancel') {
     if (currentTx) {
       return jsonResponse(res, 409, { ok: false, error: 'Transazione in corso, impossibile stornare ora' });
     }
-    const body  = await readBody(req);
-    const txRef = body.txRef || '';
+    const body = await readBody(req);
+    const stan = String(body.stan ?? '').trim();
+    if (!/^\d{1,6}$/.test(stan)) {
+      return jsonResponse(res, 400, { ok: false, error: 'Serve lo STAN della transazione da stornare (6 cifre)' });
+    }
     try {
-      const msg    = buildCancelRequest(txRef);
+      const msg    = buildCancelRequest(stan);
       const result = await sendToTerminal(msg, 15000);
       return jsonResponse(res, result.ok ? 200 : 422, { ok: result.ok, ...result });
     } catch (err) {

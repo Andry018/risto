@@ -39,4 +39,5 @@ admin-server/secrets.env
 asporto-app/public/version.txt
 asporto-app/print-agent/.env
 asporto-app/ecr-agent/.env
+asporto-app/ecr-agent/ecr-state.json
 telegram-bot/dist/

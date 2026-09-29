@@ -3,7 +3,7 @@ import { CreditCard, CheckCircle, X, AlertCircle, ChevronRight, Printer, RotateC
 import { payWithCard, printFiscalReceipt } from '../lib/ecrAgent';
 import type { PaymentResult, FiscalReceiptItem } from '../lib/ecrAgent';
 
-type Phase = 'confirm' | 'paying' | 'partSuccess' | 'allDone' | 'error';
+type Phase = 'confirm' | 'paying' | 'partSuccess' | 'allDone' | 'error' | 'uncertain';
 
 interface Props {
   open: boolean;
@@ -101,7 +101,7 @@ export default function CardPaymentModal({
 
       if (!result.ok) {
         setErrorMsg(result.error || 'Transazione rifiutata dal terminale');
-        setPhase('error');
+        setPhase(result.uncertain ? 'uncertain' : 'error');
         return;
       }
 
@@ -351,6 +351,33 @@ export default function CardPaymentModal({
                 className="w-full bg-charcoal border border-surface-light text-gray-400 font-black text-xs py-3 rounded-2xl transition-all active:scale-95 hover:text-white"
               >
                 ANNULLA
+              </button>
+            </div>
+          )}
+
+          {/* === FASE: uncertain — esito non verificabile, rischio doppio addebito === */}
+          {phase === 'uncertain' && (
+            <div className="space-y-4">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-center">
+                <AlertCircle size={28} className="text-amber-400 mx-auto mb-2" />
+                <p className="text-amber-400 font-black">Esito del pagamento sconosciuto</p>
+                <p className="text-gray-300 text-xs mt-2">
+                  Il terminale ha ricevuto la richiesta ma la risposta è andata persa.
+                  <strong className="text-white"> Controlla sul POS o sullo scontrino del POS</strong> se il pagamento è passato.
+                </p>
+                <p className="text-gray-500 text-[10px] mt-2">{errorMsg}</p>
+              </div>
+              <button
+                onClick={handleRetry}
+                className="w-full bg-charcoal border border-amber-500/30 text-amber-400 font-black text-xs py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 hover:bg-amber-500/10"
+              >
+                <RotateCcw size={16} /> NON È PASSATO — RIPROVA
+              </button>
+              <button
+                onClick={handleClose}
+                className="w-full bg-charcoal border border-surface-light text-gray-400 font-black text-xs py-3 rounded-2xl transition-all active:scale-95 hover:text-white"
+              >
+                È PASSATO / CHIUDI (registra il conto a mano)
               </button>
             </div>
           )}

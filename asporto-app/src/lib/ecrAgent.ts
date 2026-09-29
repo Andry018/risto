@@ -20,6 +20,12 @@ export interface PaymentResult {
   totalParts?: number;
   completedAt?: string;
   error?: string;
+  /** Numero transazione del terminale: serve per stornarla */
+  stan?: string | null;
+  /** Esito ricostruito chiedendo al terminale l'ultimo risultato (risposta originale persa) */
+  recovered?: boolean;
+  /** Esito NON verificabile: il cliente potrebbe essere stato addebitato. Non ripetere alla cieca. */
+  uncertain?: boolean;
 }
 
 export interface TerminalStatus {

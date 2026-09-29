@@ -12,9 +12,16 @@
 
 ## 📋 Da fare (prossima sessione)
 
-### File Manager
+### File Manager (in sospeso)
+Funziona SOLO aprendo l'app da indirizzo interno (`http://192.168.1.250/`), MAI da `gestionale.90-minuti.it`:
+il dominio passa sempre dal tunnel Cloudflare (192.168.1.106) anche con Tailscale acceso → nginx risponde 403 (voluto).
 - [ ] Sul CT: copiare `linux/nginx.conf` in `/etc/nginx/nginx.conf` + `nginx -t && systemctl reload nginx`, riavviare `risto-admin`
-- [ ] Testare da LAN/Tailscale: naviga, edit, save, upload, delete (da internet deve dare 403)
+- [ ] Accesso da remoto via Tailscale: sull'host Proxmox `tailscale set --advertise-routes=192.168.1.0/24`,
+      poi approvare la route nella console Tailscale → aprire `http://192.168.1.250/`
+      (alternativa: Tailscale dentro CT 100, serve /dev/net/tun nella config LXC → IP 100.x già consentito)
+- [ ] Se da Tailscale dà ancora 403: `tail /var/log/nginx/access.log | grep files`, aggiungere l'IP visto in `linux/nginx.conf`
+- [ ] Opzione futura per usarlo anche dal dominio: Cloudflare Access (login email) davanti a `/admin/api/files`
+- [ ] Testare: naviga, edit, save, upload, delete
 - [ ] Aggiungere syntax highlighting per editor (CodeMirror/Monaco se serve)
 
 ### Telegram Bot
