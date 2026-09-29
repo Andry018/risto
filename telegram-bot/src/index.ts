@@ -24,13 +24,25 @@ bot.use(async (ctx, next) => {
 // Comandi base
 bot.command('start', ctx => ctx.reply(
   '🤖 GirasoleBot pronto!\n\n' +
-  'Scrivi in naturale, es:\n' +
-  '• "Aggiungi 2 pizze al tavolo 5"\n' +
-  '• "Chiudi il tavolo 3"\n' +
-  '• "Stampa cucina 5"\n' +
-  '• "Non c\'è più la pizza margherita"\n' +
-  '• "Come sta il tavolo 2?"\n' +
-  '• "Incasso oggi"'
+  'Scrivi in naturale, es:\n\n' +
+  '🍕 Tavoli\n' +
+  '• "Due margherite al 5, una senza mozzarella"\n' +
+  '• "Chiudi il 3" • "Stampa cucina 5"\n' +
+  '• "Come sta il 2?" • "Quali tavoli sono occupati?"\n\n' +
+  '📋 Menu\n' +
+  '• "Finita la mozzarella" • "La diavola costa 6 euro"\n\n' +
+  '📅 Prenotazioni\n' +
+  '• "Quante prenotazioni stasera?" • "Chi viene sabato?"\n' +
+  '• "Prenota Rossi 4 persone domani alle 20:30"\n' +
+  '• "Annulla la prenotazione di Rossi"\n\n' +
+  '💶 Incassi\n' +
+  '• "Incasso oggi" • "Quanto abbiamo fatto ieri?"\n\n' +
+  '📦 Magazzino\n' +
+  '• "Quanta farina abbiamo?" • "Cosa sta finendo?"\n' +
+  '• "Arrivati 10 kg di farina"\n\n' +
+  '👤 Turni\n' +
+  '• "Chi lavora stasera?" • "Metti Marco di turno sabato sera"\n\n' +
+  'Ogni modifica chiede conferma ✅ prima di essere eseguita.'
 ));
 
 bot.command('help', ctx => ctx.reply(
