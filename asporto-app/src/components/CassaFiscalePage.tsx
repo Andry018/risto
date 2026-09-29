@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import CassaFiscaleTab from './admin/CassaFiscaleTab';
+import PagamentiCartaSection from './admin/PagamentiCartaSection';
 
 export default function CassaFiscalePage() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function CassaFiscalePage() {
       </header>
       <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-8 md:px-10">
         <CassaFiscaleTab />
+        <PagamentiCartaSection />
       </div>
     </div>
   );

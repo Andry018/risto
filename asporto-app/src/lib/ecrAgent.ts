@@ -26,6 +26,27 @@ export interface PaymentResult {
   recovered?: boolean;
   /** Esito NON verificabile: il cliente potrebbe essere stato addebitato. Non ripetere alla cieca. */
   uncertain?: boolean;
+  /** Esito normalizzato dall'agent */
+  outcome?: 'approved' | 'declined' | 'not_executed' | 'unknown';
+}
+
+/**
+ * Storno di una transazione sul terminale (comando 'S').
+ * Secondo la documentazione Nexi vale per l'ultima transazione: le precedenti vanno stornate dal terminale.
+ * Richiede il secret del Pannello Sistema (lo storno muove soldi).
+ */
+export async function reverseCardPayment(stan: string, adminSecret: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${getEcrUrl()}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': adminSecret },
+      body: JSON.stringify({ stan }),
+    });
+    const data = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+    return { ok: !!data?.ok, error: data?.error || (res.ok ? undefined : `HTTP ${res.status}`) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'ECR agent non raggiungibile' };
+  }
 }
 
 export interface TerminalStatus {
@@ -48,14 +69,29 @@ export async function payWithCard(
     description?: string;
   }
 ): Promise<PaymentResult> {
+  // Se fetch lancia (rete del tablet caduta durante l'attesa) l'errore sale al chiamante:
+  // l'agent potrebbe aver completato il pagamento → esito sconosciuto.
   const res = await fetch(`${getEcrUrl()}/pay`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amount, ...opts }),
   });
 
-  const data = await res.json() as PaymentResult;
-  return data;
+  const data = await res.json().catch(() => null) as PaymentResult | null;
+  if (data) return data;
+
+  // Risposta non JSON = errore del proxy, non dell'agent
+  const agentDown = res.status === 502 || res.status === 503;
+  return {
+    ok: false,
+    txId: '',
+    amount,
+    outcome: agentDown ? 'not_executed' : 'unknown',
+    uncertain: !agentDown,
+    error: agentDown
+      ? `ECR agent non raggiungibile (HTTP ${res.status}). Nessun addebito.`
+      : `Risposta interrotta (HTTP ${res.status}): il terminale potrebbe aver completato il pagamento.`,
+  };
 }
 
 /**

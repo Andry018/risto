@@ -37,6 +37,14 @@ const CUSTOM_HOST      = process.env.CUSTOM_HOST      || '192.168.1.51';
 const CUSTOM_PORT      = Number(process.env.CUSTOM_PORT || 9100);
 const CUSTOM_TIMEOUT   = Number(process.env.CUSTOM_TIMEOUT || 10000);        // ms
 
+// Storno (/cancel): stesso secret del Pannello Sistema (admin-server). Senza, lo storno è disabilitato.
+const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
+function secretMatches(value) {
+  if (typeof value !== 'string' || !ADMIN_SECRET) return false;
+  const a = Buffer.from(value), b = Buffer.from(ADMIN_SECRET);
+  return a.length === b.length && require('node:crypto').timingSafeEqual(a, b);
+}
+
 // ---------------------------------------------------------------------------
 // Costanti protocollo ECR17 (Nexi LAN Integration)
 // ---------------------------------------------------------------------------
@@ -642,7 +650,7 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Secret');
 
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
 
@@ -728,29 +736,29 @@ const server = http.createServer(async (req, res) => {
       const result = await sendToTerminal(buildPurchaseRequest(amountCents));
       saveLastStan(result.stan);
       console.log(`[ECR] ${txId}: ${result.ok ? 'APPROVATO' : 'RIFIUTATO'} (esito ${result.resultCode}, auth ${result.authCode}, STAN ${result.stan})`);
-      return reply(result.ok ? 200 : 402, result);
+      return reply(result.ok ? 200 : 402, result, { outcome: result.ok ? 'approved' : 'declined' });
     } catch (err) {
       console.error(`[ECR] Errore ${txId}:`, err.message);
 
       // Il terminale non ha mai ricevuto la richiesta: sicuramente nessun addebito
       if (!err.delivered) {
-        return reply(503, { ok: false, error: `Terminale non raggiungibile: ${err.message}. Nessun addebito.` });
+        return reply(503, { ok: false, error: `Terminale non raggiungibile: ${err.message}. Nessun addebito.` }, { outcome: 'not_executed' });
       }
 
       // Richiesta consegnata ma esito perso: chiedi l'ultimo esito al terminale ('G')
       const recovered = await recoverLastResult(txId, amountCents, stanBefore);
       if (recovered.result) {
         saveLastStan(recovered.result.stan);
-        return reply(recovered.result.ok ? 200 : 402, recovered.result, { recovered: true });
+        return reply(recovered.result.ok ? 200 : 402, recovered.result, { recovered: true, outcome: recovered.result.ok ? 'approved' : 'declined' });
       }
       if (recovered.notCharged) {
-        return reply(402, { ok: false, error: 'Pagamento non completato sul terminale. Nessun addebito.' }, { recovered: true });
+        return reply(402, { ok: false, error: 'Pagamento non completato sul terminale. Nessun addebito.' }, { recovered: true, outcome: 'not_executed' });
       }
       // Esito impossibile da verificare: NON far ripetere il pagamento alla cieca
       return reply(409, {
         ok: false,
         error: `Esito sconosciuto (${err.message}). Controlla sul terminale o sullo scontrino del POS se il pagamento è passato PRIMA di riprovare.`,
-      }, { uncertain: true });
+      }, { uncertain: true, outcome: 'unknown' });
     } finally {
       currentTx = null;
     }
@@ -758,6 +766,12 @@ const server = http.createServer(async (req, res) => {
 
   // POST /cancel — storna una transazione (serve lo STAN restituito da /pay)
   if (req.method === 'POST' && pathname === '/cancel') {
+    if (!ADMIN_SECRET) {
+      return jsonResponse(res, 503, { ok: false, error: 'Storno da gestionale disabilitato: imposta ADMIN_SECRET in ecr-agent/.env' });
+    }
+    if (!secretMatches(req.headers['x-admin-secret'])) {
+      return jsonResponse(res, 401, { ok: false, error: 'Secret non valido: inseriscilo nel Pannello Sistema' });
+    }
     if (currentTx) {
       return jsonResponse(res, 409, { ok: false, error: 'Transazione in corso, impossibile stornare ora' });
     }

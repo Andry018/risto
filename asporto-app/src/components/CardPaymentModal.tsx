@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { CreditCard, CheckCircle, X, AlertCircle, ChevronRight, Printer, RotateCcw, Loader2 } from 'lucide-react';
 import { payWithCard, printFiscalReceipt } from '../lib/ecrAgent';
+import { recordCardPayment } from '../lib/cardPayments';
 import type { PaymentResult, FiscalReceiptItem } from '../lib/ecrAgent';
 
 type Phase = 'confirm' | 'paying' | 'partSuccess' | 'allDone' | 'error' | 'uncertain';
@@ -95,6 +96,7 @@ export default function CardPaymentModal({
         description: label || undefined,
       });
 
+      void recordCardPayment(result, { ...logCtx(partNum) });
       if (abortedRef.current) return;
 
       setLastResult(result);
@@ -116,10 +118,21 @@ export default function CardPaymentModal({
         setPhase('partSuccess');
       }
     } catch (err) {
+      // Nessuna risposta dall'agent: il terminale potrebbe aver comunque addebitato
+      const msg = err instanceof Error ? err.message : 'Errore di comunicazione con il terminale';
+      void recordCardPayment(null, { ...logCtx(partNum), errore: msg });
       if (abortedRef.current) return;
-      setErrorMsg(err instanceof Error ? err.message : 'Errore di comunicazione con il terminale');
-      setPhase('error');
+      setErrorMsg(msg);
+      setPhase('uncertain');
     }
+  }
+
+  function logCtx(partNum: number) {
+    return {
+      riferimento: label || 'POS',
+      importo: eachAmount,
+      quota: isSplit ? `${partNum}/${totalParts}` : undefined,
+    };
   }
 
   function handleClose() {
