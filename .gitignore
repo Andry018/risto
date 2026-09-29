@@ -33,3 +33,10 @@ nginx/logs/error.log
 log_stampante.txt
 .claude/settings.local.json
 .claude/settings.local.json
+
+# --- GENERATI / LOCALI DEL CT (mai committati) ---
+admin-server/secrets.env
+asporto-app/public/version.txt
+asporto-app/print-agent/.env
+asporto-app/ecr-agent/.env
+telegram-bot/dist/
