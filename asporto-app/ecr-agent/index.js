@@ -56,32 +56,44 @@ const NAK = 0x15; // Negative Acknowledgement
 const SOH = 0x01; // Start of Heading (progress update packets)
 const EOT = 0x04; // End of Transmission (fine progress update)
 const MAX_RETRIES = 3;
+// 'X' = pagamento con esito esteso (importo host, action code); 'P' = pagamento base
+const PAY_CODE = process.env.PAX_PAY_CODE === 'P' ? 'P' : 'X';
 
-// LRC = XOR di tutti i byte del payload + ETX, con valore base 0x7F
+// LRC = XOR dei byte con valore base 0x7F. La doc Nexi ("any message byte") non chiarisce
+// se STX/ETX sono inclusi: variante configurabile, verificabile con GET /diag (solo stato, niente soldi).
+//   etx   → messaggio + ETX           (default)
+//   noetx → solo messaggio
+//   stx   → STX + messaggio + ETX
+const LRC_MODES = ['etx', 'noetx', 'stx'];
+const LRC_MODE  = LRC_MODES.includes(process.env.PAX_LRC_MODE) ? process.env.PAX_LRC_MODE : 'etx';
+
 function calcLRC(bytes) {
   return bytes.reduce((acc, b) => acc ^ b, 0x7F);
 }
 
+function frameLRC(body, mode = LRC_MODE) {
+  if (mode === 'noetx') return calcLRC([...body]);
+  if (mode === 'stx')   return calcLRC([STX, ...body, ETX]);
+  return calcLRC([...body, ETX]);
+}
+
 // Frame applicativo: [STX][payload][ETX][LRC]
-function buildFrame(payload) {
+function buildFrame(payload, mode = LRC_MODE) {
   const payloadBuf = Buffer.from(payload, 'latin1');
   const frame = Buffer.alloc(payloadBuf.length + 3);
   frame[0] = STX;
   payloadBuf.copy(frame, 1);
   frame[payloadBuf.length + 1] = ETX;
-  frame[payloadBuf.length + 2] = calcLRC([...payloadBuf, ETX]);
+  frame[payloadBuf.length + 2] = frameLRC(payloadBuf, mode);
   return frame;
 }
 
-// ACK di conferma ricezione: [ACK][ETX][LRC]
-function buildAck() {
-  return Buffer.from([ACK, ETX, calcLRC([ACK, ETX])]);
+// ACK/NAK: [ACK|NAK][ETX][LRC] (niente STX, quindi 'stx' equivale a 'etx')
+function buildControl(code, mode = LRC_MODE) {
+  return Buffer.from([code, ETX, mode === 'noetx' ? calcLRC([code]) : calcLRC([code, ETX])]);
 }
-
-// NAK di rifiuto: [NAK][ETX][LRC]
-function buildNak() {
-  return Buffer.from([NAK, ETX, calcLRC([NAK, ETX])]);
-}
+const buildAck = () => buildControl(ACK);
+const buildNak = () => buildControl(NAK);
 
 // ---------------------------------------------------------------------------
 // Costruzione messaggi ECR → Terminale
@@ -116,7 +128,7 @@ function buildPurchaseRequest(amountCents) {
   const textPad = ''.padStart(128, ' ');
   // Usa 'X' (Extended Payment) invece di 'P': stessa struttura request ma
   // la risposta include anche action code e importo confermato dall'host.
-  const payload = TERMINAL_ID + '0X' + CASH_REG_ID + '0' + '00' + '0' + '0' + amount + textPad + '00000000';
+  const payload = TERMINAL_ID + '0' + PAY_CODE + CASH_REG_ID + '0' + '00' + '0' + '0' + amount + textPad + '00000000';
   return buildFrame(payload);
 }
 
@@ -353,7 +365,9 @@ function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
             buf = buf.slice(3);
             retries++;
             if (retries >= MAX_RETRIES) {
-              finish(new Error(`Terminale ha risposto con NAK dopo ${MAX_RETRIES} tentativi`));
+              const e = new Error(`Terminale ha risposto con NAK dopo ${MAX_RETRIES} tentativi (messaggio rifiutato: LRC, codice messaggio o Terminal ID)`);
+              e.rejected = true; // il terminale non ha elaborato il messaggio → nessun addebito
+              finish(e);
               return;
             }
             console.warn(`[ECR] NAK ricevuto, ritento (${retries}/${MAX_RETRIES})`);
@@ -368,8 +382,13 @@ function sendToTerminal(message, timeoutMs = RESPONSE_TIMEOUT) {
           const etxIdx = buf.indexOf(ETX, 1);
           if (etxIdx !== -1 && buf.length >= etxIdx + 2) {
             const lrcReceived = buf[etxIdx + 1];
-            const lrcExpected = calcLRC([...buf.slice(1, etxIdx), ETX]);
-            if (lrcReceived !== lrcExpected) {
+            const body        = buf.slice(1, etxIdx);
+            const lrcExpected = frameLRC(body);
+            const matchMode   = LRC_MODES.find(m => frameLRC(body, m) === lrcReceived);
+            if (matchMode && matchMode !== LRC_MODE) {
+              console.warn(`[ECR] LRC del terminale in variante '${matchMode}' (configurata '${LRC_MODE}'): imposta PAX_LRC_MODE=${matchMode}`);
+            }
+            if (!matchMode) {
               console.warn(`[ECR] LRC errato: ricevuto 0x${lrcReceived.toString(16)}, atteso 0x${lrcExpected.toString(16)}`);
               // Invia NAK e attendi ritrasmissione
               socket.write(buildNak());
@@ -667,6 +686,31 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // GET /diag — prova ogni variante di LRC con la richiesta di stato 's' (NON muove soldi)
+  if (req.method === 'GET' && pathname === '/diag') {
+    if (ADMIN_SECRET && !secretMatches(req.headers['x-admin-secret'])) {
+      return jsonResponse(res, 401, { ok: false, error: 'Secret non valido' });
+    }
+    if (currentTx) return jsonResponse(res, 409, { ok: false, error: 'Transazione in corso' });
+    const results = {};
+    for (const mode of LRC_MODES) {
+      try {
+        const r = await sendToTerminal(buildFrame(TERMINAL_ID + '0s', mode), 8000);
+        results[mode] = { esito: 'ACK + risposta', stato: r.status, operativo: r.ok, data: r.datetime, sw: r.swRelease };
+      } catch (e) {
+        results[mode] = { esito: e.rejected ? 'NAK (rifiutato)' : 'errore', dettaglio: e.message };
+      }
+    }
+    const good = LRC_MODES.find(m => results[m].esito.startsWith('ACK'));
+    return jsonResponse(res, 200, {
+      terminalId: TERMINAL_ID, host: `${PAX_HOST}:${PAX_PORT}`, lrcConfigurato: LRC_MODE, codicePagamento: PAY_CODE,
+      risultati: results,
+      consiglio: good
+        ? `Usa PAX_LRC_MODE=${good} nel .env${good === LRC_MODE ? ' (già impostato)' : ''}`
+        : 'Nessuna variante accettata: controlla Terminal ID (stesso del terminale) e "Controllo ID terminale"',
+    });
+  }
+
   // GET /status — verifica connettività terminale
   if (req.method === 'GET' && pathname === '/status') {
     try {
@@ -741,6 +785,9 @@ const server = http.createServer(async (req, res) => {
       console.error(`[ECR] Errore ${txId}:`, err.message);
 
       // Il terminale non ha mai ricevuto la richiesta: sicuramente nessun addebito
+      if (err.rejected) {
+        return reply(502, { ok: false, error: 'Il terminale ha rifiutato la richiesta (NAK). Nessun addebito. Esegui la diagnosi: GET /ecr-agent/diag' }, { outcome: 'not_executed' });
+      }
       if (!err.delivered) {
         return reply(503, { ok: false, error: `Terminale non raggiungibile: ${err.message}. Nessun addebito.` }, { outcome: 'not_executed' });
       }
@@ -847,7 +894,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(SERVER_PORT, '0.0.0.0', () => {
   console.log('=== ECR Agent Avviato ===');
   console.log(`HTTP bridge su :${SERVER_PORT}`);
-  console.log(`Terminale PAX A35: ${PAX_HOST}:${PAX_PORT}`);
+  console.log(`Terminale PAX A35: ${PAX_HOST}:${PAX_PORT} (TID ${TERMINAL_ID}, LRC '${LRC_MODE}', pagamento '${PAY_CODE}')`);
   console.log('Endpoints: GET /health  GET /status  POST /pay  POST /cancel');
 });
 
