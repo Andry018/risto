@@ -101,11 +101,26 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const toast = useToast();
   const { confirm } = useConfirm();
 
+  /** true se il carrello differisce dall'ultimo salvataggio (stesse chiavi usate per il delta di stampa) */
+  function hasUnsavedChanges(): boolean {
+    const current = new Map<string, number>();
+    for (const item of cart) {
+      const key = getItemKey(item);
+      current.set(key, (current.get(key) || 0) + item.quantity);
+    }
+    const saved = savedItemQtysRef.current;
+    if (current.size !== saved.size) return true;
+    for (const [key, qty] of current) {
+      if (saved.get(key) !== qty) return true;
+    }
+    return false;
+  }
+
   async function handleBack() {
-    if (cart.length > 0) {
+    if (cart.length > 0 && hasUnsavedChanges()) {
       const ok = await confirm({
-        title: 'Carrello non vuoto',
-        message: 'Hai articoli nel carrello. Uscire ora li perderà. Continuare?',
+        title: 'Modifiche non salvate',
+        message: 'Nel carrello ci sono articoli non ancora salvati. Uscire ora li perderà. Continuare?',
         confirmLabel: 'Esci',
         cancelLabel: 'Rimani',
         destructive: true,

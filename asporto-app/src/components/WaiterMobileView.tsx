@@ -91,10 +91,7 @@ export default function WaiterMobileView() {
     const diff = e.touches[0].clientX - swipeStartX.current;
     if (diff > 50) {
       // Swipe right detected - go back to table map
-      if (cart.length > 0) {
-        saveDraft(selectedTable.id, cart, selectedTable.clienti || 2);
-      }
-      setSelectedTable(null);
+      leaveTable();
     }
   };
 
@@ -203,8 +200,12 @@ export default function WaiterMobileView() {
   ingredientsRef.current = ingredients;
   selectedTableRef.current = selectedTable;
 
-  /** Carica ordine IN_ATTESA dal DB e aggiorna carrello (anche da eventi Realtime). */
-  async function loadOpenOrderForTable(table: Tavolo): Promise<boolean> {
+  /**
+   * Carica ordine IN_ATTESA dal DB e aggiorna carrello (anche da eventi Realtime).
+   * keepCart: aggiorna solo id ordine e quantità già salvate, lasciando il carrello corrente
+   * (bozza ripristinata): senza, il salvataggio successivo creerebbe un ordine duplicato.
+   */
+  async function loadOpenOrderForTable(table: Tavolo, opts: { keepCart?: boolean } = {}): Promise<boolean> {
     if (IS_DEMO_MODE || !supabase) return false;
     const prods = productsRef.current;
     const ings = ingredientsRef.current;
@@ -239,21 +240,50 @@ export default function WaiterMobileView() {
           uniqueId: newUniqueId()
         };
       });
-      setCart(mappedCart);
       const qtyMap = new Map<string, number>();
       for (const i of mappedCart) {
         const k = getItemKey(i);
         qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
       }
       savedItemQtysRef.current = qtyMap;
+      if (opts.keepCart) return true;
+      setCart(mappedCart);
       setActiveTab('RIEPILOGO');
       return true;
     } else {
       setActiveOrderId(null);
+      savedItemQtysRef.current = new Map();
+      if (opts.keepCart) return false;
       setCart([]);
       setActiveTab('MENU');
       return false;
     }
+  }
+
+  /** true se il carrello differisce dall'ultimo salvataggio (stesse chiavi del delta di stampa) */
+  function hasUnsavedChanges(): boolean {
+    const current = new Map<string, number>();
+    for (const item of cart) {
+      const key = getItemKey(item);
+      current.set(key, (current.get(key) || 0) + item.quantity);
+    }
+    const saved = savedItemQtysRef.current;
+    if (current.size !== saved.size) return true;
+    for (const [key, qty] of current) {
+      if (saved.get(key) !== qty) return true;
+    }
+    return false;
+  }
+
+  /** Torna alla mappa: bozza solo se ci sono modifiche non salvate, altrimenti niente (e via bozze vecchie) */
+  function leaveTable() {
+    if (!selectedTable) return;
+    if (cart.length > 0 && hasUnsavedChanges()) {
+      saveDraft(selectedTable.id, cart, selectedTable.clienti || 2);
+    } else {
+      clearDraft(selectedTable.id);
+    }
+    setSelectedTable(null);
   }
 
   async function fetchTables() {
@@ -481,8 +511,12 @@ export default function WaiterMobileView() {
       setSelectedTable(table);
       setCart(draft.cart);
       setActiveOrderId(null);
+      savedItemQtysRef.current = new Map();
       setActiveTab('RIEPILOGO');
       clearDraft(table.id);
+      // Se il tavolo ha già un ordine salvato, recupera id e quantità salvate senza toccare la bozza:
+      // così il salvataggio aggiorna l'ordine esistente e stampa solo le novità
+      if (table.status !== 'LIBERO') void loadOpenOrderForTable(table, { keepCart: true });
       if (table.status === 'LIBERO') {
         const covers = draft.covers || table.clienti || 2;
         const updatedTable = { ...table, status: 'OCCUPATO' as const, clienti: covers };
@@ -1127,7 +1161,7 @@ export default function WaiterMobileView() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Mobile */}
           <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
-            <button onClick={() => { if (selectedTable && cart.length > 0) saveDraft(selectedTable.id, cart, selectedTable.clienti || 2); setSelectedTable(null); }} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
+            <button onClick={leaveTable} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
             <div className="flex flex-col items-center">
               <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
               <div className="flex items-center gap-3 mt-1">
