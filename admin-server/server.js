@@ -268,9 +268,89 @@ async function router(req, res) {
     }
   }
 
+  // POST /api/files  { action: list|read|write|upload|mkdir|delete, path, content?, encoding? }
+  // File Manager della webapp. Solo da LAN/Tailscale: nginx imposta X-Risto-Lan=1 unicamente
+  // nella location /admin/api/files (che nega il tunnel Cloudflare) e lo azzera altrove.
+  if (method === 'POST' && pathname === '/api/files') {
+    if (req.headers['x-risto-lan'] !== '1') {
+      return json(res, 403, { ok: false, error: 'File Manager disponibile solo dalla rete del locale o da Tailscale' });
+    }
+    const body = await readBody(req);
+    try {
+      return json(res, 200, { ok: true, ...fileManager(body) });
+    } catch (e) {
+      return json(res, e.status || 500, { ok: false, error: e.message });
+    }
+  }
+
   // 404
   res.writeHead(404);
   res.end('Not found');
+}
+
+// ── File Manager ────────────────────────────────────────
+const FM_MAX_READ = 2 * 1024 * 1024; // 2 MB: oltre non ha senso aprirlo nell'editor
+
+function fmError(status, message) {
+  const e = new Error(message);
+  e.status = status;
+  return e;
+}
+
+/** Risolve `rel` dentro BASE; rifiuta path traversal anche tramite symlink */
+function fmResolve(rel) {
+  const root = fs.realpathSync(BASE);
+  const full = path.resolve(root, String(rel || '.'));
+  const inside = (p) => p === root || p.startsWith(root + path.sep);
+  if (!inside(full)) throw fmError(400, 'Percorso fuori dalla cartella consentita');
+  let probe = full; // primo antenato esistente: se è un symlink che punta fuori, rifiuta
+  while (!fs.existsSync(probe)) probe = path.dirname(probe);
+  if (!inside(fs.realpathSync(probe))) throw fmError(400, 'Percorso fuori dalla cartella consentita');
+  return { root, full };
+}
+
+function fileManager({ action, path: rel, content, encoding }) {
+  const { root, full } = fmResolve(rel);
+  switch (action) {
+    case 'list':
+      return {
+        files: fs.readdirSync(full, { withFileTypes: true }).map((d) => {
+          let st = null;
+          try { st = fs.statSync(path.join(full, d.name)); } catch { /* link rotto */ }
+          return {
+            name: d.name,
+            isDirectory: st ? st.isDirectory() : d.isDirectory(),
+            size: st ? st.size : 0,
+            modified: st ? st.mtime.toISOString() : null,
+          };
+        }),
+      };
+    case 'read': {
+      const st = fs.statSync(full);
+      if (st.isDirectory()) throw fmError(400, 'È una cartella');
+      if (st.size > FM_MAX_READ) throw fmError(413, 'File troppo grande per l\'editor (max 2 MB)');
+      return { content: fs.readFileSync(full, 'utf8') };
+    }
+    case 'write':
+      if (typeof content !== 'string') throw fmError(400, 'Contenuto mancante');
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, content, 'utf8');
+      return {};
+    case 'upload':
+      if (encoding !== 'base64' || typeof content !== 'string') throw fmError(400, 'Upload richiede contenuto base64');
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, Buffer.from(content, 'base64'));
+      return {};
+    case 'mkdir':
+      fs.mkdirSync(full, { recursive: true });
+      return {};
+    case 'delete':
+      if (full === root) throw fmError(400, 'Non posso eliminare la cartella principale');
+      fs.rmSync(full, { recursive: true });
+      return {};
+    default:
+      throw fmError(400, 'Azione non valida');
+  }
 }
 
 // ── Server ──────────────────────────────────────────────

@@ -5,8 +5,10 @@ import {
   Code 
 } from 'lucide-react';
 import { useToast } from './Toast';
+import { getSetting, SETTINGS_KEYS } from '../lib/appSettings';
 
-const FILE_MANAGER_URL = (import.meta.env.VITE_FILE_MANAGER_URL as string) || '/api/file-manager';
+// Servito da admin-server (gira sul CT, vede /opt/risto), stessa auth del Pannello Sistema
+const FILE_MANAGER_URL = '/admin/api/files';
 
 interface FileEntry {
   name: string;
@@ -24,31 +26,30 @@ export default function FileManagerView() {
   const [editing, setEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHidden, setShowHidden] = useState(false);
-  const toast = useToast();
+  // Solo addToast (stabile): l'oggetto di useToast() cambia a ogni toast e
+  // metterlo nelle dipendenze di loadFiles causava un loop di richieste sugli errori
+  const { addToast } = useToast();
+  const secret = getSetting(SETTINGS_KEYS.systemPanelSecret, '');
 
-  const getAuthHeader = () => {
-    const token = localStorage.getItem('sb-access-token') || 
-                  sessionStorage.getItem('sb-access-token');
-    return token ? `Bearer ${token}` : '';
-  };
-
-  const api = async (action: string, path: string, data?: any) => {
+  const api = async (action: string, path: string, data?: Record<string, unknown>) => {
     const res = await fetch(FILE_MANAGER_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': getAuthHeader()
+        'X-Admin-Secret': secret,
       },
       body: JSON.stringify({ action, path, ...data })
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.ok) {
+      if (res.status === 401) throw new Error('Secret non valido: controllalo in Impostazioni → Sistema');
+      throw new Error(body?.error || `HTTP ${res.status}`);
     }
-    return res.json();
+    return body;
   };
 
   const loadFiles = useCallback(async () => {
+    if (!secret) return;
     setLoading(true);
     try {
       const res = await api('list', currentPath);
@@ -62,11 +63,11 @@ export default function FileManagerView() {
       });
       setFiles(list);
     } catch (e) {
-      toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Caricamento fallito' });
+      addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Caricamento fallito' });
     } finally {
       setLoading(false);
     }
-  }, [currentPath, showHidden, toast]);
+  }, [currentPath, showHidden, addToast, secret]);
 
   useEffect(() => {
     loadFiles();
@@ -92,7 +93,7 @@ export default function FileManagerView() {
       setFileContent(res.content);
       setEditing(false);
     } catch (e) {
-      toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Lettura fallita' });
+      addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Lettura fallita' });
     }
   };
 
@@ -100,10 +101,10 @@ export default function FileManagerView() {
     if (!selectedFile) return;
     try {
       await api('write', `${currentPath}/${selectedFile.name}`, { content: fileContent });
-      toast.addToast({ type: 'success', title: 'Salvato', message: `${selectedFile.name} aggiornato` });
+      addToast({ type: 'success', title: 'Salvato', message: `${selectedFile.name} aggiornato` });
       setEditing(false);
     } catch (e) {
-      toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Salvataggio fallito' });
+      addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Salvataggio fallito' });
     }
   };
 
@@ -116,10 +117,10 @@ export default function FileManagerView() {
       } else {
         await api('write', `${currentPath}/${name}`, { content: '' });
       }
-      toast.addToast({ type: 'success', title: 'Creato', message: `${name} creato` });
+      addToast({ type: 'success', title: 'Creato', message: `${name} creato` });
       loadFiles();
     } catch (e) {
-      toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Creazione fallita' });
+      addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Creazione fallita' });
     }
   };
 
@@ -127,11 +128,11 @@ export default function FileManagerView() {
     if (!confirm(`Eliminare ${file.name}?`)) return;
     try {
       await api('delete', `${currentPath}/${file.name}`);
-      toast.addToast({ type: 'success', title: 'Eliminato', message: `${file.name} rimosso` });
+      addToast({ type: 'success', title: 'Eliminato', message: `${file.name} rimosso` });
       loadFiles();
       if (selectedFile?.name === file.name) setSelectedFile(null);
     } catch (e) {
-      toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Eliminazione fallita' });
+      addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Eliminazione fallita' });
     }
   };
 
@@ -146,7 +147,7 @@ export default function FileManagerView() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Download fallito' });
+      addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Download fallito' });
     }
   };
 
@@ -161,10 +162,10 @@ export default function FileManagerView() {
           content: base64, 
           encoding: 'base64' 
         });
-        toast.addToast({ type: 'success', title: 'Caricato', message: file.name });
+        addToast({ type: 'success', title: 'Caricato', message: file.name });
         loadFiles();
       } catch (e) {
-        toast.addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Upload fallito' });
+        addToast({ type: 'error', title: 'Errore', message: e instanceof Error ? e.message : 'Upload fallito' });
       }
     };
     reader.readAsDataURL(file);
@@ -189,6 +190,17 @@ export default function FileManagerView() {
   const filteredFiles = searchQuery 
     ? files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : files;
+
+  if (!secret) {
+    return (
+      <div className="h-full flex items-center justify-center p-6 text-center">
+        <p className="text-sm text-gray-400 max-w-sm">
+          Il File Manager usa lo stesso secret del <a href="/servizi" className="text-gold underline">Pannello Sistema</a>.
+          Inseriscilo lì (valore di <code className="text-gold">ADMIN_SECRET</code> di admin-server) e torna qui.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-charcoal text-white">
