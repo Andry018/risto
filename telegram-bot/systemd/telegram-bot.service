@@ -10,7 +10,6 @@ ExecStart=/usr/bin/node dist/index.js
 Restart=always
 RestartSec=5
 EnvironmentFile=/opt/risto/telegram-bot/.env
-User=risto
 StandardOutput=journal
 StandardError=journal
 

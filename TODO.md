@@ -59,11 +59,11 @@ cd risto
 VITE_FILE_MANAGER_URL=https://xxx.supabase.co/functions/v1/file-manager
 
 # telegram-bot/.env
-BOT_TOKEN=8757383543:AAGxvMuFyG3hDKa7W_Mpduf-Cu4SAORnpsI
-ADMIN_IDS=123456789,987654321
+BOT_TOKEN=<da @BotFather — MAI committare>
+ADMIN_IDS=576950037
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=phi3.5:3.8b-mini-instruct-q4_K_M
-SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_URL=http://localhost:54321
 SUPABASE_SERVICE_KEY=eyJ...
 PRINT_AGENT_URL=http://localhost:8787
 ```
