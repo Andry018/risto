@@ -3,6 +3,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const VENDOR_CHUNKS: Record<string, string[]> = {
+  'vendor-react': ['react', 'react-dom', 'react-router-dom', 'react-router', 'scheduler'],
+  'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
+  'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas'],
+  'vendor-supabase': ['@supabase'],
+  'vendor-qr': ['html5-qrcode', 'qrcode.react'],
+};
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -88,12 +96,14 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
-          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas'],
-          'vendor-supabase': ['@supabase/supabase-js'],
-          'vendor-qr': ['html5-qrcode', 'qrcode.react'],
+        // Forma a funzione: accettata sia da Rollup (Vite 5) sia da Rolldown (Vite 7+),
+        // che non supporta più la forma a oggetto
+        manualChunks(id: string) {
+          if (!id.includes('/node_modules/')) return undefined;
+          for (const [chunk, pkgs] of Object.entries(VENDOR_CHUNKS)) {
+            if (pkgs.some(p => id.includes(`/node_modules/${p}/`))) return chunk;
+          }
+          return undefined;
         },
       },
     },

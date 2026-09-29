@@ -9,12 +9,15 @@ mkdir -p "$RISTO_BASE/logs"
 echo "[$(date -Iseconds)] Autopull avviato" >> "$LOG"
 
 cd "$RISTO_BASE"
+# Le versioni precedenti di questo script cancellavano il lockfile: ripristinalo,
+# altrimenti git pull si blocca quando il lockfile cambia su GitHub
+git checkout -- asporto-app/package-lock.json >> "$LOG" 2>&1 || true
 git pull >> "$LOG" 2>&1
 
 cd asporto-app
-# Rimuovi lockfile generato su Windows (contiene binari win32 incompatibili)
-rm -f package-lock.json
-npm install >> "$LOG" 2>&1
+# npm ci = esattamente le versioni del lockfile (quelle testate). Il lockfile non contiene
+# più pacchetti solo-Windows obbligatori: le varianti linux sono incluse come opzionali.
+npm ci >> "$LOG" 2>&1
 
 # Scrivi version.txt prima della build (come in start.bat / autopull.bat)
 git -C "$RISTO_BASE" rev-parse HEAD > public/version.txt
