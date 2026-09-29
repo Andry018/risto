@@ -1,51 +1,41 @@
-import { createClient } from '@supabase/supabase-js';
 import { env } from './config.js';
 import { TOOLS } from './tools/index.js';
-import { executeTool } from './tools/implementations.js';
+import { WRITE_TOOLS, prepareAction, executeReadTool, type PreparedAction } from './tools/implementations.js';
 
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+// Prompt corto: su CPU ogni token di prompt costa tempo.
+// Gli esempi fanno da "mini training" per il modello piccolo.
+const SYSTEM_PROMPT = `Sei GirasoleBot, assistente del ristorante "Il Girasole". Rispondi sempre in italiano, breve.
+Usa SEMPRE un tool per le richieste operative. Non inventare dati.
+Tavoli: passa solo il numero/nome (es. "5", "2B"). Piatti: passa il nome come detto dall'utente, il sistema lo abbina al menu.
+Portate: 1=antipasto 2=primo 3=secondo 4=contorno 5=dolce/caffè.
 
-const SYSTEM_PROMPT = `Sei "GirasoleBot", assistente del ristorante "Il Girasole".
+Esempi:
+"due margherite al 5" → add_item_to_table {"table_id":"5","items":[{"name":"margherita","quantity":2}]}
+"al 3 una coca e un tiramisù" → add_item_to_table {"table_id":"3","items":[{"name":"coca","quantity":1},{"name":"tiramisù","quantity":1}]}
+"chiudi il 5" / "il 5 ha pagato" → close_table {"table_id":"5"}
+"stampa cucina 5" → print_order {"table_id":"5","type":"kitchen"}
+"finita la margherita" → set_availability {"name":"margherita","available":false}
+"torna la margherita" → set_availability {"name":"margherita","available":true}
+"come sta il 2?" → get_table_status {"table_id":"2"}
+"incasso oggi" / "quanto abbiamo fatto?" → get_daily_report {}`;
 
-TOOL DISPONIBILI: add_item_to_table, close_table, print_order, set_availability, get_table_status, get_daily_report.
+// Ollama restituisce `arguments` come oggetto (non stringa JSON come OpenAI) e spesso senza `id`
+type ToolCall = {
+  id?: string;
+  function: { name: string; arguments: Record<string, unknown> | string };
+};
 
-REGOLE:
-- Tavoli: ID numerico stringa (es. "5" per Tavolo 5)
-- Piatti: nomi ESATTI dal menu (Antipasto, Pizza Margherita, Birra Media, Caffè, ecc.)
-- Portate: "1"=antipasto, "2"=primo, "3"=secondo, "4"=contorno, "5"=dolce/caffè
-- Se utente dice "due pizze al tavolo 5" → add_item_to_table({table_id:"5", items:[{name:"Pizza Margherita",quantity:2}]})
-- Se "chiudi il 5" → close_table({table_id:"5"})
-- Se "stampa cucina 5" → print_order({table_id:"5", type:"kitchen"})
-- Se "non c'è più la pizza" → set_availability({name:"Pizza Margherita", available:false})
-- Se "come sta il tavolo 3?" → get_table_status({table_id:"3"})
-- Se "incasso oggi" → get_daily_report({})
-- Chiedi conferma SOLO per azioni distruttive (chiudi conto, cancella piatto)
-- Rispondi SEMPRE in italiano, tono professionale ma amichevole
-- Non inventare dati: usa i tool per informazioni reali
-
-ESEMPI:
-User: "Aggiungi due antipasti al tavolo 4" → tool: add_item_to_table
-User: "Il tavolo 2 ha finito, chiudi" → tool: close_table
-User: "Quanto abbiamo fatto oggi?" → tool: get_daily_report
-User: "Metti la birra non disponibile" → tool: set_availability`;
-
-interface OllamaResponse {
-  message: {
-    role: string;
-    content: string;
-    tool_calls?: Array<{
-      id: string;
-      function: { name: string; arguments: string };
-    }>;
-  };
-  done: boolean;
-}
-
-type ChatMessage = 
+type ChatMessage =
   | { role: 'system'; content: string }
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string; tool_calls?: Array<{id: string; function: {name: string; arguments: string}}> }
-  | { role: 'tool'; content: string; tool_call_id: string };
+  | { role: 'assistant'; content: string; tool_calls?: ToolCall[] }
+  | { role: 'tool'; content: string; tool_call_id?: string };
+
+const MAX_TOOL_ROUNDS = 3;
+
+export type LLMResult =
+  | { kind: 'text'; text: string }
+  | { kind: 'confirm'; action: PreparedAction };
 
 async function callOllama(messages: ChatMessage[]) {
   const res = await fetch(`${env.OLLAMA_URL}/api/chat`, {
@@ -55,74 +45,63 @@ async function callOllama(messages: ChatMessage[]) {
       model: env.OLLAMA_MODEL,
       messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
       tools: TOOLS,
-      tool_choice: 'auto',
       stream: false,
+      keep_alive: '24h',
       options: {
-        temperature: 0.1,
+        temperature: 0,
         num_ctx: 2048,
         num_thread: 4,
         num_batch: 512,
-        repeat_penalty: 1.1
       }
     })
   });
-  
+
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Ollama error: ${res.status} ${err}`);
   }
   return res.json() as Promise<{
-    message: {
-      role: string;
-      content: string;
-      tool_calls?: Array<{
-        id: string;
-        function: { name: string; arguments: string };
-      }>;
-    };
+    message: { role: string; content: string; tool_calls?: ToolCall[] };
     done: boolean;
   }>;
 }
 
-export async function processWithLLM(userText: string): Promise<string> {
-  const messages: ChatMessage[] = [{ role: 'user' as const, content: userText }];
-  
+const parseArgs = (raw: ToolCall['function']['arguments']) =>
+  typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+export async function processWithLLM(userText: string): Promise<LLMResult> {
+  const messages: ChatMessage[] = [{ role: 'user', content: userText }];
+
   let response = await callOllama(messages);
-  
-  // Loop function calling
-  while (response.message.tool_calls?.length) {
-    for (const call of response.message.tool_calls) {
+
+  for (let round = 0; response.message.tool_calls?.length; round++) {
+    if (round >= MAX_TOOL_ROUNDS) return { kind: 'text', text: '⚠️ Non ho capito, riprova in modo più semplice.' };
+
+    const calls = response.message.tool_calls;
+
+    // Azione di scrittura: ci fermiamo e chiediamo conferma (una sola azione per messaggio)
+    const write = calls.find(c => WRITE_TOOLS.has(c.function.name));
+    if (write) {
       try {
-        const args = JSON.parse(call.function.arguments);
-        const result = await executeTool(call.function.name, args);
-        // Cast response.message to proper ChatMessage (role will be 'assistant')
-        const assistantMsg: ChatMessage = {
-          role: 'assistant',
-          content: response.message.content,
-          tool_calls: response.message.tool_calls
-        };
-        messages.push(assistantMsg);
-        messages.push({ 
-          role: 'tool' as const, 
-          tool_call_id: call.id, 
-          content: JSON.stringify(result) 
-        });
+        return { kind: 'confirm', action: await prepareAction(write.function.name, parseArgs(write.function.arguments)) };
       } catch (e) {
-        const assistantMsg: ChatMessage = {
-          role: 'assistant',
-          content: response.message.content,
-          tool_calls: response.message.tool_calls
-        };
-        messages.push(assistantMsg);
-        messages.push({ 
-          role: 'tool' as const, 
-          tool_call_id: call.id, 
-          content: JSON.stringify({ error: e instanceof Error ? e.message : 'Tool failed' }) 
-        });
+        return { kind: 'text', text: `❌ ${e instanceof Error ? e.message : 'Richiesta non valida'}` };
       }
+    }
+
+    // Solo lettura: eseguiamo e lasciamo che il modello formuli la risposta
+    messages.push({ role: 'assistant', content: response.message.content, tool_calls: calls });
+    for (const call of calls) {
+      let content: string;
+      try {
+        content = JSON.stringify(await executeReadTool(call.function.name, parseArgs(call.function.arguments)));
+      } catch (e) {
+        content = JSON.stringify({ error: e instanceof Error ? e.message : 'Tool failed' });
+      }
+      messages.push({ role: 'tool', tool_call_id: call.id, content });
     }
     response = await callOllama(messages);
   }
-  
-  return response.message.content || 'Nessuna risposta generata';
+
+  return { kind: 'text', text: response.message.content || 'Non ho capito, puoi riformulare?' };
 }

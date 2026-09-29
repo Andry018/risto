@@ -1,13 +1,20 @@
 import 'dotenv/config';
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
+import { randomUUID } from 'node:crypto';
 import { env, ADMIN_SET } from './config.js';
 import { processWithLLM } from './llm.js';
+import { executeConfirmed, type PreparedAction } from './tools/implementations.js';
 
 const bot = new Telegraf(env.BOT_TOKEN);
+
+// Azioni in attesa di conferma (in memoria: si perdono al riavvio, va bene così)
+const PENDING_TTL_MS = 10 * 60_000;
+const pending = new Map<string, { action: PreparedAction; userId: number; at: number }>();
 
 // Auth middleware
 bot.use(async (ctx, next) => {
   if (!ADMIN_SET.has(ctx.from?.id ?? 0)) {
+    console.warn(`Accesso negato: utente ${ctx.from?.id} (@${ctx.from?.username ?? '-'})`);
     await ctx.reply('⛔ Non autorizzato. Contatta l\'amministratore.');
     return;
   }
@@ -34,22 +41,61 @@ bot.command('help', ctx => ctx.reply(
   '\nOppure scrivi direttamente in linguaggio naturale.'
 ));
 
-bot.command('status', ctx => ctx.reply('✅ Bot attivo • Ollama connesso • Supabase ok'));
+bot.command('status', ctx => ctx.reply(`✅ Bot attivo • modello ${env.OLLAMA_MODEL}`));
+
+// Conferma / annulla azioni proposte dall'LLM
+bot.action(/^(ok|no):(.+)$/, async (ctx) => {
+  const [, choice, id] = ctx.match;
+  const entry = pending.get(id);
+  pending.delete(id);
+  await ctx.answerCbQuery();
+
+  if (!entry || Date.now() - entry.at > PENDING_TTL_MS) {
+    await ctx.editMessageText('⌛ Richiesta scaduta, riscrivila.');
+    return;
+  }
+  if (entry.userId !== ctx.from.id) return;
+  if (choice === 'no') {
+    await ctx.editMessageText(`${entry.action.summary}\n\n❌ Annullato`);
+    return;
+  }
+  try {
+    const result = await executeConfirmed(entry.action);
+    await ctx.editMessageText(`${entry.action.summary}\n\n${result}`);
+  } catch (e) {
+    console.error('Tool error:', e);
+    await ctx.editMessageText(`${entry.action.summary}\n\n❌ ${e instanceof Error ? e.message : 'Errore'}`);
+  }
+});
 
 // Messaggi naturali → LLM
 bot.on('message', async (ctx) => {
   if (!ctx.message || !('text' in ctx.message)) return;
-  
+
   const text = ctx.message.text.trim();
   if (!text) return;
-  
+
+  // Su CPU la risposta può richiedere vari secondi: rinnova "sta scrivendo…"
+  const typing = setInterval(() => ctx.sendChatAction('typing').catch(() => {}), 4000);
   try {
     await ctx.sendChatAction('typing');
-    const reply = await processWithLLM(text);
-    await ctx.reply(reply);
+    const result = await processWithLLM(text);
+    if (result.kind === 'text') {
+      await ctx.reply(result.text);
+      return;
+    }
+    const id = randomUUID().slice(0, 8);
+    for (const [k, v] of pending) if (Date.now() - v.at > PENDING_TTL_MS) pending.delete(k);
+    pending.set(id, { action: result.action, userId: ctx.from.id, at: Date.now() });
+    await ctx.reply(result.action.summary, Markup.inlineKeyboard([
+      Markup.button.callback('✅ Conferma', `ok:${id}`),
+      Markup.button.callback('❌ Annulla', `no:${id}`),
+    ]));
   } catch (e) {
     console.error('LLM error:', e);
     await ctx.reply('❌ Errore elaborazione. Riprova o contatta admin.');
+  } finally {
+    clearInterval(typing);
   }
 });
 
