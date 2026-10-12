@@ -1,14 +1,16 @@
 /**
  * rearScreen — "mini presentazione" sul retro dello Xiaomi 17 Pro / Pro Max.
  *
- * Il Magic Back Screen non espone API web: l'unico canale che una PWA può usare
- * è il widget musica, che mostra i metadati della Media Session di Chrome
- * (titolo, artista, copertina). Quindi:
- *  1. si riproduce in loop un audio silenzioso (serve per avere una sessione media attiva);
- *  2. ogni "scena" diventa metadata: titolo = tavolo + totale, artista = dettaglio,
- *     copertina = immagine disegnata su canvas.
+ * Il Magic Back Screen non espone API web. Due canali (scelti per dispositivo):
  *
- * Funziona anche su qualsiasi Android (notifica media / lockscreen).
+ *  - 'outerview': la scena viene inviata in POST all'app Android "Girasole Rear"
+ *    (`rear-bridge/`, http://127.0.0.1:8790), che la espone come ContentProvider alla card
+ *    `rear-card/` importata sul retro con OuterView (richiede root + LSPosed).
+ *    APK e card sono "muti": testi e colori arrivano già pronti da qui, così cambiare
+ *    cosa si vede richiede solo l'aggiornamento della PWA.
+ *  - 'media': widget musica. Audio silenzioso in loop per avere una Media Session attiva;
+ *    titolo/artista/copertina = scena. Funziona anche su qualsiasi Android (notifica media).
+ *
  * La scena corrente viene anche trasmessa su BroadcastChannel per l'anteprima `/rear`.
  *
  * Impostazione per dispositivo (localStorage, non sincronizzata nel DB).
@@ -18,6 +20,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import type { CustomizedItem } from '../types/entities';
 
 const STORAGE_KEY = 'risto_rear_screen';
+const BRIDGE_URL = 'http://127.0.0.1:8790/state';
 const CHANNEL_NAME = 'risto-rear-screen';
 const FLASH_MS = 3500;
 
@@ -33,31 +36,43 @@ export interface RearFrame {
 }
 
 // ---------------------------------------------------------------------------
-// Abilitazione (per dispositivo)
+// Modalità (per dispositivo)
 // ---------------------------------------------------------------------------
 
-const enabledListeners = new Set<() => void>();
+export type RearScreenMode = 'off' | 'outerview' | 'media';
 
-export function isRearScreenEnabled(): boolean {
-  try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
+const modeListeners = new Set<() => void>();
+
+export function getRearScreenMode(): RearScreenMode {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    if (v === 'outerview' || v === 'media') return v;
+    return v === 'true' ? 'media' : 'off'; // vecchio valore booleano
+  } catch { return 'off'; }
 }
 
-export function setRearScreenEnabled(enabled: boolean) {
-  try { localStorage.setItem(STORAGE_KEY, String(enabled)); } catch { /* storage non disponibile */ }
-  enabledListeners.forEach(l => l());
-  if (enabled) void startRearScreen();
+function isRearScreenEnabled(): boolean {
+  return getRearScreenMode() !== 'off';
+}
+
+export function setRearScreenMode(mode: RearScreenMode) {
+  try { localStorage.setItem(STORAGE_KEY, mode); } catch { /* storage non disponibile */ }
+  lastKey = '';
+  modeListeners.forEach(l => l());
+  if (mode === 'media') void startRearScreen();
   else stopRearScreen();
+  if (mode !== 'off') renderScene(currentScene);
 }
 
-export function useRearScreenEnabled(): boolean {
+export function useRearScreenMode(): RearScreenMode {
   return useSyncExternalStore(
-    fn => { enabledListeners.add(fn); return () => enabledListeners.delete(fn); },
-    isRearScreenEnabled,
-    () => false,
+    fn => { modeListeners.add(fn); return () => modeListeners.delete(fn); },
+    getRearScreenMode,
+    () => 'off',
   );
 }
 
-export function isRearScreenSupported(): boolean {
+export function isMediaSessionSupported(): boolean {
   return typeof navigator !== 'undefined' && 'mediaSession' in navigator;
 }
 
@@ -85,14 +100,14 @@ function silentWavUrl(): string {
 
 /** Va chiamata dentro un gesto utente (tap), altrimenti il browser blocca play(). */
 export async function startRearScreen(): Promise<boolean> {
-  if (!isRearScreenSupported() || !isRearScreenEnabled()) return false;
+  if (!isMediaSessionSupported() || getRearScreenMode() !== 'media') return false;
   if (!audio) {
     audio = new Audio(silentWavUrl());
     audio.loop = true;
     const ms = navigator.mediaSession;
     ms.setActionHandler('play', () => { void audio?.play(); ms.playbackState = 'playing'; });
     ms.setActionHandler('pause', () => { audio?.pause(); ms.playbackState = 'paused'; });
-    ms.setActionHandler('stop', () => setRearScreenEnabled(false));
+    ms.setActionHandler('stop', () => setRearScreenMode('off'));
   }
   if (!audio.paused) return true;
   try {
@@ -105,14 +120,13 @@ export async function startRearScreen(): Promise<boolean> {
   }
 }
 
-export function stopRearScreen() {
-  lastKey = '';
+function stopRearScreen() {
   if (audio) {
     audio.pause();
     URL.revokeObjectURL(audio.src);
     audio = null;
   }
-  if (isRearScreenSupported()) {
+  if (isMediaSessionSupported()) {
     navigator.mediaSession.metadata = null;
     navigator.mediaSession.playbackState = 'none';
   }
@@ -120,7 +134,7 @@ export function stopRearScreen() {
 
 // Dopo un reload il play() deve aspettare il primo tap: lo agganciamo una volta sola.
 if (typeof window !== 'undefined') {
-  const kick = () => { if (isRearScreenEnabled() && (!audio || audio.paused)) void startRearScreen(); };
+  const kick = () => { if (getRearScreenMode() === 'media' && (!audio || audio.paused)) void startRearScreen(); };
   // Su touch l'attivazione utente arriva al pointerup (non al pointerdown)
   window.addEventListener('pointerup', kick, { capture: true, passive: true });
   window.addEventListener('keydown', kick, { capture: true });
@@ -190,7 +204,7 @@ export function sceneToFrame(scene: RearScene): Omit<RearFrame, 'artwork'> & { a
   const GOLD = '#CFA055';
   switch (scene.kind) {
     case 'idle':
-      return { title: 'Il Girasole', subtitle: 'In servizio', art: ['Il Girasole', '🌻', 'In servizio', GOLD] };
+      return { title: 'Il Girasole', subtitle: 'In servizio', art: ['In servizio', 'Il Girasole', '', GOLD] };
     case 'table': {
       const detail = `${scene.items} ${scene.items === 1 ? 'articolo' : 'articoli'}`;
       if (scene.flash) {
@@ -210,9 +224,65 @@ export function sceneToFrame(scene: RearScene): Omit<RearFrame, 'artwork'> & { a
 let channel: BroadcastChannel | null = null;
 let lastKey = '';
 
+// --- canale OuterView: POST all'app ponte, al massimo una richiesta in volo (vince l'ultima) ---
+
+type BridgePayload = { kind: RearScene['kind']; top: string; main: string; bottom: string; accent: string };
+let bridgeBusy = false;
+let bridgePending: BridgePayload | null = null;
+
+async function pushToBridge(payload: BridgePayload) {
+  if (bridgeBusy) { bridgePending = payload; return; }
+  bridgeBusy = true;
+  try {
+    await fetch(BRIDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    lastKey = ''; // app ponte spenta: riprova alla prossima scena
+  } finally {
+    bridgeBusy = false;
+    const next = bridgePending;
+    bridgePending = null;
+    if (next) void pushToBridge(next);
+  }
+}
+
+// Heartbeat: rimanda la scena ogni 10 s, così l'app ponte riacceso/riavviato si riallinea da solo.
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    if (getRearScreenMode() !== 'outerview' || document.visibilityState !== 'visible') return;
+    lastKey = '';
+    renderScene(currentScene);
+  }, 10_000);
+}
+
+/** true se l'app ponte "Girasole Rear" risponde su questo telefono. */
+export async function checkRearBridge(): Promise<boolean> {
+  try {
+    const r = await fetch(BRIDGE_URL, { signal: AbortSignal.timeout(2000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 function renderScene(scene: RearScene) {
   const f = sceneToFrame(scene);
   const key = JSON.stringify(f);
+  const mode = getRearScreenMode();
+
+  if (mode === 'outerview') {
+    if (key !== lastKey) {
+      lastKey = key;
+      const [top, main, bottom, accent] = f.art;
+      void pushToBridge({ kind: scene.kind, top, main, bottom, accent });
+    }
+    broadcast({ title: f.title, subtitle: f.subtitle, artwork: drawArtwork(...f.art) });
+    return;
+  }
+
   const active = !!audio && !audio.paused;
   if (key === lastKey && active) return;
 
@@ -229,6 +299,10 @@ function renderScene(scene: RearScene) {
     });
   }
 
+  broadcast(frame);
+}
+
+function broadcast(frame: RearFrame) {
   try {
     channel ??= new BroadcastChannel(CHANNEL_NAME);
     channel.postMessage(frame);
@@ -278,7 +352,7 @@ export interface RearScreenInput {
 }
 
 export function useRearScreen({ table, cart, total, status }: RearScreenInput) {
-  const enabled = useRearScreenEnabled();
+  const enabled = useRearScreenMode() !== 'off';
   const prevCart = useRef<CustomizedItem[]>(cart);
   const prevTable = useRef<string | null>(table);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

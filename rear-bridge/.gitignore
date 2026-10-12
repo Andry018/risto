@@ -1,0 +1,10 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+
+# firma APK: solo in locale + GitHub Secrets
+app/girasole-rear.keystore
+keystore-password.txt
+keystore-base64.txt

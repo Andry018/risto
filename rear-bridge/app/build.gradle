@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'it.risto.rear'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'it.risto.rear'
+        minSdk 26
+        targetSdk 36
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger())
+        versionName '1.0.0'
+    }
+
+    // Firma sempre uguale, altrimenti Android rifiuta l'aggiornamento sopra la versione installata.
+    // Keystore NON nel repo: in CI arriva dai Secrets (REAR_KEYSTORE_B64 / REAR_KEYSTORE_PASSWORD),
+    // in locale da app/girasole-rear.keystore + keystore-password.txt (entrambi in .gitignore).
+    def ksPassword = System.getenv('REAR_KEYSTORE_PASSWORD') ?:
+        (rootProject.file('keystore-password.txt').exists() ? rootProject.file('keystore-password.txt').text.trim() : null)
+    signingConfigs {
+        shared {
+            storeFile file(System.getenv('REAR_KEYSTORE_FILE') ?: 'girasole-rear.keystore')
+            storePassword ksPassword
+            keyAlias 'girasole-rear'
+            keyPassword ksPassword
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+        debug {
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

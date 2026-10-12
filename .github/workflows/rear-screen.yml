@@ -1,0 +1,68 @@
+# Compila l'app ponte "Girasole Rear" e la card OuterView e le pubblica nella release
+# `rear-latest`, così si scaricano direttamente dal telefono (niente PC).
+# Richiede i Secrets REAR_KEYSTORE_B64 e REAR_KEYSTORE_PASSWORD (firma sempre uguale → aggiornamenti installabili).
+name: Rear screen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rear-bridge/**'
+      - 'rear-card/**'
+      - '.github/workflows/rear-screen.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Keystore
+        env:
+          REAR_KEYSTORE_B64: ${{ secrets.REAR_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$REAR_KEYSTORE_B64" ]; then
+            echo "::error::Mancano i Secrets REAR_KEYSTORE_B64 / REAR_KEYSTORE_PASSWORD (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+          echo "$REAR_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/rear.keystore"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: APK
+        working-directory: rear-bridge
+        env:
+          REAR_KEYSTORE_FILE: ${{ runner.temp }}/rear.keystore
+          REAR_KEYSTORE_PASSWORD: ${{ secrets.REAR_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../girasole-rear.apk
+
+      - name: Card
+        run: |
+          python3 rear-card/build.py
+          cp rear-card/dist/girasole-rear-card.zip .
+
+      - name: Release rear-latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: rear-latest
+          name: Schermo posteriore (ultima build)
+          prerelease: true
+          body: |
+            **girasole-rear.apk** — app ponte: installala e aprila una volta.
+            **girasole-rear-card.zip** — card da importare in OuterView.
+            Build ${{ github.run_number }} da ${{ github.sha }}.
+          files: |
+            girasole-rear.apk
+            girasole-rear-card.zip
