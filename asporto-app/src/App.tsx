@@ -33,6 +33,7 @@ const MagazzinoView = lazy(() => import('./components/MagazzinoView'));
 const HaccpView = lazy(() => import('./components/HaccpView'));
 const CassaFiscalePage = lazy(() => import('./components/CassaFiscalePage'));
 const SystemPanelView = lazy(() => import('./components/SystemPanelView'));
+const RearScreenPreview = lazy(() => import('./components/RearScreenPreview'));
 
 initTheme();
 
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="/cassa" element={<StaffPinGuard requiredRoles={['admin']}><CassaFiscalePage /></StaffPinGuard>} />
           <Route path="/servizi" element={<StaffPinGuard requiredRoles={['admin']}><SystemPanelView /></StaffPinGuard>} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
+          <Route path="/rear" element={<RearScreenPreview />} />
         </Routes>
         </Suspense>
         </ExitGuard>

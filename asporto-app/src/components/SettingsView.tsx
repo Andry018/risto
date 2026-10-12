@@ -21,6 +21,7 @@ import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { setWakeLockEnabled } from '../hooks/useWakeLock';
+import { isRearScreenSupported, setRearScreenEnabled, showRearScene, useRearScreenEnabled } from '../lib/rearScreen';
 import { THEMES, applyTheme, getThemeId } from '../lib/theme';
 import { SETTINGS_KEYS, useSetting, useBooleanSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
@@ -116,6 +117,7 @@ export default function SettingsView() {
 
   const [printDeltaQty, setPrintDeltaQty] = useBooleanSetting(SETTINGS_KEYS.printDeltaQty, false);
   const [wakeLockEnabled, setWakeLockLocal] = useBooleanSetting(SETTINGS_KEYS.wakeLock, false);
+  const rearScreenEnabled = useRearScreenEnabled();
   const wakeLockSupported = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
   const [newPin, setNewPin] = useState('');
@@ -621,6 +623,44 @@ export default function SettingsView() {
                     <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                       Questo browser/dispositivo non supporta la funzione "sempre acceso". Su iPad serve Safari aggiornato (iOS 16.4+) e l'app aperta come PWA installata dalla schermata Home, non come semplice scheda del browser.
                     </p>
+                  )}
+
+                  <div className="flex items-center justify-between gap-4 pt-4 border-t border-surface-light">
+                    <div>
+                      <p className="text-sm font-bold text-white">Schermo posteriore (Xiaomi 17 Pro)</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Mostra sul retro tavolo, totale e articoli appena aggiunti tramite il widget musica.
+                        Solo questo dispositivo.
+                      </p>
+                    </div>
+                    <Toggle checked={rearScreenEnabled} onChange={() => setRearScreenEnabled(!rearScreenEnabled)} />
+                  </div>
+                  {rearScreenEnabled && (
+                    isRearScreenSupported() ? (
+                      <div className="text-xs text-gray-400 bg-charcoal border border-surface-light rounded-xl p-3 space-y-2">
+                        <p>
+                          L'app riproduce un audio muto per restare nel widget musica: sul retro scegli il widget
+                          <b className="text-white"> Musica</b>. Mettere in pausa dal widget sospende la presentazione;
+                          "stop" la disattiva. Mette in pausa altra musica in riproduzione sul telefono.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => showRearScene({ kind: 'table', table: 'Tavolo 5', total: 42.5, items: 6, flash: { qty: 1, nome: 'Margherita' } })}
+                            className="px-3 py-1.5 rounded-lg bg-gold/15 text-gold font-bold border border-gold/30"
+                          >
+                            Prova
+                          </button>
+                          <a href="/rear" target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-surface-light text-white font-bold">
+                            Anteprima
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                        Questo browser non supporta Media Session: usa Chrome su Android con l'app installata come PWA.
+                      </p>
+                    )
                   )}
                 </div>
               </Card>

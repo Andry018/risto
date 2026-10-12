@@ -16,6 +16,7 @@ import PaninoBuilderModal from './PaninoBuilderModal';
 import CustomItemModal from './CustomItemModal';
 import NumericKeypad from './NumericKeypad';
 import { syncManager } from '../lib/OfflineSync';
+import { useRearScreen } from '../lib/rearScreen';
 import { calculateItemPrice } from '../lib/priceUtils';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
@@ -473,6 +474,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     ? Math.max(0, total - scontoValore)
     : total;
 
+  const rearScreen = useRearScreen({
+    table: tableName || 'Banco',
+    cart,
+    total: discountedTotal,
+    status: cardPaymentOpen ? 'paying' : null,
+  });
+
   const advancePortata = () => {
     const currentIndex = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
     const nextIndex = Math.min(currentIndex + 1, PORTATA_OPTIONS.length - 1);
@@ -530,6 +538,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       }
 
       setActiveOrderId(null);
+      rearScreen.pulse('paid', discountedTotal);
       setOrderSuccess(true);
       setCart([]);
       setTimeout(() => {

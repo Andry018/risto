@@ -33,6 +33,7 @@ import CustomItemModal from './CustomItemModal';
 import { SALE } from '../lib/salas';
 import { hasTurno, toggleTurno } from '../lib/turni';
 import { toLocalISODate } from '../lib/dateUtils';
+import { useRearScreen } from '../lib/rearScreen';
 
 export default function WaiterMobileView() {
   const navigate = useNavigate();
@@ -770,6 +771,8 @@ export default function WaiterMobileView() {
     [cart, ingredients]
   );
 
+  const rearScreen = useRearScreen({ table: selectedTable?.nome ?? null, cart, total });
+
   const saveOrder = async (skipPrint = false) => {
     if (!selectedTable || cart.length === 0 || orderActionBusy) return;
     
@@ -868,6 +871,7 @@ export default function WaiterMobileView() {
 
       clearDraft(selectedTable.id);
       setSuccess(true);
+      rearScreen.pulse('saved');
     } catch {
       localUpdateOrdiniRef.current = false;
       localUpdateTavoliRef.current = false;
