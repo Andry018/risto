@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { requireManagerPin } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
-import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem } from '../types/entities';
+import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem, MagazzinoArticolo } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
 import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause, UtensilsCrossed, CreditCard } from 'lucide-react';
@@ -27,6 +27,7 @@ import {
   calculateRemovalsPrice,
   findProductForOrderLine,
 } from '../lib/orderCarrelloMap';
+import { fetchArticoli } from '../lib/magazzino';
 
 const PORTATA_OPTIONS = [
   { value: '1', label: '1ª Uscita', color: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
@@ -44,6 +45,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [magazzino, setMagazzino] = useState<MagazzinoArticolo[]>([]);
   const [cart, setCart] = useState<CustomizedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -192,6 +194,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     if (data) setIngredients(data);
   }
 
+  async function fetchMagazzino() {
+    if (IS_DEMO_MODE || !supabase) return;
+    setMagazzino(await fetchArticoli());
+  }
+
   async function fetchExistingOrder(force = true) {
     if (IS_DEMO_MODE) {
       const mockTable = MOCK_TABLES.find(t => t.id === tableId || t.nome === tableName);
@@ -294,6 +301,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   useEffect(() => {
     void fetchProducts();
     void fetchIngredients();
+    void fetchMagazzino();
 
     if (!supabase) return;
     const sb = supabase;
@@ -306,9 +314,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       .channel('public:ingredienti')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients())
       .subscribe();
+    const magazzinoChannel = sb
+      .channel('public:magazzino-pos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'magazzino_articoli' }, () => void fetchMagazzino())
+      .subscribe();
     return () => { 
       sb.removeChannel(productsChannel); 
       sb.removeChannel(ingredientsChannel);
+      sb.removeChannel(magazzinoChannel);
     };
   }, []);
 
@@ -543,6 +556,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       } else {
         await syncManager.pushOrder(orderData);
       }
+      void fetchMagazzino();
 
       if (tableId) {
         await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
@@ -655,6 +669,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         await syncManager.pushOrder(orderData);
         await syncManager.pushTableUpdate(tableId, { status: 'OCCUPATO' });
       }
+      void fetchMagazzino();
 
       // Update saved quantities after successful save
       const newMap = new Map<string, number>();
@@ -819,6 +834,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
       setActiveOrderId(null);
       setCart([]);
+      void fetchMagazzino();
       toast.addToast({
         type: 'success',
         title: 'Conto in Sospeso',
@@ -1263,6 +1279,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
             return <div className={gridClass}>{filteredProducts.map(p => renderProductCard(p))}</div>;
 
+            const stockByProdotto = new Map<string, MagazzinoArticolo>(
+              magazzino
+                .filter((a): a is MagazzinoArticolo & { prodotto_id: string } => !!a.prodotto_id)
+                .map(a => [a.prodotto_id, a]),
+            );
+
             function renderProductCard(product: Product) {
               const missingIngredients = product.ingredienti?.filter(ingName => {
                 const ingredient = ingredients.find(i => i.nome === ingName);
@@ -1271,6 +1293,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               const isTrulyAvailable = product.disponibile && missingIngredients.length === 0;
               const cartCount = cart.filter(c => c.id === product.id).reduce((s, c) => s + c.quantity, 0);
               const inCart = cartCount > 0;
+              const linkedArticle = stockByProdotto.get(product.id);
 
               return (
                 <div
@@ -1294,7 +1317,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                     </p>
                   </div>
                   <div className="flex justify-between items-end">
-                    <span className={`text-xl font-black ${isTrulyAvailable ? 'text-white' : 'text-gray-500'}`}>€{product.prezzo.toFixed(2)}</span>
+                    <div className="flex flex-col">
+                      <span className={`text-xl font-black ${isTrulyAvailable ? 'text-white' : 'text-gray-500'}`}>€{product.prezzo.toFixed(2)}</span>
+                      {linkedArticle && (
+                        <span className={`text-[9px] font-black uppercase tracking-wider ${linkedArticle.quantita <= (linkedArticle.soglia_minima || 0) ? 'text-rose-400' : 'text-sky-400'}`}>
+                          Frigo: {linkedArticle.quantita}{linkedArticle.target_frigo ? `/${linkedArticle.target_frigo}` : ''}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={(e) => { e.stopPropagation(); if (isTrulyAvailable) openCustomization(product); }}

@@ -6,6 +6,12 @@ export interface FornitoreOption {
   nome: string;
 }
 
+export interface ProdottoOption {
+  id: string;
+  nome: string;
+  categoria: string;
+}
+
 export async function fetchArticoli(): Promise<MagazzinoArticolo[]> {
   if (IS_DEMO_MODE || !supabase) return [];
   const { data, error } = await supabase.from('magazzino_articoli').select('*').order('categoria').order('nome');
@@ -14,6 +20,16 @@ export async function fetchArticoli(): Promise<MagazzinoArticolo[]> {
     return [];
   }
   return data as MagazzinoArticolo[];
+}
+
+export async function fetchProdottiOptions(): Promise<ProdottoOption[]> {
+  if (IS_DEMO_MODE || !supabase) return [];
+  const { data, error } = await supabase.from('prodotti').select('id, nome, categoria').order('categoria').order('nome');
+  if (error) {
+    if (import.meta.env.DEV) console.error('Fetch prodotti options error:', error);
+    return [];
+  }
+  return data as ProdottoOption[];
 }
 
 export async function fetchFornitoriOptions(): Promise<FornitoreOption[]> {
@@ -35,6 +51,8 @@ export async function addArticolo(articolo: {
   costo_unitario?: number;
   fornitore_id?: string | null;
   codice_a_barre?: string | null;
+  prodotto_id?: string | null;
+  target_frigo?: number;
   note?: string;
 }): Promise<boolean> {
   if (!supabase) return false;

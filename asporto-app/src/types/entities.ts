@@ -108,6 +108,8 @@ export type MagazzinoArticolo = {
   costo_unitario: number;
   fornitore_id?: string | null;
   codice_a_barre?: string | null;
+  prodotto_id?: string | null;
+  target_frigo?: number;
   note: string;
   created_at: string;
   updated_at: string;

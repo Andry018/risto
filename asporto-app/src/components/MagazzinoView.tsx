@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package, Plus, Minus, ArrowLeft, Edit2, Trash2, X, Save,
-  AlertTriangle, Clock, Truck, ScanBarcode,
+  AlertTriangle, Clock, Truck, ScanBarcode, Snowflake, Link2,
 } from 'lucide-react';
 import type { MagazzinoArticolo, MagazzinoMovimento } from '../types/entities';
 import {
   fetchArticoli, fetchFornitoriOptions, addArticolo, updateArticolo, deleteArticolo,
-  registraMovimento, fetchMovimentiRecenti, type FornitoreOption,
+  registraMovimento, fetchMovimentiRecenti, fetchProdottiOptions,
+  type FornitoreOption, type ProdottoOption,
 } from '../lib/magazzino';
 import { lookupBarcodeProduct } from '../lib/barcodeLookup';
 import { IS_DEMO_MODE } from '../lib/supabase';
@@ -28,6 +29,8 @@ const emptyForm = {
   costo_unitario: '',
   fornitore_id: '',
   codice_a_barre: '',
+  prodotto_id: '',
+  target_frigo: '',
   note: '',
 };
 
@@ -38,9 +41,11 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
 
   const [articoli, setArticoli] = useState<MagazzinoArticolo[]>([]);
   const [fornitori, setFornitori] = useState<FornitoreOption[]>([]);
+  const [prodotti, setProdotti] = useState<ProdottoOption[]>([]);
   const [movimenti, setMovimenti] = useState<MagazzinoMovimento[]>([]);
   const [loading, setLoading] = useState(true);
   const [showStorico, setShowStorico] = useState(false);
+  const [tab, setTab] = useState<'articoli' | 'frigo'>('articoli');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,9 +59,10 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
   const [movimentoNota, setMovimentoNota] = useState('');
 
   async function refresh() {
-    const [a, f, m] = await Promise.all([fetchArticoli(), fetchFornitoriOptions(), fetchMovimentiRecenti()]);
+    const [a, f, p, m] = await Promise.all([fetchArticoli(), fetchFornitoriOptions(), fetchProdottiOptions(), fetchMovimentiRecenti()]);
     setArticoli(a);
     setFornitori(f);
+    setProdotti(p);
     setMovimenti(m);
     setLoading(false);
   }
@@ -65,8 +71,14 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
 
   const fornitoreName = (id?: string | null) => fornitori.find(f => f.id === id)?.nome;
   const articoloName = (id: string) => articoli.find(a => a.id === id)?.nome || '—';
+  const prodottoNome = (a: MagazzinoArticolo) => (a.prodotto_id ? prodotti.find(p => p.id === a.prodotto_id)?.nome : undefined) || a.nome;
   const sottoScorta = articoli.filter(a => a.quantita <= a.soglia_minima);
   const valoreTotale = articoli.reduce((sum, a) => sum + a.quantita * (a.costo_unitario || 0), 0);
+
+  const frigoArticoli = articoli.filter(a => a.prodotto_id);
+  const daCaricare = (a: MagazzinoArticolo) => Math.max(0, (a.target_frigo || 0) - a.quantita);
+  const frigoDaCaricare = frigoArticoli.filter(a => daCaricare(a) > 0);
+  const totaleDaCaricare = frigoDaCaricare.reduce((s, a) => s + daCaricare(a), 0);
 
   const grouped = articoli.reduce<Record<string, MagazzinoArticolo[]>>((acc, a) => {
     const cat = a.categoria || 'Senza categoria';
@@ -91,6 +103,8 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
       costo_unitario: String(a.costo_unitario || ''),
       fornitore_id: a.fornitore_id || '',
       codice_a_barre: a.codice_a_barre || '',
+      prodotto_id: a.prodotto_id || '',
+      target_frigo: a.target_frigo ? String(a.target_frigo) : '',
       note: a.note,
     });
     setIsFormOpen(true);
@@ -133,6 +147,7 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
     const quantita = parseFloat(form.quantita.replace(',', '.')) || 0;
     const soglia_minima = parseFloat(form.soglia_minima.replace(',', '.')) || 0;
     const costo_unitario = parseFloat(form.costo_unitario.replace(',', '.')) || 0;
+    const target_frigo = parseFloat(form.target_frigo.replace(',', '.')) || 0;
     const payload = {
       nome: form.nome.trim(),
       categoria: form.categoria.trim(),
@@ -142,6 +157,8 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
       costo_unitario,
       fornitore_id: form.fornitore_id || null,
       codice_a_barre: form.codice_a_barre.trim() || null,
+      prodotto_id: form.prodotto_id || null,
+      target_frigo,
       note: form.note.trim(),
     };
     const ok = editingId ? await updateArticolo(editingId, payload) : await addArticolo(payload);
@@ -178,6 +195,30 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
     setMovimentoTarget(null);
     await refresh();
     addToast({ type: 'success', title: movimentoTipo === 'carico' ? 'Carico registrato' : 'Scarico registrato' });
+  }
+
+  /** Porta la scorta di un articolo fino al target frigo (registra un carico della differenza). */
+  async function caricaFinoATarget(a: MagazzinoArticolo) {
+    const mancante = daCaricare(a);
+    if (mancante <= 0) return;
+    const operatore = getCurrentUser()?.name || '';
+    const ok = await registraMovimento(a.id, 'carico', mancante, 'Rifornimento frigo', operatore);
+    if (!ok) { addToast({ type: 'error', title: 'Errore', message: 'Carico non registrato.' }); return; }
+    await refresh();
+    addToast({ type: 'success', title: `${prodottoNome(a)}: +${mancante} a frigo` });
+  }
+
+  async function caricaTutto() {
+    if (frigoDaCaricare.length === 0) return;
+    if (!(await confirm({ title: 'Rifornisci frigo', message: `Caricare ${totaleDaCaricare} pezzi su ${frigoDaCaricare.length} bibite fino al target?` }))) return;
+    const operatore = getCurrentUser()?.name || '';
+    let done = 0;
+    for (const a of frigoDaCaricare) {
+      const ok = await registraMovimento(a.id, 'carico', daCaricare(a), 'Rifornimento frigo', operatore);
+      if (ok) done++;
+    }
+    await refresh();
+    addToast({ type: done > 0 ? 'success' : 'error', title: done > 0 ? 'Frigo rifornito' : 'Errore', message: done > 0 ? `${done} bibite portate a target.` : 'Nessun carico registrato.' });
   }
 
   return (
@@ -218,6 +259,24 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
         </div>
       </header>
 
+      <div className="flex gap-2 mb-4 shrink-0">
+        <button
+          onClick={() => setTab('articoli')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${tab === 'articoli' ? 'bg-gold text-black' : 'bg-surface border border-surface-light text-gray-400 hover:text-white'}`}
+        >
+          <Package size={16} /> Articoli
+        </button>
+        <button
+          onClick={() => setTab('frigo')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${tab === 'frigo' ? 'bg-sky-500 text-black' : 'bg-surface border border-surface-light text-gray-400 hover:text-white'}`}
+        >
+          <Snowflake size={16} /> Frigo / Da Caricare
+          {frigoDaCaricare.length > 0 && (
+            <span className="ml-1 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px]">{frigoDaCaricare.length}</span>
+          )}
+        </button>
+      </div>
+
       {IS_DEMO_MODE && (
         <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400 text-sm font-bold shrink-0">
           Modalità demo: il magazzino richiede un database reale (tabelle non disponibili in demo).
@@ -231,7 +290,7 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
         </div>
       )}
 
-      {!loading && articoli.length > 0 && (
+      {tab === 'articoli' && !loading && articoli.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6 shrink-0">
           <div className="bg-surface border border-surface-light rounded-2xl p-4">
             <p className="text-2xl font-black text-white leading-none">{articoli.length}</p>
@@ -248,7 +307,7 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
         </div>
       )}
 
-      {sottoScorta.length > 0 && (
+      {tab === 'articoli' && sottoScorta.length > 0 && (
         <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3 shrink-0">
           <AlertTriangle size={20} className="text-rose-400 shrink-0 mt-0.5" />
           <div>
@@ -258,6 +317,7 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
         </div>
       )}
 
+      {tab === 'articoli' && (
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
         {!loading && articoli.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50">
@@ -322,6 +382,80 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
           ))
         )}
       </div>
+      )}
+
+      {tab === 'frigo' && (
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+          {loading ? (
+            <p className="text-center text-gray-500 text-sm py-10">Caricamento…</p>
+          ) : frigoArticoli.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 text-center px-6">
+              <Snowflake size={80} strokeWidth={1} className="mb-6" />
+              <p className="text-xl font-black uppercase tracking-widest">Nessuna bibita collegata</p>
+              <p className="text-sm mt-2 max-w-md">Collega un prodotto del POS a un articolo di magazzino (Modifica articolo → “Collega bibita”) e imposta il target frigo.</p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-5 p-4 bg-sky-500/10 border border-sky-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sky-400 font-black text-sm uppercase tracking-widest">
+                    {frigoDaCaricare.length > 0 ? `${frigoDaCaricare.length} bibite da caricare` : 'Frigo completo'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {frigoDaCaricare.length > 0 ? `Totale pezzi mancanti: ${totaleDaCaricare}` : 'Tutte le bibite sono al target.'}
+                  </p>
+                </div>
+                {frigoDaCaricare.length > 0 && (
+                  <button onClick={caricaTutto} className="bg-sky-500 hover:bg-sky-400 text-black px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                    Carica tutto
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {frigoArticoli.map(a => {
+                  const mancante = daCaricare(a);
+                  const target = a.target_frigo || 0;
+                  const pct = target > 0 ? Math.min(100, Math.round((a.quantita / target) * 100)) : 100;
+                  return (
+                    <div key={a.id} className={`bg-surface border rounded-2xl p-5 transition-all ${mancante > 0 ? 'border-sky-500/40' : 'border-surface-light'}`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-white uppercase text-sm truncate">{prodottoNome(a)}</h4>
+                          <p className="text-[10px] text-gray-500 font-bold flex items-center gap-1 mt-1">
+                            <Link2 size={11} /> {prodotti.find(p => p.id === a.prodotto_id)?.categoria || a.nome}
+                          </p>
+                        </div>
+                        <button onClick={() => openEditForm(a)} className="p-2 bg-charcoal text-gray-500 hover:text-white rounded-lg shrink-0"><Edit2 size={15} /></button>
+                      </div>
+
+                      <div className="flex items-end justify-between mb-3">
+                        <p className={`text-3xl font-black italic ${mancante > 0 ? 'text-sky-400' : 'text-emerald-400'}`}>
+                          {a.quantita} <span className="text-sm font-bold not-italic text-gray-500">/ {target} frigo</span>
+                        </p>
+                      </div>
+                      <p className={`text-[11px] font-black mb-3 ${mancante > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {mancante > 0 ? `Da caricare: ${mancante}` : 'Al completo'}
+                      </p>
+
+                      <div className="h-2 w-full rounded-full bg-charcoal overflow-hidden mb-4">
+                        <div className={`h-full ${mancante > 0 ? 'bg-sky-500' : 'bg-emerald-500'}`} style={{ width: `${pct}%` }} />
+                      </div>
+
+                      <button
+                        onClick={() => caricaFinoATarget(a)}
+                        disabled={mancante <= 0}
+                        className="w-full py-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 transition-all hover:bg-sky-500/20 disabled:opacity-30"
+                      >
+                        <Plus size={16} /> {mancante > 0 ? `Carica ${mancante}` : 'Al completo'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Add/Edit Form Modal */}
       {isFormOpen && (
@@ -377,6 +511,20 @@ export default function MagazzinoView({ onNavigateHome }: { onNavigateHome?: () 
                   <option value="">Nessuno</option>
                   {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[.2em] mb-2">Collega bibita / prodotto</label>
+                <select value={form.prodotto_id} onChange={e => setForm({ ...form, prodotto_id: e.target.value })}
+                  className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white font-bold text-sm outline-none focus:border-gold/50 appearance-none">
+                  <option value="">Nessuno</option>
+                  {prodotti.map(p => <option key={p.id} value={p.id}>{p.nome}{p.categoria ? ` (${p.categoria})` : ''}</option>)}
+                </select>
+                <p className="text-[10px] text-gray-600 font-bold mt-1">Le vendite scalano automaticamente la scorta di questo articolo.</p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[.2em] mb-2">Pezzi nel frigo (target)</label>
+                <input type="text" inputMode="decimal" value={form.target_frigo} onChange={e => setForm({ ...form, target_frigo: e.target.value })}
+                  placeholder="0" className="w-full bg-charcoal border border-surface-light rounded-2xl py-3 px-4 text-white font-bold text-sm outline-none focus:border-gold/50" />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[.2em] mb-2">Note</label>
