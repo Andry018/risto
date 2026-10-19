@@ -1402,12 +1402,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 </button>
                 {(() => {
                   const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
-                  const cucinaItems = cart.filter(i => !salaCats.includes(i.categoria));
-                  const salaItems = cart.filter(i => salaCats.includes(i.categoria));
+                  const itemsToPrint = cart.filter(i => i.categoria !== 'Servizio');
+                  const cucinaItems = itemsToPrint.filter(i => !salaCats.includes(i.categoria));
+                  const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
+                  const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
+                        onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime)}
                         disabled={cucinaItems.length === 0}
                         className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                       >

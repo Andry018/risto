@@ -454,7 +454,8 @@ async function printOrder({ table_id, type }: { table_id: string; type: 'kitchen
       items: targetItems.map(i => ({
         nome: i.nome,
         quantity: i.quantity,
-        addedIngredients: i.modifiche?.aggiunte ?? [],
+        categoria: categoria(i),
+        addedIngredients: (i.modifiche?.aggiunte ?? []).map(nome => ({ nome, prezzo: 0 })),
         removedIngredients: i.modifiche?.rimozioni ?? [],
         notes: i.modifiche?.note ?? '',
       })),

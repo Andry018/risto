@@ -72,7 +72,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const CATEGORIES_NO_KITCHEN = ['Bevande', 'Caffè e Liquori', 'Servizio', 'Dolce', 'Dolci'];
 const VARIANT_NOISE = ['Pizze Bianca', 'Pizze Rosse', 'Pizze', 'Impasto'];
 const PIZZA_VARIANTS = new Set(['Bianca', 'Rossa', 'Rosè', 'Rose']);
-const PRIORITY_MODS = ['', ''];
+const PRIORITY_MODS = ['Senza Glutine', 'Senza Lattosio'];
 
 /** Ritorna il nome breve della variante pizza (es. 'BIANCA', 'ROSSA', 'ROSÈ')
  *  oppure null se l'ingrediente non è una variante. Matching case-insensitive
@@ -190,12 +190,12 @@ function portataLabel(key) {
   return map[key] || key;
 }
 
-async function executePrinter(printer, context) {
+async function executePrinter(printer, context, printerSource = null) {
   try {
     // Usa send TCP diretto per evitare il bug di inactivity timeout
     // nel network layer di node-thermal-printer su buffer ESC/POS grandi.
     const buffer = printer.getBuffer();
-    const iface  = resolvePrinterInterface(null);
+    const iface  = resolvePrinterInterface(printerSource);
     const match  = /tcp:\/\/([^:]+):(\d+)/.exec(iface);
     if (match) {
       const host = match[1];
@@ -223,10 +223,19 @@ function setReadableText(printer) {
 }
 
 function printModLines(printer, item, maxNote = 44) {
-  const extras = (item.addedIngredients || []).filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !isPizzaVariant(a.nome));
+  const allMods = item.addedIngredients || [];
+  const priorityMods = allMods.filter(a => PRIORITY_MODS.includes(a.nome));
+  const extras = allMods.filter(a => !VARIANT_NOISE.includes(a.nome) && !PRIORITY_MODS.includes(a.nome) && !isPizzaVariant(a.nome));
   const removed = item.removedIngredients || [];
   const note = normalizeVariantNotes(item.notes);
 
+  if (priorityMods.length > 0) {
+    printer.bold(true);
+    printer.setTextDoubleWidth();
+    printWrapped(printer, `!! ${priorityMods.map(a => a.nome).join(' / ')} !!`, maxNote, '', '   ');
+    printer.setTextNormal();
+    printer.bold(false);
+  }
   if (extras.length > 0) {
     printer.setTextDoubleWidth();
     printWrapped(printer, `+ ${extras.map(a => a.nome).join(', ')}`, maxNote, '', '  ');
@@ -305,7 +314,7 @@ async function printKitchenJob(job) {
   printer.setTextNormal();
 
   printer.cut();
-  await executePrinter(printer, `Comanda cucina ${job.tableName}`);
+  await executePrinter(printer, `Comanda cucina ${job.tableName}`, job);
 }
 
 async function printReceiptJob(job) {
@@ -324,7 +333,8 @@ async function printReceiptJob(job) {
   printer.drawLine();
 
   for (const item of job.items || []) {
-    const itemTotal = (item.prezzo || 0) * item.quantity + (item.addedIngredients || []).reduce((s, a) => s + a.prezzo, 0);
+    const extras = (item.addedIngredients || []).reduce((s, a) => s + Number(a.prezzo || 0), 0);
+    const itemTotal = ((Number(item.prezzo) || 0) + extras) * (Number(item.quantity) || 1);
     printer.leftRight(`${item.quantity}x ${truncate(item.nome, 20)}`, `€${itemTotal.toFixed(2)}`);
     printModLines(printer, item, 40);
   }
@@ -333,7 +343,7 @@ async function printReceiptJob(job) {
   printer.alignRight();
   printer.println(`TOTALE: €${Number(job.total || 0).toFixed(2)}`);
   printer.cut();
-  await executePrinter(printer, `Ricevuta ${job.tableName}`);
+  await executePrinter(printer, `Ricevuta ${job.tableName}`, job);
 }
 
 async function printPreContoJob(job) {
@@ -372,11 +382,11 @@ async function printPreContoJob(job) {
       `${item.quantity}x ${truncate(getDisplayName(item) + variantSuffix, 24)}`,
       `\u20AC${(basePrice * item.quantity).toFixed(2)}`
     );
-    // Aggiunte con prezzo individuale
+    // Aggiunte con prezzo individuale (moltiplicato per quantità)
     for (const a of extras) {
       const extraPrice = Number(a.prezzo || 0);
       if (extraPrice > 0) {
-        printer.leftRight(`  + ${truncate(a.nome, 28)}`, `\u20AC${extraPrice.toFixed(2)}`);
+        printer.leftRight(`  + ${truncate(a.nome, 28)}`, `\u20AC${(extraPrice * item.quantity).toFixed(2)}`);
       } else {
         printer.println(`  + ${truncate(a.nome, 38)}`);
       }
@@ -402,7 +412,7 @@ async function printPreContoJob(job) {
   printer.println('Grazie per la visita!');
   printer.println('');
   printer.cut();
-  await executePrinter(printer, `Pre-conto ${job.tableName}`);
+  await executePrinter(printer, `Pre-conto ${job.tableName}`, job);
 }
 
 async function printSalaJob(job) {
@@ -434,7 +444,7 @@ async function printSalaJob(job) {
   }
 
   printer.cut();
-  await executePrinter(printer, `Comanda sala ${job.tableName}`);
+  await executePrinter(printer, `Comanda sala ${job.tableName}`, job);
 }
 
 function normalizeDbOrderItems(order) {
@@ -475,7 +485,7 @@ async function printQuickLabelJob(job) {
   printer.setTextNormal();
   printer.println('');
   printer.cut();
-  await executePrinter(printer, `Etichetta rapida ${job.nome}`);
+  await executePrinter(printer, `Etichetta rapida ${job.nome}`, job);
 }
 
 async function stampaEtichettaHaccp(dati) {
@@ -541,7 +551,7 @@ async function stampaEtichettaHaccp(dati) {
 
     printer.println('');
     printer.cut();
-    await executePrinter(printer, `Etichetta HACCP ${dati.nome_prodotto}`);
+    await executePrinter(printer, `Etichetta HACCP ${dati.nome_prodotto}`, dati);
   } catch (error) {
     console.error(`[HACCP LABEL ERROR] ${dati.nome_prodotto}`, error);
     throw error;
