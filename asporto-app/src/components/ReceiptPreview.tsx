@@ -141,17 +141,17 @@ export default function ReceiptPreview({ isOpen, onClose, customerName, pickupTi
                             )}
                             {extras.length > 0 && (
                               <p className="text-[15px] font-bold text-black/80 leading-tight break-words">
-                                + {truncate(extras.map(a => a.nome).join(', '), 44)}
+                                + {extras.map(a => a.nome).join(', ')}
                               </p>
                             )}
                             {item.removedIngredients.length > 0 && (
                               <p className="text-[15px] font-bold text-black/60 leading-tight break-words">
-                                - {truncate(item.removedIngredients.join(', '), 44)}
+                                - {item.removedIngredients.join(', ')}
                               </p>
                             )}
                             {notes && (
                               <p className="text-[16px] font-bold italic text-black/80 leading-tight break-words">
-                                NOTE: {truncate(notes.toUpperCase(), 46)}
+                                NOTE: {notes.toUpperCase()}
                               </p>
                             )}
                           </div>

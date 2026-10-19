@@ -139,6 +139,36 @@ function truncate(text, max = 34) {
   return `${value.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
 
+/** Spezza il testo su più righe senza tagliare nulla, andando a capo
+ *  sugli spazi. Usato per ingredienti/note lunghi (es. Panini). */
+function wrapText(text, max = 34) {
+  const value = cleanText(text);
+  if (!value) return [];
+  const words = value.split(' ');
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    if (!current) {
+      current = word;
+    } else if (`${current} ${word}`.length <= max) {
+      current += ` ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/** Stampa un testo su più righe: prefisso solo sulla prima, indent sulle
+ *  successive, così gli elenchi lunghi restano allineati e completi. */
+function printWrapped(printer, text, max, prefix = '', indent = '') {
+  for (const [i, line] of wrapText(text, max).entries()) {
+    printer.println(`${i === 0 ? prefix : indent}${line}`);
+  }
+}
+
 function groupByPortata(items) {
   const grouped = new Map();
   for (const item of items) {
@@ -199,17 +229,17 @@ function printModLines(printer, item, maxNote = 44) {
 
   if (extras.length > 0) {
     printer.setTextDoubleWidth();
-    printer.println(`+ ${truncate(extras.map(a => a.nome).join(', '), maxNote)}`);
+    printWrapped(printer, `+ ${extras.map(a => a.nome).join(', ')}`, maxNote, '', '  ');
     printer.setTextNormal();
   }
   if (removed.length > 0) {
     printer.setTextDoubleWidth();
-    printer.println(`- ${truncate(removed.join(', '), maxNote)}`);
+    printWrapped(printer, `- ${removed.join(', ')}`, maxNote, '', '  ');
     printer.setTextNormal();
   }
   if (note) {
     printer.setTextDoubleWidth();
-    printer.println(`NOTE: ${truncate(note, maxNote + 2)}`);
+    printWrapped(printer, note, maxNote + 2, 'NOTE: ', '      ');
     printer.setTextNormal();
   }
 }
@@ -351,8 +381,8 @@ async function printPreContoJob(job) {
         printer.println(`  + ${truncate(a.nome, 38)}`);
       }
     }
-    if (removed.length > 0) printer.println(`  - ${truncate(removed.join(', '), 38)}`);
-    if (note) printer.println(`  ${truncate(note, 40)}`);
+    if (removed.length > 0) printWrapped(printer, `- ${removed.join(', ')}`, 38, '  ');
+    if (note) printWrapped(printer, note, 40, '  ');
   }
 
   printer.drawLine();
