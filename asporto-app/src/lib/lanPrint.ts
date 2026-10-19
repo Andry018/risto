@@ -14,7 +14,10 @@ type ReceiptPrintJob = {
   kind: 'receipt';
   tableName: string;
   total: number;
-  items: CustomizedItem[];
+  subtotal?: number;
+  discount?: number;
+  discountLabel?: string;
+  items: (CustomizedItem & { lineTotal?: number })[];
   printerIp?: string;
   printerPort?: number;
 };
@@ -59,6 +62,8 @@ type PreContoJob = {
     addedIngredients: { nome: string; prezzo: number }[];
     removedIngredients: string[];
     notes: string;
+    lineTotal?: number;
+    removalDiscount?: number;
   }[];
   printerIp?: string;
   printerPort?: number;
@@ -84,12 +89,23 @@ export async function printKitchenViaAgent(items: CustomizedItem[], tableName: s
   }, agentUrl);
 }
 
-export async function printReceiptViaAgent(items: CustomizedItem[], tableName: string, total: number, agentUrl: string, printerIp?: string, printerPort?: number): Promise<void> {
+export async function printReceiptViaAgent(
+  items: CustomizedItem[],
+  tableName: string,
+  total: number,
+  agentUrl: string,
+  printerIp?: string,
+  printerPort?: number,
+  extra?: { lineTotals?: number[]; subtotal?: number; discount?: number; discountLabel?: string },
+): Promise<void> {
   await sendPrintJob({
     kind: 'receipt',
     tableName,
-    items,
     total,
+    subtotal: extra?.subtotal,
+    discount: extra?.discount,
+    discountLabel: extra?.discountLabel,
+    items: items.map((i, idx) => (extra?.lineTotals ? { ...i, lineTotal: extra.lineTotals[idx] } : i)),
     printerIp,
     printerPort,
   }, agentUrl);
@@ -105,19 +121,21 @@ export async function printSalaViaAgent(items: CustomizedItem[], tableName: stri
   }, agentUrl);
 }
 
-export async function printPreContoViaAgent(items: CustomizedItem[], tableName: string, total: number, agentUrl: string, printerIp?: string, printerPort?: number, covers?: number): Promise<void> {
+export async function printPreContoViaAgent(items: CustomizedItem[], tableName: string, total: number, agentUrl: string, printerIp?: string, printerPort?: number, covers?: number, removalDiscounts?: number[]): Promise<void> {
   await sendPrintJob({
     kind: 'pre_conto',
     tableName,
     covers,
     total,
-    items: items.map(i => ({
+    items: items.map((i, idx) => ({
       nome: i.nome,
       quantity: i.quantity,
       prezzo: i.prezzo,
       addedIngredients: i.addedIngredients,
       removedIngredients: i.removedIngredients,
       notes: i.notes,
+      lineTotal: undefined,
+      removalDiscount: removalDiscounts?.[idx],
     })),
     printerIp,
     printerPort,

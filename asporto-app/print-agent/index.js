@@ -1,9 +1,3 @@
-// Pezza di emergenza per definire la funzione mancante globalmente
-global.getDisplayName = function(item) {
-    if (!item) return "Articolo";
-    return item.nome || item.name || item.title || item.display_name || "Articolo";
-};
-
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const ThermalPrinter = require('node-thermal-printer').printer;
@@ -334,13 +328,21 @@ async function printReceiptJob(job) {
 
   for (const item of job.items || []) {
     const extras = (item.addedIngredients || []).reduce((s, a) => s + Number(a.prezzo || 0), 0);
-    const itemTotal = ((Number(item.prezzo) || 0) + extras) * (Number(item.quantity) || 1);
+    const computed = ((Number(item.prezzo) || 0) + extras) * (Number(item.quantity) || 1);
+    const itemTotal = Number.isFinite(item.lineTotal) ? Number(item.lineTotal) : computed;
     printer.leftRight(`${item.quantity}x ${truncate(item.nome, 20)}`, `€${itemTotal.toFixed(2)}`);
     printModLines(printer, item, 40);
   }
 
   printer.drawLine();
   printer.alignRight();
+  const discount = Number(job.discount || 0);
+  if (discount > 0) {
+    const subtotal = Number.isFinite(job.subtotal) ? Number(job.subtotal) : Number(job.total || 0) + discount;
+    printer.println(`Subtotale: €${subtotal.toFixed(2)}`);
+    const label = job.discountLabel ? ` (${job.discountLabel})` : '';
+    printer.println(`Sconto${label}: -€${discount.toFixed(2)}`);
+  }
   printer.println(`TOTALE: €${Number(job.total || 0).toFixed(2)}`);
   printer.cut();
   await executePrinter(printer, `Ricevuta ${job.tableName}`, job);
@@ -392,6 +394,10 @@ async function printPreContoJob(job) {
       }
     }
     if (removed.length > 0) printWrapped(printer, `- ${removed.join(', ')}`, 38, '  ');
+    const removalDiscount = Number(item.removalDiscount || 0);
+    if (removalDiscount > 0) {
+      printer.leftRight(`  Sconto rimozioni`, `-\u20AC${(removalDiscount * item.quantity).toFixed(2)}`);
+    }
     if (note) printWrapped(printer, note, 40, '  ');
   }
 
@@ -445,22 +451,6 @@ async function printSalaJob(job) {
 
   printer.cut();
   await executePrinter(printer, `Comanda sala ${job.tableName}`, job);
-}
-
-function normalizeDbOrderItems(order) {
-  const items = Array.isArray(order?.carrello) ? order.carrello : [];
-  return items.map((item) => ({
-    nome: item.nome || 'Prodotto',
-    quantity: Number(item.quantity || 1),
-    prezzo_unitario: Number(item.prezzo_unitario || 0),
-    categoria: item.categoria || '',
-    portata: item.portata || '1',
-    addedIngredients: Array.isArray(item.modifiche?.aggiunte)
-      ? item.modifiche.aggiunte.map((nome) => ({ nome, prezzo: 0 }))
-      : [],
-    removedIngredients: Array.isArray(item.modifiche?.rimozioni) ? item.modifiche.rimozioni : [],
-    notes: item.modifiche?.note || '',
-  }));
 }
 
 async function printQuickLabelJob(job) {

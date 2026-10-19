@@ -28,6 +28,7 @@ import { parseAperturaFromNote, setAperturaInNote, clearAperturaInNote } from '.
 import { notifyNewOrder } from '../lib/notify';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
+import Dialog from './Dialog';
 import PaninoBuilderModal from './PaninoBuilderModal';
 import CustomItemModal from './CustomItemModal';
 import { SALE } from '../lib/salas';
@@ -176,6 +177,10 @@ export default function WaiterMobileView() {
         getPrinterIp(),
         getPrinterPort(),
         selectedTable?.clienti,
+        cart.map(item => item.removedIngredients.reduce((s, rName) => {
+          const ing = ingredients.find(i => i.nome.toLowerCase() === rName.toLowerCase());
+          return s + (ing?.prezzo_rimozione || 0);
+        }, 0)),
       );
       toast.addToast({ type: 'success', title: 'Pre-conto stampato', message: 'Conto non fiscale inviato alla stampante.', duration: 2500 });
     } catch {
@@ -191,6 +196,7 @@ export default function WaiterMobileView() {
   const localUpdateOrdiniRef = useRef(false);
   const localUpdateTavoliRef = useRef(false);
   const savedItemQtysRef = useRef<Map<string, number>>(new Map());
+  const cartRef = useRef<CustomizedItem[]>(cart);
 
   const getItemKey = (item: CustomizedItem): string => {
     const adds = [...item.addedIngredients].map(a => a.nome).sort().join(',');
@@ -200,13 +206,14 @@ export default function WaiterMobileView() {
   productsRef.current = products;
   ingredientsRef.current = ingredients;
   selectedTableRef.current = selectedTable;
+  cartRef.current = cart;
 
   /**
    * Carica ordine IN_ATTESA dal DB e aggiorna carrello (anche da eventi Realtime).
    * keepCart: aggiorna solo id ordine e quantità già salvate, lasciando il carrello corrente
    * (bozza ripristinata): senza, il salvataggio successivo creerebbe un ordine duplicato.
    */
-  async function loadOpenOrderForTable(table: Tavolo, opts: { keepCart?: boolean } = {}): Promise<boolean> {
+  async function loadOpenOrderForTable(table: Tavolo, opts: { keepCart?: boolean; skipIfDirty?: boolean } = {}): Promise<boolean> {
     if (IS_DEMO_MODE || !supabase) return false;
     const prods = productsRef.current;
     const ings = ingredientsRef.current;
@@ -241,6 +248,15 @@ export default function WaiterMobileView() {
           uniqueId: newUniqueId()
         };
       });
+      if (opts.skipIfDirty && hasUnsavedChanges()) {
+        toast.addToast({
+          type: 'info',
+          title: 'Modifiche non salvate',
+          message: "L'ordine è stato aggiornato altrove. Salva o riapri il tavolo per allinearti.",
+          duration: 5000,
+        });
+        return true;
+      }
       const qtyMap = new Map<string, number>();
       for (const i of mappedCart) {
         const k = getItemKey(i);
@@ -264,7 +280,7 @@ export default function WaiterMobileView() {
   /** true se il carrello differisce dall'ultimo salvataggio (stesse chiavi del delta di stampa) */
   function hasUnsavedChanges(): boolean {
     const current = new Map<string, number>();
-    for (const item of cart) {
+    for (const item of cartRef.current) {
       const key = getItemKey(item);
       current.set(key, (current.get(key) || 0) + item.quantity);
     }
@@ -446,7 +462,7 @@ export default function WaiterMobileView() {
           localUpdateOrdiniRef.current = false;
           const cur = selectedTableRef.current;
           if (cur?.id === t.id && cur.status === 'OCCUPATO') {
-            void loadOpenOrderForTable(cur);
+            void loadOpenOrderForTable(cur, { skipIfDirty: true });
           }
         }
       )
@@ -478,7 +494,7 @@ export default function WaiterMobileView() {
           localUpdateTavoliRef.current = false;
           const merged = { ...t, ...row } as Tavolo;
           setSelectedTable((prev) => (prev && prev.id === row.id ? { ...prev, ...row } as Tavolo : prev));
-          void loadOpenOrderForTable(merged);
+          void loadOpenOrderForTable(merged, { skipIfDirty: true });
         }
       )
       .subscribe();
@@ -1012,7 +1028,7 @@ export default function WaiterMobileView() {
                     {currentUser ? `Ciao, ${currentUser.name}` : 'Il Girasole'}
                   </h1>
                   {currentUser && (
-                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-0.5">{currentUser.role}</p>
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-0.5">{currentUser.role}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -1024,8 +1040,9 @@ export default function WaiterMobileView() {
                   )}
                   <button
                     onClick={() => setShowChangelog(true)}
-                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-gold transition-colors"
+                    className="p-2 bg-surface rounded-xl text-gray-400 hover:text-gold transition-colors"
                     title="Novità e changelog"
+                    aria-label="Novità e changelog"
                   >
                     <Info size={20} />
                   </button>
@@ -1035,8 +1052,9 @@ export default function WaiterMobileView() {
                       const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
                       if (ok) staffLogout();
                     }}
-                    className="p-2 bg-surface rounded-xl text-gray-500 hover:text-red-400 transition-colors"
+                    className="p-2 bg-surface rounded-xl text-gray-400 hover:text-red-400 transition-colors"
                     title="Esci staff"
+                    aria-label="Esci dall'area staff"
                   >
                     <LogOut size={20} />
                   </button>
@@ -1117,7 +1135,7 @@ export default function WaiterMobileView() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-6 pb-2 space-y-4">
               <div className="flex items-center gap-3">
-                <button onClick={() => setActiveSection('hub')} className="p-2 bg-surface rounded-xl text-gray-400 active:scale-90 shrink-0">
+                <button onClick={() => setActiveSection('hub')} aria-label="Torna alle sezioni" className="p-2 bg-surface rounded-xl text-gray-400 active:scale-90 shrink-0">
                   <ChevronLeft size={20} />
                 </button>
                 <h1 className="text-2xl font-black italic text-gold uppercase tracking-tighter leading-none">Sala & Tavoli</h1>
@@ -1129,8 +1147,9 @@ export default function WaiterMobileView() {
                   <button
                     key={room}
                     onClick={() => setActiveRoom(room)}
+                    aria-pressed={activeRoom === room}
                     className={`px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all whitespace-nowrap ${
-                      activeRoom === room ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-500'
+                      activeRoom === room ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-400'
                     }`}
                   >
                     {room}
@@ -1165,7 +1184,7 @@ export default function WaiterMobileView() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Mobile */}
           <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
-            <button onClick={leaveTable} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
+            <button onClick={leaveTable} aria-label="Torna alla mappa tavoli" className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
             <div className="flex flex-col items-center">
               <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
               <div className="flex items-center gap-3 mt-1">
@@ -1188,16 +1207,20 @@ export default function WaiterMobileView() {
             </div>
 
           {/* Tab Switcher */}
-          <div className="flex p-3 bg-charcoal shrink-0">
+          <div role="tablist" aria-label="Dettaglio ordine tavolo" className="flex p-3 bg-charcoal shrink-0">
             <button 
+              role="tab"
+              aria-selected={activeTab === 'RIEPILOGO'}
               onClick={() => setActiveTab('RIEPILOGO')}
-              className={`flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${activeTab === 'RIEPILOGO' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-500'}`}
+              className={`flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${activeTab === 'RIEPILOGO' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-400'}`}
             >
               Riepilogo
             </button>
             <button 
+              role="tab"
+              aria-selected={activeTab === 'MENU'}
               onClick={() => setActiveTab('MENU')}
-              className={`flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${activeTab === 'MENU' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-500'}`}
+              className={`flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${activeTab === 'MENU' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-400'}`}
             >
               Menu
             </button>
@@ -1224,7 +1247,7 @@ export default function WaiterMobileView() {
               <div className="bg-surface/80 backdrop-blur-xl border-b border-surface-light px-5 py-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Totale</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Totale</p>
                     <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -1241,16 +1264,16 @@ export default function WaiterMobileView() {
                 <div className="flex items-center gap-3 mt-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-sm font-bold text-white">{selectedTable?.nome} · {selectedTable?.clienti} coperti</span>
-                  <span className="text-[10px] font-black text-gray-500 uppercase">{activeOrderId ? 'Servizio in corso' : 'Occupato'}</span>
+                  <span className="text-[10px] font-black text-gray-400 uppercase">{activeOrderId ? 'Servizio in corso' : 'Occupato'}</span>
                 </div>
               </div>
 
               <div className="p-5 space-y-6">
                 {/* Allergie / avviso cucina */}
                 <div className={`rounded-2xl border px-4 py-3 flex items-start gap-3 transition-colors ${allergieNote ? 'bg-red-500/10 border-red-500/40' : 'bg-charcoal border-surface-light'}`}>
-                  <AlertTriangle size={16} className={`mt-0.5 flex-shrink-0 ${allergieNote ? 'text-red-400' : 'text-gray-600'}`} />
+                  <AlertTriangle size={16} className={`mt-0.5 flex-shrink-0 ${allergieNote ? 'text-red-400' : 'text-gray-400'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${allergieNote ? 'text-red-400' : 'text-gray-600'}`}>Allergie / Avviso Cucina</p>
+                    <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${allergieNote ? 'text-red-400' : 'text-gray-400'}`}>Allergie / Avviso Cucina</p>
                     <input
                       type="text"
                       value={allergieNote}
@@ -1260,15 +1283,15 @@ export default function WaiterMobileView() {
                     />
                   </div>
                   {allergieNote && (
-                    <button onClick={() => setAllergieNote('')} className="text-gray-600 hover:text-white transition-colors">
+                    <button onClick={() => setAllergieNote('')} aria-label="Cancella nota allergie" className="text-gray-400 hover:text-white transition-colors">
                       <X size={14} />
                     </button>
                   )}
                 </div>
                 {cart.length === 0 ? (
                   <div className="py-16 text-center">
-                    <p className="text-gray-600 text-base font-bold">Nessun articolo</p>
-                    <p className="text-gray-600/50 text-sm mt-1">Aggiungi prodotti dal menu</p>
+                    <p className="text-gray-400 text-base font-bold">Nessun articolo</p>
+                    <p className="text-gray-400 text-sm mt-1">Aggiungi prodotti dal menu</p>
                   </div>
                 ) : (
                   (() => {
@@ -1356,19 +1379,25 @@ export default function WaiterMobileView() {
 
       {/* Inline Covers Picker */}
       {showInlineCovers && inlineCoversTable && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-in fade-in duration-150" onClick={cancelInlineCovers}>
-          <div className="fixed bottom-0 left-0 right-0 z-[101] bg-surface border-t border-surface-light rounded-t-[32px] p-6 animate-in slide-in-from-bottom-4 duration-200" onClick={e => e.stopPropagation()}>
+        <Dialog
+          open
+          onClose={cancelInlineCovers}
+          label="Numero coperti"
+          overlayClassName="z-[100] items-end p-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+          panelClassName="w-full bg-surface border-t border-surface-light rounded-t-[32px] p-6 animate-in slide-in-from-bottom-4 duration-200"
+        >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-black italic uppercase text-white">Numero Coperti</h2>
-              <button onClick={cancelInlineCovers} className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white">
+              <button onClick={cancelInlineCovers} aria-label="Chiudi" className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white">
                 <X size={20} />
               </button>
             </div>
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6 text-center">{inlineCoversTable.nome}</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 text-center">{inlineCoversTable.nome}</p>
             
             <div className="flex items-center justify-center gap-6 mb-6">
               <button 
                 onClick={() => setInlineCovers(Math.max(1, inlineCovers - 1))}
+                aria-label="Riduci coperti"
                 className="w-16 h-16 bg-charcoal rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
               >
                 <Minus size={28} />
@@ -1376,6 +1405,7 @@ export default function WaiterMobileView() {
               <span className="text-7xl font-black italic text-white tabular-nums">{inlineCovers}</span>
               <button 
                 onClick={() => setInlineCovers(inlineCovers + 1)}
+                aria-label="Aumenta coperti"
                 className="w-16 h-16 bg-charcoal rounded-2xl flex items-center justify-center text-gold border border-surface-light active:scale-90 transition-all"
               >
                 <Plus size={28} />
@@ -1394,31 +1424,36 @@ export default function WaiterMobileView() {
             >
               ANNULLA
             </button>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {transferSource && (
-        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="bg-surface border border-surface-light w-full sm:max-w-md max-h-[85vh] flex flex-col rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden">
+        <Dialog
+          open
+          onClose={() => setTransferSource(null)}
+          label="Trasferisci tavolo"
+          closeOnOverlay={false}
+          overlayClassName="z-[130] items-end sm:items-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200"
+          panelClassName="bg-surface border border-surface-light w-full sm:max-w-md max-h-[85vh] flex flex-col rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden"
+        >
             <div className="p-5 border-b border-surface-light shrink-0">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xl font-black italic uppercase text-white">Trasferisci Tavolo</h2>
-                <button onClick={() => setTransferSource(null)} className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90">
+                <button onClick={() => setTransferSource(null)} aria-label="Chiudi trasferimento" className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90">
                   <X size={18} />
                 </button>
               </div>
               <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">
                 Da {transferSource.nome} · {transferSource.clienti || 0} coperti
               </p>
-              <p className="text-[10px] text-gray-500 font-bold mt-1">
+              <p className="text-[10px] text-gray-400 font-bold mt-1">
                 Ordini aperti, bozza e orario di apertura verranno spostati sul tavolo selezionato.
               </p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
               {transferBusy ? (
-                <div className="flex items-center justify-center py-16 text-gray-500 font-black text-xs uppercase tracking-widest animate-pulse">
+                <div className="flex items-center justify-center py-16 text-gray-400 font-black text-xs uppercase tracking-widest animate-pulse">
                   Trasferimento in corso...
                 </div>
               ) : (
@@ -1431,7 +1466,7 @@ export default function WaiterMobileView() {
                   if (roomTables.length === 0) return null;
                   return (
                     <div key={room}>
-                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-600 mb-2 px-1">{room}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-400 mb-2 px-1">{room}</p>
                       <div className="grid grid-cols-2 gap-2">
                         {roomTables.map(t => {
                           const isFree = t.status === 'LIBERO';
@@ -1447,12 +1482,12 @@ export default function WaiterMobileView() {
                               }`}
                             >
                               <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border self-start ${
-                                isFree ? 'border-green-500/40 text-green-400' : 'border-surface-light text-gray-600'
+                                isFree ? 'border-green-500/40 text-green-400' : 'border-surface-light text-gray-400'
                               }`}>
                                 {t.status === 'LIBERO' ? 'Libero' : t.status}
                               </span>
                               <span className="text-lg font-black text-white leading-none">{t.nome}</span>
-                              <span className="text-[10px] font-bold text-gray-500">{t.clienti || 0} coperti</span>
+                              <span className="text-[10px] font-bold text-gray-400">{t.clienti || 0} coperti</span>
                             </button>
                           );
                         })}
@@ -1472,8 +1507,7 @@ export default function WaiterMobileView() {
                 ANNULLA
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       <ProductCustomizationModal
@@ -1535,15 +1569,21 @@ export default function WaiterMobileView() {
 
       {/* Turno Modal (marcatura pranzo/sera propria) */}
       {turnoModalOpen && currentUser && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl p-8">
+        <Dialog
+          open
+          onClose={() => setTurnoModalOpen(false)}
+          label="Il tuo turno"
+          closeOnOverlay={false}
+          overlayClassName="z-[140] items-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200"
+          panelClassName="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl p-8"
+        >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black italic uppercase text-white">Il tuo <span className="text-gold">Turno</span></h2>
-              <button onClick={() => setTurnoModalOpen(false)} className="p-2 bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light">
+              <button onClick={() => setTurnoModalOpen(false)} aria-label="Chiudi" className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white border border-surface-light">
                 <X size={18} />
               </button>
             </div>
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-5">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-5">
               {currentUser.name} · {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <div key={turnoTick} className="grid grid-cols-2 gap-3">
@@ -1554,7 +1594,7 @@ export default function WaiterMobileView() {
                   setTurnoTick(t => t + 1);
                 }}
                 className={`py-6 rounded-2xl border-2 font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
-                  hasTurno(currentUser.id, toLocalISODate(), 'pranzo') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
+                  hasTurno(currentUser.id, toLocalISODate(), 'pranzo') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-400'
                 }`}
               >
                 Pranzo
@@ -1566,49 +1606,54 @@ export default function WaiterMobileView() {
                   setTurnoTick(t => t + 1);
                 }}
                 className={`py-6 rounded-2xl border-2 font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
-                  hasTurno(currentUser.id, toLocalISODate(), 'sera') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-500'
+                  hasTurno(currentUser.id, toLocalISODate(), 'sera') ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-400'
                 }`}
               >
                 Sera
               </button>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Reservation Create/Edit Modal */}
       {reservationModal.open && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden">
+        <Dialog
+          open
+          onClose={() => setReservationModal({ open: false })}
+          label={reservationModal.reservation ? 'Modifica prenotazione' : 'Nuova prenotazione'}
+          closeOnOverlay={false}
+          overlayClassName="z-[140] items-center p-4 bg-black/90 backdrop-blur-xl animate-in zoom-in duration-200"
+          panelClassName="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden"
+        >
             <div className="p-5">
               <div className="flex justify-between items-center mb-5">
                 <div>
                   <h2 className="text-lg font-black italic uppercase tracking-tighter text-white">{reservationModal.reservation ? 'Modifica' : 'Nuova'} <span className="text-gold">Prenotazione</span></h2>
-                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-0.5">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">
                     {reservationModal.table ? `Tavolo: ${reservationModal.table.nome}` : 'Nessun tavolo assegnato'}
                   </p>
                 </div>
-                <button onClick={() => setReservationModal({ open: false })} className="p-2 bg-charcoal rounded-xl text-gray-500 hover:text-white border border-surface-light">
+                <button onClick={() => setReservationModal({ open: false })} aria-label="Chiudi" className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white border border-surface-light">
                   <X size={18} />
                 </button>
               </div>
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Cliente</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome Cliente</label>
                   <input type="text" placeholder="es. Mario Rossi" value={resForm.nome} onChange={e => setResForm({...resForm, nome: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Data</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data</label>
                     <input type="date" value={resForm.data} onChange={e => setResForm({...resForm, data: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Ora</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Ora</label>
                     <input type="time" value={resForm.ora} onChange={e => setResForm({...resForm, ora: e.target.value})} className="w-full bg-charcoal border border-surface-light rounded-xl p-3 text-sm text-white font-bold outline-none focus:border-gold transition-all" />
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Persone</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Persone</label>
                   <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-xl p-1.5 px-3">
                     <button onClick={() => setResForm({...resForm, persone: Math.max(1, (resForm.persone || 2) - 1)})} className="w-8 h-8 bg-surface rounded-lg text-gold active:scale-90 text-sm">-</button>
                     <span className="text-xl font-black text-white">{resForm.persone}</span>
@@ -1616,7 +1661,7 @@ export default function WaiterMobileView() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
                   <select
                     value={resForm.tavolo_id || ''}
                     onChange={e => setResForm({...resForm, tavolo_id: e.target.value || undefined})}
@@ -1642,31 +1687,36 @@ export default function WaiterMobileView() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Reservations Modal */}
       {isReservationsOpen && (
-        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300">
-          <div className="bg-surface border border-surface-light w-full sm:max-w-xl rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <Dialog
+          open
+          onClose={() => setIsReservationsOpen(false)}
+          label="Libro prenotazioni"
+          closeOnOverlay={false}
+          overlayClassName="z-[130] items-end sm:items-center p-0 sm:p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in duration-300"
+          panelClassName="bg-surface border border-surface-light w-full sm:max-w-xl rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        >
             <div className="p-5 border-b border-surface-light flex justify-between items-center bg-surface-light/5">
               <div>
                 <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">Libro <span className="text-gold">Prenotazioni</span></h2>
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mt-0.5">Prenotazioni di oggi</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mt-0.5">Prenotazioni di oggi</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="p-3 bg-gold text-black rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-gold/20">
+                <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} aria-label="Nuova prenotazione" className="p-3 bg-gold text-black rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-gold/20">
                   <Plus size={20} />
                 </button>
-                <button onClick={() => setIsReservationsOpen(false)} className="p-3 bg-charcoal rounded-2xl text-gray-500 hover:text-white border border-surface-light">
+                <button onClick={() => setIsReservationsOpen(false)} aria-label="Chiudi" className="p-3 bg-charcoal rounded-2xl text-gray-400 hover:text-white border border-surface-light">
                   <X size={20} />
                 </button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
                {reservations.length === 0 ? (
-                 <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 py-16">
+                 <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50 py-16">
                    <BookOpen size={48} strokeWidth={1} className="mb-4" />
                    <p className="font-black uppercase tracking-widest text-sm mb-5">Nessuna prenotazione oggi</p>
                    <button onClick={() => { setIsReservationsOpen(false); openNewReservationModal(); }} className="bg-gold text-black font-black py-3 px-6 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-gold/20 hover:brightness-110 transition-all">
@@ -1688,7 +1738,7 @@ export default function WaiterMobileView() {
                                  {res.persone} {res.persone === 1 ? 'Persona' : 'Persone'}
                                  {res.tavolo_id && tables.find(t => t.id === res.tavolo_id) && ` · ${tables.find(t => t.id === res.tavolo_id)!.nome}`}
                                </p>
-                               {res.note && <p className="text-[10px] text-gray-500 italic mt-1 truncate">"{res.note}"</p>}
+                               {res.note && <p className="text-[10px] text-gray-400 italic mt-1 truncate">"{res.note}"</p>}
                             </div>
                          </div>
                           {res.status === 'ARRIVATA' ? (
@@ -1715,8 +1765,7 @@ export default function WaiterMobileView() {
                  </div>
                )}
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
@@ -1735,9 +1784,9 @@ function HubCard({ icon, title, desc, accent, onClick }: {
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-black text-white text-base uppercase tracking-tight">{title}</h3>
-        <p className="text-xs text-gray-500 font-bold mt-0.5">{desc}</p>
+        <p className="text-xs text-gray-400 font-bold mt-0.5">{desc}</p>
       </div>
-      <ChevronRight size={20} className="text-gray-600 shrink-0" />
+      <ChevronRight size={20} className="text-gray-400 shrink-0" />
     </button>
   );
 }
@@ -1796,7 +1845,7 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
           <div className="flex items-center gap-2">
             <h5 className="font-bold text-white text-sm truncate">{item.nome}</h5>
             {item.portata && (
-              <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-500 border-gray-500/30 bg-gray-500/10'}`}>
+              <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-400 border-gray-500/30 bg-gray-500/10'}`}>
                 {item.portata}ª
               </span>
             )}

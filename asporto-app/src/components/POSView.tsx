@@ -105,7 +105,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   /** true se il carrello differisce dall'ultimo salvataggio (stesse chiavi usate per il delta di stampa) */
   function hasUnsavedChanges(): boolean {
     const current = new Map<string, number>();
-    for (const item of cart) {
+    for (const item of cartRef.current) {
       const key = getItemKey(item);
       current.set(key, (current.get(key) || 0) + item.quantity);
     }
@@ -140,8 +140,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const ingredientsRef = useRef(ingredients);
   const localUpdateRef = useRef(false);
   const savedItemQtysRef = useRef<Map<string, number>>(new Map());
+  const cartRef = useRef<CustomizedItem[]>(cart);
   productsRef.current = products;
   ingredientsRef.current = ingredients;
+  cartRef.current = cart;
 
   const getItemKey = (item: CustomizedItem): string => {
     const adds = [...item.addedIngredients].map(a => a.nome).sort().join(',');
@@ -190,7 +192,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     if (data) setIngredients(data);
   }
 
-  async function fetchExistingOrder() {
+  async function fetchExistingOrder(force = true) {
     if (IS_DEMO_MODE) {
       const mockTable = MOCK_TABLES.find(t => t.id === tableId || t.nome === tableName);
       if (mockTable) {
@@ -241,6 +243,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           uniqueId: newUniqueId()
         };
       });
+      if (!force && hasUnsavedChanges()) {
+        toast.addToast({
+          type: 'info',
+          title: 'Modifiche non salvate',
+          message: "L'ordine è stato aggiornato da un altro dispositivo. Salva o ricarica per allinearti.",
+          duration: 5000,
+        });
+        return;
+      }
       setCart(mappedCart);
       const qtyMap = new Map<string, number>();
       for (const i of mappedCart) {
@@ -337,7 +348,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             });
           }
           localUpdateRef.current = false;
-          void fetchExistingOrder();
+          void fetchExistingOrder(false);
         }
       )
       .subscribe();
@@ -365,7 +376,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               });
             }
             localUpdateRef.current = false;
-            void fetchExistingOrder();
+            void fetchExistingOrder(false);
           }
         )
         .subscribe();
@@ -975,7 +986,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
                 <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto hide-scrollbar">
                   <button
-                    onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
+                    onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), {
+                      lineTotals: cart.map(i => calculateItemPrice(i, ingredients)),
+                      subtotal: total,
+                      discount: Math.max(0, total - discountedTotal),
+                      discountLabel: scontoTipo === 'percentuale' ? `${scontoValore}%` : (scontoTipo === 'fisso' ? `-€${scontoValore.toFixed(2)}` : undefined),
+                    })}
                     disabled={cart.length === 0}
                     className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
