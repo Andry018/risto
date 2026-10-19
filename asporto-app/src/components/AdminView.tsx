@@ -327,7 +327,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
             {onNavigateHome ? (
               <button
                 onClick={onNavigateHome}
-                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all duration-300"
+                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all duration-300"
               >
                 <LayoutDashboard size={20} />
                 <span className="whitespace-nowrap">Dashboard Principale</span>
@@ -335,7 +335,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
             ) : (
               <Link
                 to="/"
-                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all duration-300"
+                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all duration-300"
               >
                 <LayoutDashboard size={20} />
                 <span className="whitespace-nowrap">Dashboard Principale</span>
@@ -347,7 +347,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'menu'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
@@ -360,7 +360,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'ingredients'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
@@ -373,7 +373,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'removals'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
@@ -386,7 +386,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'variants'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
@@ -400,7 +400,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'haccp'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
@@ -413,7 +413,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
                 activeTab === 'cassa'
                   ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-500 hover:bg-charcoal hover:text-white'
+                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3 font-medium">
@@ -446,11 +446,11 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
               </div>
               <div className="flex flex-col gap-1 flex-1">
                 {onNavigateHome ? (
-                  <button onClick={() => { setMenuOpen(false); onNavigateHome(); }} className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all">
+                  <button onClick={() => { setMenuOpen(false); onNavigateHome(); }} className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all">
                     <LayoutDashboard size={20} /> Dashboard
                   </button>
                 ) : (
-                  <a href="/" className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-500 hover:bg-charcoal hover:text-white transition-all" onClick={() => setMenuOpen(false)}>
+                  <a href="/" className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all" onClick={() => setMenuOpen(false)}>
                     <LayoutDashboard size={20} /> Dashboard
                   </a>
                 )}
@@ -464,7 +464,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                   <button
                     key={tab}
                     onClick={() => { setActiveTab(tab); setMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === tab ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-500 hover:bg-charcoal hover:text-white'}`}
+                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === tab ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-400 hover:bg-charcoal hover:text-white'}`}
                   >
                     <Icon size={20} className={activeTab === tab ? 'text-gold' : ''} />
                     <span className="font-medium">{label}</span>
@@ -473,14 +473,14 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
                 <div className="h-px bg-surface-light/50 my-1" />
                 <button
                   onClick={() => { setActiveTab('haccp'); setMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'haccp' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-500 hover:bg-charcoal hover:text-white'}`}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'haccp' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-400 hover:bg-charcoal hover:text-white'}`}
                 >
                   <ShieldCheck size={20} className={activeTab === 'haccp' ? 'text-gold' : ''} />
                   <span className="font-medium">HACCP Etichette</span>
                 </button>
                 <button
                   onClick={() => { setActiveTab('cassa'); setMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'cassa' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-500 hover:bg-charcoal hover:text-white'}`}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'cassa' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-400 hover:bg-charcoal hover:text-white'}`}
                 >
                   <Receipt size={20} className={activeTab === 'cassa' ? 'text-gold' : ''} />
                   <span className="font-medium">Cassa Fiscale</span>

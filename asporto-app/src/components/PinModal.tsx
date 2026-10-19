@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { X, Lock } from 'lucide-react';
 import { getManagerPin, setPinPromptHandler } from '../lib/staffAuth';
+import Dialog from './Dialog';
 
 interface PinContextValue {
   requestPin: (actionLabel: string) => Promise<boolean>;
@@ -52,14 +53,13 @@ export function PinProvider({ children }: { children: ReactNode }) {
     <PinContext.Provider value={{ requestPin }}>
       {children}
       {state && (
-        <div
-          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={handleCancel}
+        <Dialog
+          open
+          onClose={handleCancel}
+          label="PIN responsabile"
+          overlayClassName="z-[300] items-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          panelClassName="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden"
         >
-          <div
-            className="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
             <div className="p-6 border-b border-surface-light flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-gold/20">
@@ -69,7 +69,7 @@ export function PinProvider({ children }: { children: ReactNode }) {
                   PIN Responsabile
                 </h2>
               </div>
-              <button onClick={handleCancel} className="p-2 bg-charcoal border border-surface-light rounded-xl text-gray-500 hover:text-white transition-all active:scale-90">
+              <button onClick={handleCancel} aria-label="Chiudi" className="p-2 bg-charcoal border border-surface-light rounded-xl text-gray-400 hover:text-white transition-all active:scale-90">
                 <X size={18} />
               </button>
             </div>
@@ -104,8 +104,7 @@ export function PinProvider({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </PinContext.Provider>
   );

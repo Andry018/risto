@@ -96,7 +96,7 @@ export default function WaiterMenuTab({
     <div className="flex h-full min-h-0 flex-col bg-gradient-to-b from-charcoal via-charcoal to-surface">
       <div className="px-3 pt-3 pb-2 shrink-0 border-b border-surface-light/70 bg-surface/40 backdrop-blur-xl">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-500 shrink-0">Portata</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-400 shrink-0">Portata</span>
           <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
             <button
               type="button"
@@ -105,6 +105,7 @@ export default function WaiterMenuTab({
                 onPortataChange(PORTATA_OPTIONS[Math.max(idx - 1, 0)].value);
               }}
               disabled={currentPortata === PORTATA_OPTIONS[0].value}
+              aria-label="Portata precedente"
               className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
             >
               <Minus size={16} />
@@ -119,6 +120,7 @@ export default function WaiterMenuTab({
                 onPortataChange(PORTATA_OPTIONS[Math.min(idx + 1, PORTATA_OPTIONS.length - 1)].value);
               }}
               disabled={currentPortata === PORTATA_OPTIONS[PORTATA_OPTIONS.length - 1].value}
+              aria-label="Portata successiva"
               className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
             >
               <Plus size={16} />
@@ -145,7 +147,7 @@ export default function WaiterMenuTab({
 
       <div className="px-3 py-3 space-y-2 shrink-0 bg-charcoal border-b border-surface-light/70">
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input
             type="text"
             placeholder="Cerca piatto..."
@@ -169,10 +171,11 @@ export default function WaiterMenuTab({
             <button
               key={def.label}
               onClick={() => onCategoryChange(activeCategory === def.label ? null : def.label)}
+              aria-pressed={activeCategory === def.label}
               className={`shrink-0 px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.22em] border transition-all ${
                 activeCategory === def.label
                   ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20'
-                  : 'bg-surface border-surface-light text-gray-500'
+                  : 'bg-surface border-surface-light text-gray-400'
               }`}
             >
               {def.label}
@@ -183,9 +186,9 @@ export default function WaiterMenuTab({
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-32">
         {filtered.length === 0 ? (
-          <div className="py-16 text-center text-gray-500">
+          <div className="py-16 text-center text-gray-400">
             <p className="italic text-lg">Nessun prodotto trovato</p>
-            <p className="text-[10px] uppercase tracking-[0.3em] mt-2 text-gray-600">Controlla filtro o disponibilità</p>
+            <p className="text-[10px] uppercase tracking-[0.3em] mt-2 text-gray-400">Controlla filtro o disponibilità</p>
           </div>
         ) : (
           filtered.map(product => {
@@ -207,7 +210,7 @@ export default function WaiterMenuTab({
                   </div>
                   <div className="flex items-center gap-3 mt-1.5">
                     <span className="text-lg font-black text-gold">€{product.prezzo.toFixed(2)}</span>
-                    <span className="text-[10px] font-black text-gray-600 uppercase">{product.categoria}</span>
+                    <span className="text-[10px] font-black text-gray-400 uppercase">{product.categoria}</span>
                   </div>
                 </div>
 

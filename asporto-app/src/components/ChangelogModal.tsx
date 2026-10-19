@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, CheckCircle, Zap, Bug, TrendingUp, MessageSquare, Bell } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
+import Dialog from './Dialog';
 
 type ChangeType = 'feature' | 'fix' | 'improvement' | 'breaking';
 
@@ -85,8 +86,14 @@ export default function ChangelogModal({ isOpen, onClose }: { isOpen: boolean; o
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="bg-surface border border-surface-light w-full max-w-2xl max-h-[85vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+    <Dialog
+      open
+      onClose={onClose}
+      label="Changelog"
+      closeOnOverlay={false}
+      overlayClassName="z-[150] items-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-200"
+      panelClassName="bg-surface border border-surface-light w-full max-w-2xl max-h-[85vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+    >
         {/* Header */}
         <div className="p-6 border-b border-surface-light bg-surface-light/5 flex justify-between items-start">
           <div>
@@ -94,11 +101,11 @@ export default function ChangelogModal({ isOpen, onClose }: { isOpen: boolean; o
               <Bell size={28} className="text-gold" />
               Changelog
             </h2>
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">
               Storico modifiche e nuove funzionalità
             </p>
           </div>
-          <button onClick={onClose} className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white border border-surface-light active:scale-90 transition">
+          <button onClick={onClose} aria-label="Chiudi" className="p-2 bg-charcoal rounded-xl text-gray-400 hover:text-white border border-surface-light active:scale-90 transition">
             <X size={20} />
           </button>
         </div>
@@ -125,7 +132,7 @@ export default function ChangelogModal({ isOpen, onClose }: { isOpen: boolean; o
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${config.bg} ${config.color} border border-current/30`}>
                         {config.label}
                       </span>
-                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{entry.date}</span>
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{entry.date}</span>
                     </div>
                     <p className="font-bold text-white text-base pr-8">{entry.title}</p>
                     <p className="text-[11px] text-gray-400 mt-1">{entry.description}</p>
@@ -153,9 +160,9 @@ export default function ChangelogModal({ isOpen, onClose }: { isOpen: boolean; o
 
           {/* Version info */}
           <div className="pt-4 border-t border-surface-light text-center">
-            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Versione corrente</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Versione corrente</p>
             <p className="text-lg font-black text-gold italic">2.1.0</p>
-            <p className="text-[10px] text-gray-600 mt-2">
+            <p className="text-[10px] text-gray-400 mt-2">
               Build: {new Date().toLocaleDateString('it-IT')}
             </p>
           </div>
@@ -187,7 +194,6 @@ export default function ChangelogModal({ isOpen, onClose }: { isOpen: boolean; o
             Chiudi
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

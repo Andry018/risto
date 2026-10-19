@@ -101,7 +101,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
           <h1 className="text-2xl font-black text-white text-center uppercase italic tracking-tight mb-1">
             Accesso <span className="text-gold">Staff</span>
           </h1>
-          <p className="text-center text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-6">
+          <p className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-6">
             Seleziona il tuo profilo
           </p>
 
@@ -117,10 +117,10 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
                     </div>
                     <div>
                       <p className="font-bold text-white text-sm">{user.name}</p>
-                      <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{user.role}</p>
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{user.role}</p>
                     </div>
                   </div>
-                  <ChevronRight size={18} className="text-gray-600" />
+                  <ChevronRight size={18} className="text-gray-400" />
                 </button>
               ))}
               {defaultPin && (
@@ -128,20 +128,20 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
                   className="w-full flex items-center justify-between p-4 bg-charcoal border border-dashed border-surface-light rounded-2xl hover:border-gold/30 transition-all"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gray-500 font-black">?</div>
+                    <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center text-gray-400 font-black">?</div>
                     <div>
                       <p className="font-bold text-gray-400 text-sm">PIN predefinito</p>
-                      <p className="text-[9px] font-black text-gray-600 uppercase">Login legacy</p>
+                      <p className="text-[9px] font-black text-gray-400 uppercase">Login legacy</p>
                     </div>
                   </div>
-                  <ChevronRight size={18} className="text-gray-600" />
+                  <ChevronRight size={18} className="text-gray-400" />
                 </button>
               )}
             </div>
           ) : (
             <div className="mb-6">
               <button onClick={() => { setSelectedUserId(null); setError(null); setPin(''); }}
-                className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 flex items-center gap-1 hover:text-white"
+                className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1 hover:text-white"
               >
                 <ArrowRight size={12} className="rotate-180" /> Cambia utente
               </button>
@@ -150,7 +150,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
               </p>
               <input type="password" inputMode="numeric" value={pin} onChange={e => { setPin(e.target.value); setError(null); }}
                 onKeyDown={e => e.key === 'Enter' && submit()} placeholder="PIN"
-                className="w-full bg-charcoal border border-surface-light rounded-2xl px-5 py-4 text-center text-2xl font-black tracking-[0.5em] text-white placeholder:text-gray-600 outline-none focus:border-gold mb-4"
+                className="w-full bg-charcoal border border-surface-light rounded-2xl px-5 py-4 text-center text-2xl font-black tracking-[0.5em] text-white placeholder:text-gray-400 outline-none focus:border-gold mb-4"
               />
               {error && <p className="text-red-400 text-xs font-bold text-center mb-4 uppercase">{error}</p>}
             </div>
@@ -170,7 +170,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
             </button>
           ) : null}
 
-          <p className="mt-6 text-[10px] text-gray-600 text-center font-bold uppercase tracking-widest">
+          <p className="mt-6 text-[10px] text-gray-400 text-center font-bold uppercase tracking-widest">
             Sessione su questo dispositivo
           </p>
         </div>
@@ -189,7 +189,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
           <h1 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">
             Accesso <span className="text-red-400">non autorizzato</span>
           </h1>
-          <p className="text-gray-500 text-sm font-bold mb-8 max-w-xs">
+          <p className="text-gray-400 text-sm font-bold mb-8 max-w-xs">
             {current.name}, il tuo ruolo ({current.role}) non ha accesso a questa sezione.
           </p>
           <button

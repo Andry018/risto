@@ -11,6 +11,7 @@ import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
 import ChangelogModal from './ChangelogModal';
+import Dialog from './Dialog';
 
 type Section = 'hub' | 'sala';
 
@@ -91,6 +92,7 @@ export default function StaffDashboard() {
               onClick={() => goToSection('hub')}
               className="p-2 -ml-1 mr-1 bg-surface border border-surface-light rounded-xl text-gray-400 hover:text-white transition-colors cursor-pointer"
               title="Torna alle sezioni"
+              aria-label="Torna alle sezioni"
             >
               <ArrowLeft size={20} />
             </button>
@@ -109,7 +111,7 @@ export default function StaffDashboard() {
           <div className="hidden md:flex items-center gap-3 mr-2">
             <div className="text-right">
               <p className="text-xl font-black text-white leading-none tabular-nums">{timeStr}</p>
-              <p className="text-[10px] font-bold text-gray-500 capitalize mt-0.5">{dateStr}</p>
+              <p className="text-[10px] font-bold text-gray-400 capitalize mt-0.5">{dateStr}</p>
             </div>
             <Clock size={22} className="text-gold" />
           </div>
@@ -118,6 +120,7 @@ export default function StaffDashboard() {
             onClick={() => setShowChangelog(true)}
             className="text-white hover:text-gold transition-colors cursor-pointer"
             title="Novità e changelog"
+            aria-label="Novità e changelog"
           >
             <Info size={28} strokeWidth={1.5} />
           </button>
@@ -125,6 +128,7 @@ export default function StaffDashboard() {
             onClick={() => navigate('/settings')}
             className="text-white hover:text-gold transition-colors cursor-pointer"
             title="Impostazioni"
+            aria-label="Impostazioni"
           >
             <Settings size={28} strokeWidth={1.5} />
           </button>
@@ -226,7 +230,7 @@ export default function StaffDashboard() {
                     </div>
                   ))}
                   {tables.length === 0 && !loading && (
-                    <div className="col-span-full text-center text-[11px] text-gray-500 py-4">Nessun tavolo</div>
+                    <div className="col-span-full text-center text-[11px] text-gray-400 py-4">Nessun tavolo</div>
                   )}
                 </div>
               </div>
@@ -278,8 +282,8 @@ export default function StaffDashboard() {
             </div>
 
             <div className="flex justify-between items-center mb-4 shrink-0">
-                <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">OGGI</span>
-                <span className="text-[11px] text-gray-500 capitalize">{dateStr}</span>
+                <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">OGGI</span>
+                <span className="text-[11px] text-gray-400 capitalize">{dateStr}</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
@@ -287,8 +291,8 @@ export default function StaffDashboard() {
                   <div key={r.id} className="flex justify-between items-center border-b border-surface-light pb-4 last:border-0 last:pb-0">
                     <div>
                       <h4 className="text-[13px] font-bold text-white mb-1">{r.ora?.split(':').slice(0, 2).join(':')}</h4>
-                      <p className="text-[11px] text-gray-500">{r.persone} Persone</p>
-                      <p className="text-[11px] text-gray-500">{r.nome}</p>
+                      <p className="text-[11px] text-gray-400">{r.persone} Persone</p>
+                      <p className="text-[11px] text-gray-400">{r.nome}</p>
                     </div>
                     <span className={`px-2.5 py-1 rounded border text-[10px] uppercase tracking-wider font-semibold ${
                        r.status === 'CONFERMATA' ? 'border-gold text-gold' :
@@ -300,7 +304,7 @@ export default function StaffDashboard() {
                   </div>
                 ))}
                 {reservations.length === 0 && !loading && (
-                   <div className="h-full flex items-center justify-center text-gray-500 text-[11px]">Nessuna prenotazione oggi</div>
+                   <div className="h-full flex items-center justify-center text-gray-400 text-[11px]">Nessuna prenotazione oggi</div>
                 )}
             </div>
 
@@ -316,9 +320,15 @@ export default function StaffDashboard() {
 
       {/* New Order Modal */}
       {showNewOrderModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-surface border border-surface-light w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden p-8 relative animate-in zoom-in-95 duration-200">
-            <button onClick={() => setShowNewOrderModal(false)} className="absolute top-6 right-6 text-gray-500 hover:text-white transition cursor-pointer">
+        <Dialog
+          open
+          onClose={() => setShowNewOrderModal(false)}
+          label="Nuovo conto"
+          closeOnOverlay={false}
+          overlayClassName="z-[100] items-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300"
+          panelClassName="bg-surface border border-surface-light w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden p-8 relative animate-in zoom-in-95 duration-200"
+        >
+            <button onClick={() => setShowNewOrderModal(false)} aria-label="Chiudi" className="absolute top-6 right-6 text-gray-400 hover:text-white transition cursor-pointer">
               <X size={20} />
             </button>
             <h2 className="text-2xl font-black text-white mb-6">Nuovo Conto</h2>
@@ -332,12 +342,12 @@ export default function StaffDashboard() {
                 </div>
                 <div>
                   <p className="font-bold text-white group-hover:text-gold transition-colors">Apri su Tavolo</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Seleziona un tavolo dalla mappa</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Seleziona un tavolo dalla mappa</p>
                 </div>
               </button>
               <div className="flex items-center gap-3 py-1">
                 <div className="flex-1 h-px bg-surface-light" />
-                <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">oppure</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">oppure</span>
                 <div className="flex-1 h-px bg-surface-light" />
               </div>
               <div>
@@ -350,7 +360,7 @@ export default function StaffDashboard() {
                   </div>
                   <div>
                     <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">Apri con Nome</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Per eventi, feste o conti sospesi</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Per eventi, feste o conti sospesi</p>
                   </div>
                 </button>
                 <input
@@ -359,13 +369,12 @@ export default function StaffDashboard() {
                   onChange={e => setNewOrderName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && newOrderName.trim()) { setShowNewOrderModal(false); navigate(`/pos?tableName=${encodeURIComponent(newOrderName.trim())}`); } }}
                   placeholder="Inserisci nome cliente o evento..."
-                  className="w-full bg-charcoal border border-surface-light rounded-xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-gold transition-all placeholder:text-gray-600"
+                  className="w-full bg-charcoal border border-surface-light rounded-xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-gold transition-all placeholder:text-gray-400"
                   autoFocus
                 />
               </div>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
     </div>
@@ -374,14 +383,14 @@ export default function StaffDashboard() {
 
 type Accent = 'gold' | 'green' | 'gray' | 'blue' | 'orange' | 'purple' | 'red';
 
-const accentClasses: Record<Accent, { icon: string; border: string; glow: string; bg: string }> = {
-  gold:   { icon: 'text-gold',        border: 'hover:border-gold/50',        glow: 'group-hover:bg-gold/10',        bg: 'bg-gold/10' },
-  green:  { icon: 'text-emerald-400', border: 'hover:border-emerald-500/50', glow: 'group-hover:bg-emerald-500/10', bg: 'bg-emerald-500/10' },
-  blue:   { icon: 'text-sky-400',     border: 'hover:border-sky-500/50',     glow: 'group-hover:bg-sky-500/10',     bg: 'bg-sky-500/10' },
-  orange: { icon: 'text-orange-400',  border: 'hover:border-orange-500/50',  glow: 'group-hover:bg-orange-500/10', bg: 'bg-orange-500/10' },
-  purple: { icon: 'text-violet-400',  border: 'hover:border-violet-500/50',  glow: 'group-hover:bg-violet-500/10', bg: 'bg-violet-500/10' },
-  gray:   { icon: 'text-gray-400',    border: 'hover:border-gray-500/50',    glow: 'group-hover:bg-gray-500/10',   bg: 'bg-gray-500/10' },
-  red:    { icon: 'text-red-400',     border: 'hover:border-red-500/50',     glow: 'group-hover:bg-red-500/10',    bg: 'bg-red-500/10' },
+const accentClasses: Record<Accent, { icon: string; border: string; glow: string; bg: string; title: string }> = {
+  gold:   { icon: 'text-gold',        border: 'hover:border-gold/50',        glow: 'group-hover:bg-gold/10',        bg: 'bg-gold/10',        title: 'group-hover:text-gold' },
+  green:  { icon: 'text-emerald-400', border: 'hover:border-emerald-500/50', glow: 'group-hover:bg-emerald-500/10', bg: 'bg-emerald-500/10', title: 'group-hover:text-emerald-400' },
+  blue:   { icon: 'text-sky-400',     border: 'hover:border-sky-500/50',     glow: 'group-hover:bg-sky-500/10',     bg: 'bg-sky-500/10',     title: 'group-hover:text-sky-400' },
+  orange: { icon: 'text-orange-400',  border: 'hover:border-orange-500/50',  glow: 'group-hover:bg-orange-500/10', bg: 'bg-orange-500/10',  title: 'group-hover:text-orange-400' },
+  purple: { icon: 'text-violet-400',  border: 'hover:border-violet-500/50',  glow: 'group-hover:bg-violet-500/10', bg: 'bg-violet-500/10',  title: 'group-hover:text-violet-400' },
+  gray:   { icon: 'text-gray-400',    border: 'hover:border-gray-500/50',    glow: 'group-hover:bg-gray-500/10',   bg: 'bg-gray-500/10',    title: 'group-hover:text-gray-400' },
+  red:    { icon: 'text-red-400',     border: 'hover:border-red-500/50',     glow: 'group-hover:bg-red-500/10',    bg: 'bg-red-500/10',     title: 'group-hover:text-red-400' },
 };
 
 function KpiCard({ label, value, accent, icon }: { label: string; value: number; accent: Accent; icon: React.ReactNode }) {
@@ -393,7 +402,7 @@ function KpiCard({ label, value, accent, icon }: { label: string; value: number;
       </div>
       <div>
         <p className={`text-3xl font-black leading-none ${a.icon}`}>{value}</p>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-1">{label}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">{label}</p>
       </div>
     </div>
   );
@@ -415,8 +424,8 @@ function BigSectionCard({ title, desc, icon, accent, onClick, badge }: {
         {icon}
       </div>
       <div className="text-left mt-4">
-        <p className={`text-2xl font-black uppercase tracking-tight text-white group-hover:${a.icon} transition-colors`}>{title}</p>
-        <p className="text-xs text-gray-500 mt-1 font-medium">{desc}</p>
+        <p className={`text-2xl font-black uppercase tracking-tight text-white ${a.title} transition-colors`}>{title}</p>
+        <p className="text-xs text-gray-400 mt-1 font-medium">{desc}</p>
       </div>
     </button>
   );
@@ -428,7 +437,7 @@ function PosBox({ icon, title, desc, onClick }: { icon: React.ReactNode, title: 
       <div className="text-gold">{icon}</div>
       <div>
         <h3 className="text-[13px] font-semibold text-[#f5f5f5] group-hover:text-gold transition">{title}</h3>
-        <p className="text-[10px] text-gray-500 mt-1">{desc}</p>
+        <p className="text-[10px] text-gray-400 mt-1">{desc}</p>
       </div>
     </button>
   );
