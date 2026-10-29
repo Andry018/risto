@@ -1,0 +1,16 @@
+[Unit]
+Description=Risto — WA Agent (WhatsApp via Evolution API)
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/risto/asporto-app/wa-agent
+EnvironmentFile=/opt/risto/asporto-app/wa-agent/.env
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:/opt/risto/logs/wa.log
+StandardError=append:/opt/risto/logs/wa.log
+
+[Install]
+WantedBy=multi-user.target

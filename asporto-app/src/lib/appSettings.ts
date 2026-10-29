@@ -128,6 +128,7 @@ export const SETTINGS_KEYS = {
   publishMenuSecret: 'risto_setting_publish_menu_secret',
   systemPanelSecret: 'risto_setting_system_panel_secret',
   ecrAgentUrl:       'risto_setting_ecr_agent_url',
+  whatsappQuickReplies: 'risto_setting_whatsapp_quick_replies',
 } as const;
 
 // ---------------------------------------------------------------------------

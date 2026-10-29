@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient, Order, CustomizedItem } from '../types/entities';
@@ -27,7 +27,10 @@ import ProductCustomizationModal from './ProductCustomizationModal';
 
 export default function TakeawayTabletView() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { addToast } = useToast();
+  // Arrivo da WhatsApp: nome precompilato e, a ordine salvato, ritorno alla chat
+  const returnTo = searchParams.get('returnTo')?.startsWith('/whatsapp') ? searchParams.get('returnTo') : null;
   useEffect(() => {
     const user = getCurrentUser();
     if (user && user.role !== 'admin') {
@@ -38,7 +41,7 @@ export default function TakeawayTabletView() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CustomizedItem[]>([]);
-  const [customerName, setCustomerName] = useState('');
+  const [customerName, setCustomerName] = useState(() => searchParams.get('nome') || '');
   const [pickupTime, setPickupTime] = useState(''); // This will now represent the selected slot
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -217,6 +220,14 @@ export default function TakeawayTabletView() {
 
     if (!error) {
       addToast({ type: 'success', title: 'Ordine salvato!' });
+      if (returnTo) {
+        const back = new URL(returnTo, window.location.origin);
+        back.searchParams.set('asporto', pickupTime);
+        back.searchParams.set('totale', total.toFixed(2));
+        back.searchParams.set('nome', customerName);
+        navigate(back.pathname + back.search);
+        return;
+      }
       setCart([]);
       setCustomerName('');
       setPickupTime('');

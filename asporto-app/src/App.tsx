@@ -34,6 +34,7 @@ const HaccpView = lazy(() => import('./components/HaccpView'));
 const CassaFiscalePage = lazy(() => import('./components/CassaFiscalePage'));
 const SystemPanelView = lazy(() => import('./components/SystemPanelView'));
 const RearScreenPreview = lazy(() => import('./components/RearScreenPreview'));
+const WhatsAppView = lazy(() => import('./components/WhatsAppView'));
 
 initTheme();
 
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/reports" element={<StaffPinGuard requiredRoles={['admin']}><ReportsView /></StaffPinGuard>} />
           <Route path="/fatture" element={<StaffPinGuard requiredRoles={['admin']}><FattureView /></StaffPinGuard>} />
           <Route path="/reservations" element={<ReservationsView />} />
+          <Route path="/whatsapp" element={<StaffPinGuard requiredRoles={['admin', 'waiter']}><WhatsAppView /></StaffPinGuard>} />
           <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
           <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />
           <Route path="/haccp" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><HaccpView isEmbedded={false} /></StaffPinGuard>} />

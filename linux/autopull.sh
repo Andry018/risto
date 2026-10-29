@@ -32,5 +32,6 @@ supabase migration up --local --workdir "$RISTO_BASE" >> "$LOG" 2>&1 || echo "[$
 # Riavvia servizi aggiornati
 systemctl restart risto-print >> "$LOG" 2>&1 || true
 systemctl restart risto-ecr >> "$LOG" 2>&1 || true
+systemctl restart risto-wa >> "$LOG" 2>&1 || true
 
 echo "[$(date -Iseconds)] Autopull completato" >> "$LOG"

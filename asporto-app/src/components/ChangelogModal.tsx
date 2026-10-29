@@ -16,6 +16,21 @@ interface ChangeEntry {
 
 const CHANGELOG: ChangeEntry[] = [
   {
+    version: '2.2.0',
+    date: '2026-10-29',
+    type: 'feature',
+    title: 'WhatsApp nel gestionale',
+    description: 'Chat WhatsApp stile WhatsApp Web con azioni rapide per prenotazioni e asporto',
+    details: [
+      'Nuova pagina /whatsapp (icona fumetto in dashboard, con badge messaggi non letti)',
+      'Elenco chat, conversazione in tempo reale, spunte di lettura, foto su richiesta',
+      'Pannello laterale: nuova prenotazione precompilata da nome e numero, con messaggio di conferma pronto',
+      'Ordine asporto dalla chat: al salvataggio torna alla chat con la conferma (orario + totale) da inviare',
+      'Prossime prenotazioni del cliente riconosciute dal numero di telefono',
+      'Risposte rapide modificabili e link al menu',
+    ],
+  },
+  {
     version: '2.1.1',
     date: '2026-09-28',
     type: 'feature',

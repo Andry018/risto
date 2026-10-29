@@ -1,0 +1,13 @@
+{
+  "name": "wa-agent",
+  "version": "1.0.0",
+  "description": "Ponte gestionale ↔ Evolution API (WhatsApp) — nessuna dipendenza npm",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

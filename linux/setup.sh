@@ -195,6 +195,14 @@ EOF
   info "asporto-app/.env creato."
 fi
 
+# WA agent (WhatsApp): chiavi casuali generate al primo setup
+WA_ENV="$RISTO_BASE/asporto-app/wa-agent/.env"
+if [ ! -f "$WA_ENV" ]; then
+  sed -e "s|cambiami-chiave-lunga-casuale|$(openssl rand -hex 24)|"       -e "s|cambiami-token-tablet|$(openssl rand -hex 16)|"       -e "s|cambiami-segreto-webhook|$(openssl rand -hex 24)|"       -e "s|cambiami-password-db|$(openssl rand -hex 16)|"       "${WA_ENV}.example" > "$WA_ENV"
+  chmod 600 "$WA_ENV"
+  info "wa-agent/.env creato. Token tablet: $(grep '^WA_ACCESS_TOKEN=' "$WA_ENV" | cut -d= -f2)"
+fi
+
 # Admin server secrets
 SECRETS_FILE="$RISTO_BASE/admin-server/secrets.env"
 if [ ! -f "$SECRETS_FILE" ]; then
@@ -209,13 +217,13 @@ fi
 # 12. Systemd services
 # ---------------------------------------------------------------------------
 info "Installazione servizi systemd..."
-for SVC in risto-admin risto-print risto-ecr risto-webhook; do
+for SVC in risto-admin risto-print risto-ecr risto-webhook risto-wa; do
   cp "$RISTO_BASE/linux/services/${SVC}.service" /etc/systemd/system/
 done
 
 systemctl daemon-reload
-systemctl enable risto-admin risto-print risto-ecr risto-webhook
-systemctl start  risto-admin risto-print risto-ecr risto-webhook
+systemctl enable risto-admin risto-print risto-ecr risto-webhook risto-wa
+systemctl start  risto-admin risto-print risto-ecr risto-webhook risto-wa
 
 # ---------------------------------------------------------------------------
 # Fine

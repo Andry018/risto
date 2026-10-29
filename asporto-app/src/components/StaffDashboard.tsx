@@ -5,13 +5,14 @@ import type { Tavolo, Reservation } from '../types/entities';
 import {
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   FilePlus, Zap, History, PauseCircle, Package, Users,
-  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt, Info
+  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt, Info, MessageCircle
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
 import { toLocalISODate } from '../lib/dateUtils';
 import ChangelogModal from './ChangelogModal';
 import Dialog from './Dialog';
+import { useWaUnread } from '../lib/whatsapp';
 
 type Section = 'hub' | 'sala';
 
@@ -37,6 +38,7 @@ export default function StaffDashboard() {
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [newOrderName, setNewOrderName] = useState('');
   const [showChangelog, setShowChangelog] = useState(false);
+  const waUnread = useWaUnread();
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -116,6 +118,19 @@ export default function StaffDashboard() {
             <Clock size={22} className="text-gold" />
           </div>
           <PrinterStatusBadge />
+          <button
+            onClick={() => navigate('/whatsapp')}
+            className="relative text-white hover:text-emerald-400 transition-colors cursor-pointer"
+            title="WhatsApp"
+            aria-label={waUnread ? `WhatsApp, ${waUnread} messaggi non letti` : 'WhatsApp'}
+          >
+            <MessageCircle size={28} strokeWidth={1.5} />
+            {waUnread > 0 && (
+              <span className="absolute -top-1.5 -right-2 min-w-[1.25rem] h-5 px-1 rounded-full bg-emerald-500 text-black text-[11px] font-bold flex items-center justify-center ring-2 ring-charcoal">
+                {waUnread > 99 ? '99+' : waUnread}
+              </span>
+            )}
+          </button>
           <button
             onClick={() => setShowChangelog(true)}
             className="text-white hover:text-gold transition-colors cursor-pointer"
