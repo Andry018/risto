@@ -6,8 +6,8 @@ import {
   setStaffSessionValid,
   verifyStaffPin,
   getStaffUsers,
-  addStaffUser,
   getDefaultStaffPin,
+  legacyStaffUser,
   getDefaultRouteForRole,
   getCurrentUser,
   hasPermission,
@@ -31,6 +31,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState(() => isStaffSessionValid());
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const [users, setUsers] = useState<StaffUser[]>(() => getStaffUsers());
   const defaultPin = getDefaultStaffPin();
 
@@ -53,41 +54,37 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
     }
   }, [authed]);
 
-  // Auto-create default user if no users exist and a default PIN is configured
-  useEffect(() => {
-    if (users.length === 0 && defaultPin) {
-      addStaffUser('Operatore', defaultPin, 'admin');
-      setUsers(getStaffUsers());
-    }
-  }, []);
-
-  const submit = useCallback(() => {
+  const submit = useCallback(async () => {
+    if (checking) return;
     setError(null);
     if (selectedUserId) {
-      if (!verifyStaffPin(selectedUserId, pin)) {
-        setError('PIN non valido');
+      // PIN verificato sul server (hash nel DB); offline solo se già usato su questo dispositivo
+      setChecking(true);
+      const check = await verifyStaffPin(selectedUserId, pin);
+      setChecking(false);
+      const user = users.find(u => u.id === selectedUserId);
+      if (!check.ok || !user) {
+        setError(check.error || 'PIN non valido');
         setPin('');
         return;
       }
-      const user = users.find(u => u.id === selectedUserId) || { id: selectedUserId, name: 'Operatore', pin, role: 'admin' as const };
       setStaffSessionValid(user);
       setAuthed(true);
       setPin('');
-    } else if (defaultPin) {
-      // Legacy PIN fallback
+    } else if (users.length === 0 && defaultPin) {
+      // Prima configurazione: nessun operatore ancora creato
       if (pin.trim() !== defaultPin) {
         setError('PIN non valido');
         setPin('');
         return;
       }
-      const user = users.find(u => u.pin === pin.trim()) || { id: 'legacy', name: 'Operatore', pin, role: 'admin' as const };
-      setStaffSessionValid(user);
+      setStaffSessionValid(legacyStaffUser());
       setAuthed(true);
       setPin('');
     } else {
       setError('Nessun utente configurato. Contatta l\'amministratore.');
     }
-  }, [pin, selectedUserId, defaultPin, users]);
+  }, [pin, selectedUserId, defaultPin, users, checking]);
 
   if (!authed) {
     return (
@@ -123,7 +120,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
                   <ChevronRight size={18} className="text-gray-400" />
                 </button>
               ))}
-              {defaultPin && (
+              {defaultPin && users.length === 0 && (
                 <button onClick={() => setSelectedUserId(null)}
                   className="w-full flex items-center justify-between p-4 bg-charcoal border border-dashed border-surface-light rounded-2xl hover:border-gold/30 transition-all"
                 >
@@ -149,7 +146,7 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
                 {users.find(u => u.id === selectedUserId)?.name || 'Operatore'}
               </p>
               <input type="password" inputMode="numeric" value={pin} onChange={e => { setPin(e.target.value); setError(null); }}
-                onKeyDown={e => e.key === 'Enter' && submit()} placeholder="PIN"
+                onKeyDown={e => { if (e.key === 'Enter') void submit(); }} placeholder="PIN"
                 className="w-full bg-charcoal border border-surface-light rounded-2xl px-5 py-4 text-center text-2xl font-black tracking-[0.5em] text-white placeholder:text-gray-400 outline-none focus:border-gold mb-4"
               />
               {error && <p className="text-red-400 text-xs font-bold text-center mb-4 uppercase">{error}</p>}
@@ -157,13 +154,13 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
           )}
 
           {selectedUserId ? (
-            <button onClick={submit}
-              className="w-full bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+            <button onClick={() => void submit()} disabled={checking}
+              className="w-full bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              Accedi <ArrowRight size={20} />
+              {checking ? 'Verifica…' : 'Accedi'} <ArrowRight size={20} />
             </button>
           ) : users.length === 0 && defaultPin ? (
-            <button onClick={submit} disabled={!defaultPin}
+            <button onClick={() => void submit()} disabled={!defaultPin}
               className="w-full bg-gold hover:bg-gold-hover text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-30"
             >
               Accedi con PIN <ArrowRight size={20} />

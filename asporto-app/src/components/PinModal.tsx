@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { X, Lock } from 'lucide-react';
-import { getManagerPin, setPinPromptHandler } from '../lib/staffAuth';
+import { verifyManagerPin, setPinPromptHandler } from '../lib/staffAuth';
 import Dialog from './Dialog';
 
 interface PinContextValue {
@@ -18,36 +18,48 @@ export function usePinModal() {
 export function PinProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{
     actionLabel: string;
-    resolve: (val: boolean) => void;
+    resolve: (pin: string | null) => void;
   } | null>(null);
   const [pinValue, setPinValue] = useState('');
-  const [pinError, setPinError] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  const requestPin = useCallback((actionLabel: string): Promise<boolean> => {
+  /** Risolve con il PIN (già verificato sul server) o null se annullato */
+  const requestPinValue = useCallback((actionLabel: string): Promise<string | null> => {
     return new Promise(resolve => {
       setState({ actionLabel, resolve });
       setPinValue('');
-      setPinError(false);
+      setPinError(null);
     });
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    if (pinValue.trim() === getManagerPin()) {
-      state?.resolve(true);
+  const requestPin = useCallback(
+    (actionLabel: string) => requestPinValue(actionLabel).then(pin => pin !== null),
+    [requestPinValue],
+  );
+
+  const handleConfirm = useCallback(async () => {
+    if (!state || checking || !pinValue.trim()) return;
+    setChecking(true);
+    const check = await verifyManagerPin(pinValue);
+    setChecking(false);
+    if (check.ok) {
+      state.resolve(pinValue.trim());
       setState(null);
     } else {
-      setPinError(true);
+      setPinError(check.error || 'PIN non valido');
+      setPinValue('');
     }
-  }, [state, pinValue]);
+  }, [state, pinValue, checking]);
 
   const handleCancel = useCallback(() => {
-    state?.resolve(false);
+    state?.resolve(null);
     setState(null);
   }, [state]);
 
   useEffect(() => {
-    setPinPromptHandler(requestPin);
-  }, [requestPin]);
+    setPinPromptHandler(requestPinValue);
+  }, [requestPinValue]);
 
   return (
     <PinContext.Provider value={{ requestPin }}>
@@ -75,19 +87,19 @@ export function PinProvider({ children }: { children: ReactNode }) {
             </div>
             <div className="p-6">
               <p className="text-sm text-gray-300 font-bold leading-relaxed mb-4">
-                Inserisci il PIN per {state.actionLabel}
+                Inserisci il PIN di un amministratore per {state.actionLabel}
               </p>
               <input
                 type="password"
                 value={pinValue}
-                onChange={e => { setPinValue(e.target.value); setPinError(false); }}
-                onKeyDown={e => { if (e.key === 'Enter') handleConfirm(); }}
+                onChange={e => { setPinValue(e.target.value); setPinError(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') void handleConfirm(); }}
                 className={`w-full bg-charcoal border rounded-2xl p-4 text-white font-bold text-center text-2xl tracking-[0.3em] outline-none transition-colors ${pinError ? 'border-red-500 focus:border-red-500' : 'border-surface-light focus:border-gold'}`}
                 placeholder="● ● ● ●"
                 autoFocus
               />
               {pinError && (
-                <p className="text-red-400 text-xs font-bold mt-2 text-center animate-in slide-in-from-top-1 duration-200">PIN non valido</p>
+                <p className="text-red-400 text-xs font-bold mt-2 text-center animate-in slide-in-from-top-1 duration-200">{pinError}</p>
               )}
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <button
@@ -97,8 +109,9 @@ export function PinProvider({ children }: { children: ReactNode }) {
                   Annulla
                 </button>
                 <button
-                  onClick={handleConfirm}
-                  className="py-3 px-4 rounded-2xl font-black text-sm bg-gold hover:bg-gold-hover text-black transition-all active:scale-95 shadow-lg shadow-gold/20"
+                  onClick={() => void handleConfirm()}
+                  disabled={checking}
+                  className="disabled:opacity-50 py-3 px-4 rounded-2xl font-black text-sm bg-gold hover:bg-gold-hover text-black transition-all active:scale-95 shadow-lg shadow-gold/20"
                 >
                   Conferma
                 </button>

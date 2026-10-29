@@ -1,22 +1,32 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const rpc = vi.fn();
+vi.mock('../supabase', () => ({ supabase: { rpc: (...args: unknown[]) => rpc(...args), from: vi.fn() } }));
+
 import {
   getDefaultStaffPin,
   getStaffUsers,
-  addStaffUser,
-  removeStaffUser,
-  updateStaffUser,
   verifyStaffPin,
+  verifyManagerPin,
   getCurrentUser,
   isStaffSessionValid,
   setStaffSessionValid,
   clearStaffSession,
+  legacyStaffUser,
   hasPermission,
   getDefaultRouteForRole,
 } from '../staffAuth';
 
+const MARIO = { id: 'u-mario', name: 'Mario', role: 'waiter' as const };
+
+function seedUsers(users: object[]) {
+  localStorage.setItem('risto_staff_users', JSON.stringify(users));
+}
+
 describe('staffAuth', () => {
   beforeEach(() => {
     localStorage.clear();
+    rpc.mockReset();
   });
 
   describe('getDefaultStaffPin', () => {
@@ -25,60 +35,50 @@ describe('staffAuth', () => {
     });
   });
 
-  describe('gestione operatori (CRUD)', () => {
-    it('parte da una lista vuota', () => {
+  describe('elenco operatori in cache', () => {
+    it('vuoto di default', () => {
       expect(getStaffUsers()).toHaveLength(0);
     });
 
-    it('aggiunge un operatore e lo persiste', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      expect(user.name).toBe('Mario');
-      expect(user.role).toBe('waiter');
-      expect(getStaffUsers()).toHaveLength(1);
-      expect(getStaffUsers()[0].id).toBe(user.id);
-    });
-
-    it('aggiorna un operatore esistente', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      updateStaffUser(user.id, { name: 'Mario Rossi', role: 'admin' });
-      const updated = getStaffUsers().find(u => u.id === user.id);
-      expect(updated?.name).toBe('Mario Rossi');
-      expect(updated?.role).toBe('admin');
-    });
-
-    it('rimuove un operatore', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      removeStaffUser(user.id);
-      expect(getStaffUsers()).toHaveLength(0);
-    });
-
-    it('rimuovendo l\'operatore con sessione attiva, la sessione viene invalidata', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      setStaffSessionValid(user);
-      expect(isStaffSessionValid()).toBe(true);
-      removeStaffUser(user.id);
-      expect(isStaffSessionValid()).toBe(false);
+    it('scarta i PIN in chiaro salvati dalle versioni precedenti', () => {
+      seedUsers([{ ...MARIO, pin: '1111' }]);
+      expect(getStaffUsers()).toEqual([MARIO]);
     });
   });
 
-  describe('verifyStaffPin', () => {
-    it('accetta il PIN corretto per l\'operatore giusto', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      expect(verifyStaffPin(user.id, '1111')).toBe(true);
+  describe('verifyStaffPin (sul server)', () => {
+    it('accetta il PIN confermato dal server', async () => {
+      rpc.mockResolvedValue({ data: true, error: null });
+      expect(await verifyStaffPin(MARIO.id, ' 1111 ')).toEqual({ ok: true });
+      expect(rpc).toHaveBeenCalledWith('staff_verify_pin', { p_user_id: MARIO.id, p_pin: '1111' });
     });
 
-    it('ignora spazi extra', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      expect(verifyStaffPin(user.id, '  1111  ')).toBe(true);
+    it('rifiuta il PIN sbagliato', async () => {
+      rpc.mockResolvedValue({ data: false, error: null });
+      expect((await verifyStaffPin(MARIO.id, '9999')).ok).toBe(false);
     });
 
-    it('rifiuta PIN errato', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      expect(verifyStaffPin(user.id, '9999')).toBe(false);
+    it('riporta il blocco per troppi tentativi', async () => {
+      rpc.mockResolvedValue({ data: null, error: { message: 'Troppi tentativi: riprova tra 15 minuti' } });
+      expect(await verifyStaffPin(MARIO.id, '9999')).toEqual({ ok: false, error: 'Troppi tentativi: riprova tra 15 minuti' });
     });
 
-    it('rifiuta un userId inesistente', () => {
-      expect(verifyStaffPin('non-esiste', '1111')).toBe(false);
+    it('offline rifiuta un PIN mai usato su questo dispositivo', async () => {
+      rpc.mockResolvedValue({ data: null, error: { message: 'TypeError: Failed to fetch' } });
+      expect(await verifyStaffPin(MARIO.id, '1111')).toEqual({ ok: false, error: 'Server non raggiungibile' });
+    });
+  });
+
+  describe('verifyManagerPin', () => {
+    it('senza amministratori nel DB usa il PIN locale di prima configurazione', async () => {
+      rpc.mockResolvedValue({ data: null, error: null });
+      expect((await verifyManagerPin('2580')).ok).toBe(true);
+      expect((await verifyManagerPin('0000')).ok).toBe(false);
+    });
+
+    it('con amministratori vale solo la risposta del server', async () => {
+      rpc.mockResolvedValue({ data: false, error: null });
+      expect((await verifyManagerPin('2580')).ok).toBe(false);
     });
   });
 
@@ -89,15 +89,29 @@ describe('staffAuth', () => {
     });
 
     it('salva e recupera la sessione dell\'operatore corrente', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      setStaffSessionValid(user);
+      seedUsers([MARIO]);
+      setStaffSessionValid(MARIO);
       expect(isStaffSessionValid()).toBe(true);
-      expect(getCurrentUser()?.id).toBe(user.id);
+      expect(getCurrentUser()?.id).toBe(MARIO.id);
+    });
+
+    it('la sessione di un operatore eliminato non è più valida', () => {
+      seedUsers([MARIO]);
+      setStaffSessionValid(MARIO);
+      seedUsers([]);
+      expect(getCurrentUser()).toBeNull();
+    });
+
+    it('login di prima configurazione valido solo finché non ci sono operatori', () => {
+      setStaffSessionValid(legacyStaffUser());
+      expect(getCurrentUser()?.role).toBe('admin');
+      seedUsers([MARIO]);
+      expect(getCurrentUser()).toBeNull();
     });
 
     it('clearStaffSession rimuove la sessione', () => {
-      const user = addStaffUser('Mario', '1111', 'waiter');
-      setStaffSessionValid(user);
+      seedUsers([MARIO]);
+      setStaffSessionValid(MARIO);
       clearStaffSession();
       expect(getCurrentUser()).toBeNull();
     });

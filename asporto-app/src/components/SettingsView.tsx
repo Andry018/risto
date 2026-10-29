@@ -10,9 +10,8 @@ import {
 import { supabase } from '../lib/supabase';
 import FileManagerView from './FileManagerView';
 import {
-  requireManagerPin, setManagerPin,
-  getStaffUsers, addStaffUser, updateStaffUser, removeStaffUser,
-  pushStaffUserToDb, deleteStaffUserFromDb,
+  requireManagerPin, requestManagerPin, setManagerPin,
+  getStaffUsers, saveStaffUser, deleteStaffUser, newStaffId, syncStaffUsersFromDb,
   type StaffUser, type StaffRole,
 } from '../lib/staffAuth';
 import { hasTurno, toggleTurno, loadTurniFromDb, readTurni, type TurnoTipo, type TurnoEntry } from '../lib/turni';
@@ -162,12 +161,16 @@ export default function SettingsView() {
   const [editUserRole, setEditUserRole] = useState<StaffRole>('waiter');
 
   const refreshStaffUsers = () => setStaffUsers(getStaffUsers());
+  useEffect(() => { void syncStaffUsersFromDb().then(() => setStaffUsers(getStaffUsers())); }, []);
 
-  const handleAddUser = () => {
+  // Gli operatori si gestiscono sul server (PIN salvati solo come hash): ogni modifica chiede il PIN di un amministratore
+  const handleAddUser = async () => {
     if (!newUserName.trim()) { addToast({ type: 'error', title: 'Nome mancante', message: 'Inserisci un nome per l\'operatore' }); return; }
     if (newUserPin.trim().length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
-    const newUser = addStaffUser(newUserName, newUserPin, newUserRole);
-    void pushStaffUserToDb(newUser);
+    const adminPin = await requestManagerPin('aggiungere un operatore');
+    if (adminPin === null) return;
+    const error = await saveStaffUser(adminPin, { id: newStaffId(), name: newUserName, role: newUserRole }, newUserPin);
+    if (error) { addToast({ type: 'error', title: 'Operatore non salvato', message: error }); return; }
     refreshStaffUsers();
     setNewUserName('');
     setNewUserPin('');
@@ -183,16 +186,13 @@ export default function SettingsView() {
     setEditUserRole(user.role);
   };
 
-  const handleSaveEditUser = (id: string) => {
+  const handleSaveEditUser = async (id: string) => {
     if (!editUserName.trim()) { addToast({ type: 'error', title: 'Nome mancante', message: 'Inserisci un nome per l\'operatore' }); return; }
-    const updates: Partial<StaffUser> = { name: editUserName.trim(), role: editUserRole };
-    if (editUserPin.trim()) {
-      if (editUserPin.trim().length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
-      updates.pin = editUserPin.trim();
-    }
-    updateStaffUser(id, updates);
-    const updated = getStaffUsers().find(u => u.id === id);
-    if (updated) void pushStaffUserToDb(updated);
+    if (editUserPin.trim() && editUserPin.trim().length < 4) { addToast({ type: 'error', title: 'PIN troppo corto', message: 'Minimo 4 cifre' }); return; }
+    const adminPin = await requestManagerPin('modificare un operatore');
+    if (adminPin === null) return;
+    const error = await saveStaffUser(adminPin, { id, name: editUserName, role: editUserRole }, editUserPin.trim() || null);
+    if (error) { addToast({ type: 'error', title: 'Operatore non salvato', message: error }); return; }
     refreshStaffUsers();
     setEditingUserId(null);
     addToast({ type: 'success', title: 'Operatore aggiornato' });
@@ -201,8 +201,10 @@ export default function SettingsView() {
   const handleRemoveUser = async (user: StaffUser) => {
     const ok = await confirm({ title: 'Elimina operatore', message: `Eliminare "${user.name}"? Dovrà reinserire i dati per accedere di nuovo.`, destructive: true });
     if (!ok) return;
-    removeStaffUser(user.id);
-    void deleteStaffUserFromDb(user.id);
+    const adminPin = await requestManagerPin('eliminare un operatore');
+    if (adminPin === null) return;
+    const error = await deleteStaffUser(adminPin, user.id);
+    if (error) { addToast({ type: 'error', title: 'Operatore non eliminato', message: error }); return; }
     refreshStaffUsers();
     addToast({ type: 'success', title: 'Operatore eliminato' });
   };
@@ -664,7 +666,7 @@ export default function SettingsView() {
                       <Save size={14} className="inline mr-1" /> Salva
                     </button>
                   </div>
-                  <p className="text-[10px] text-gray-500 font-bold">Il PIN attuale è richiesto per azioni sensibili (svuota DB, cambio PIN)</p>
+                  <p className="text-[10px] text-gray-500 font-bold">PIN di prima configurazione: vale solo finché non esiste un operatore amministratore. Dopo, per le azioni sensibili si usa il PIN di un amministratore.</p>
                 </div>
               </Card>
             )}
@@ -693,7 +695,7 @@ export default function SettingsView() {
                           <div className="flex gap-2">
                             <button onClick={() => setEditingUserId(null)}
                               className="flex-1 py-2 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black uppercase text-gray-400">Annulla</button>
-                            <button onClick={() => handleSaveEditUser(user.id)}
+                            <button onClick={() => void handleSaveEditUser(user.id)}
                               className="flex-1 py-2 bg-gold text-black rounded-xl text-[10px] font-black uppercase">Salva</button>
                           </div>
                         </div>
@@ -738,7 +740,7 @@ export default function SettingsView() {
                         className="flex-1 py-2.5 bg-charcoal border border-surface-light rounded-xl text-[10px] font-black uppercase text-gray-400">
                         <X size={14} className="inline mr-1" /> Annulla
                       </button>
-                      <button onClick={handleAddUser} className="flex-1 py-2.5 bg-gold text-black rounded-xl text-[10px] font-black uppercase">
+                      <button onClick={() => void handleAddUser()} className="flex-1 py-2.5 bg-gold text-black rounded-xl text-[10px] font-black uppercase">
                         <Save size={14} className="inline mr-1" /> Aggiungi
                       </button>
                     </div>
