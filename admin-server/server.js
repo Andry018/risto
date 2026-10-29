@@ -111,6 +111,7 @@ const EDITABLE_FILES = {
   'app-env':   path.join(BASE, 'asporto-app', '.env'),
   'ecr-env':   path.join(BASE, 'asporto-app', 'ecr-agent', '.env'),
   'print-env': path.join(BASE, 'asporto-app', 'print-agent', '.env'),
+  'wa-env':    path.join(BASE, 'asporto-app', 'wa-agent', '.env'),
 };
 
 function readBody(req) {
@@ -146,14 +147,16 @@ async function router(req, res) {
 
   // GET /api/status
   if (method === 'GET' && pathname === '/api/status') {
-    const [nginx, webhook, adminServer, printAgent, ecrAgent] = await Promise.all([
+    // `webhook` = aggiornamento automatico: su Linux è risto-autopull.timer (controllo GitHub ogni 2 min)
+    const [nginx, webhook, adminServer, printAgent, ecrAgent, waAgent] = await Promise.all([
       IS_WIN ? isRunning('nginx.exe')   : isRunning('nginx'),
-      IS_WIN ? isRunning('webhook.exe') : isRunning('webhook'),
+      IS_WIN ? isRunning('webhook.exe') : runCmd('systemctl is-active risto-autopull.timer').then(r => r.stdout === 'active'),
       isPortListening(4000),
       isNodeScriptRunning('print-agent'),
       isNodeScriptRunning('ecr-agent'),
+      isNodeScriptRunning('wa-agent'),
     ]);
-    return json(res, 200, { nginx, webhook, adminServer, printAgent, ecrAgent });
+    return json(res, 200, { nginx, webhook, adminServer, printAgent, ecrAgent, waAgent });
   }
 
   // GET /api/log
@@ -202,9 +205,9 @@ async function router(req, res) {
         spawn('cmd.exe', ['/c', 'start', '', whPath, '-hooks', path.join(BASE, 'hooks.json'), '-verbose', '-port', '9000'], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
       }
     } else {
-      await runCmd('systemctl restart risto-webhook');
+      await runCmd('systemctl restart risto-autopull.timer');
     }
-    return json(res, 200, { ok: true, message: 'Webhook riavviato' });
+    return json(res, 200, { ok: true, message: 'Aggiornamento automatico riavviato' });
   }
 
   // POST /api/restart-admin
@@ -234,7 +237,7 @@ async function router(req, res) {
       }
       spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/c', AGENT_SCRIPT], { detached: true, stdio: 'ignore', cwd: BASE, windowsHide: true }).unref();
     } else {
-      await runCmd('systemctl reload-or-restart nginx risto-print risto-ecr risto-webhook');
+      await runCmd('systemctl reload-or-restart nginx risto-print risto-ecr risto-wa');
     }
     return json(res, 200, { ok: true, message: 'Tutti i servizi riavviati' });
   }

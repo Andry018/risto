@@ -45,7 +45,7 @@ function read(key: string, fallback: string): string {
 function write(key: string, value: string) {
   memCache.set(key, value);
   try { localStorage.setItem(key, value); } catch {}
-  void upsertSetting(key, value);
+  if (!LOCAL_ONLY_KEYS.has(key)) void upsertSetting(key, value);
   emit();
 }
 
@@ -78,8 +78,9 @@ async function loadFromDb(): Promise<void> {
     const rows = data as { chiave: string; valore: string }[];
     const dbKeys = new Set(rows.map(r => r.chiave));
 
-    // 1. Popola memCache dai dati del DB
+    // 1. Popola memCache dai dati del DB (i segreti restano solo locali, anche se una riga vecchia esiste ancora)
     for (const { chiave, valore } of rows) {
+      if (LOCAL_ONLY_KEYS.has(chiave)) continue;
       memCache.set(chiave, valore);
       try { localStorage.setItem(chiave, valore); } catch {}
     }
@@ -87,7 +88,7 @@ async function loadFromDb(): Promise<void> {
     // 2. Prima esecuzione: migra le chiavi esistenti in localStorage → DB
     const toMigrate: { chiave: string; valore: string }[] = [];
     for (const key of Object.values(SETTINGS_KEYS)) {
-      if (!dbKeys.has(key)) {
+      if (!dbKeys.has(key) && !LOCAL_ONLY_KEYS.has(key)) {
         let v: string | null = null;
         try { v = localStorage.getItem(key); } catch {}
         if (v !== null) {
@@ -130,6 +131,16 @@ export const SETTINGS_KEYS = {
   ecrAgentUrl:       'risto_setting_ecr_agent_url',
   whatsappQuickReplies: 'risto_setting_whatsapp_quick_replies',
 } as const;
+
+/**
+ * Segreti: SOLO nel localStorage del dispositivo, mai nella tabella `impostazioni`.
+ * La tabella è leggibile con la anon key (pubblica nel bundle) e il gestionale è esposto su internet:
+ * chi leggeva il secret del Pannello Sistema poteva stornare pagamenti e modificare i .env.
+ */
+const LOCAL_ONLY_KEYS: ReadonlySet<string> = new Set([
+  SETTINGS_KEYS.systemPanelSecret,
+  SETTINGS_KEYS.publishMenuSecret,
+]);
 
 // ---------------------------------------------------------------------------
 // API imperativa (per codice non-React)

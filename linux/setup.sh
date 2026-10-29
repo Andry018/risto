@@ -99,17 +99,9 @@ fi
 info "Supabase $(supabase --version)"
 
 # ---------------------------------------------------------------------------
-# 5. Webhook (autopull da GitHub)
+# 5. Aggiornamento automatico: risto-autopull.timer controlla GitHub ogni 2 minuti
+#    (niente webhook in ingresso: il CT non deve essere raggiungibile da GitHub)
 # ---------------------------------------------------------------------------
-if ! command -v webhook &>/dev/null; then
-  info "Installazione webhook (adnanh/webhook)..."
-  WH_VERSION=$(curl -s https://api.github.com/repos/adnanh/webhook/releases/latest | jq -r .tag_name)
-  curl -fsSL "https://github.com/adnanh/webhook/releases/download/${WH_VERSION}/webhook-linux-amd64.tar.gz" \
-    | tar -xz -C /tmp
-  mv /tmp/webhook-linux-amd64/webhook /usr/local/bin/webhook
-  chmod +x /usr/local/bin/webhook
-fi
-info "Webhook $(webhook --version 2>&1 | head -1)"
 
 # ---------------------------------------------------------------------------
 # 6. Clone / aggiornamento repo
@@ -217,13 +209,15 @@ fi
 # 12. Systemd services
 # ---------------------------------------------------------------------------
 info "Installazione servizi systemd..."
-for SVC in risto-admin risto-print risto-ecr risto-webhook risto-wa; do
+for SVC in risto-admin risto-print risto-ecr risto-wa risto-autopull; do
   cp "$RISTO_BASE/linux/services/${SVC}.service" /etc/systemd/system/
 done
+cp "$RISTO_BASE/linux/services/risto-autopull.timer" /etc/systemd/system/
 
 systemctl daemon-reload
-systemctl enable risto-admin risto-print risto-ecr risto-webhook risto-wa
-systemctl start  risto-admin risto-print risto-ecr risto-webhook risto-wa
+systemctl enable risto-admin risto-print risto-ecr risto-wa
+systemctl start  risto-admin risto-print risto-ecr risto-wa
+systemctl enable --now risto-autopull.timer
 
 # ---------------------------------------------------------------------------
 # Fine
@@ -248,7 +242,8 @@ echo "  4. (Opzionale) Certificato SSL: apt install certbot python3-certbot-ngin
 echo "                                   certbot --nginx -d <dominio>"
 echo ""
 echo "  Comandi utili:"
-echo "  systemctl status risto-admin risto-print risto-ecr risto-webhook"
+echo "  systemctl status risto-admin risto-print risto-ecr risto-wa"
+echo "  systemctl list-timers risto-autopull   # prossimo controllo aggiornamenti"
 echo "  journalctl -fu risto-print     # log stampa in tempo reale"
 echo "  tail -f $RISTO_BASE/logs/autopull.log"
 echo ""

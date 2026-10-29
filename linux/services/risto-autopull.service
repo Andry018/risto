@@ -1,0 +1,10 @@
+[Unit]
+Description=Risto — Aggiornamento automatico da GitHub (se ci sono commit nuovi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/risto
+ExecStart=/bin/bash /opt/risto/linux/autopull-check.sh
+TimeoutStartSec=20min

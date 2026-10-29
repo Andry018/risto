@@ -10,9 +10,12 @@ import { useConfirm } from './ConfirmModal';
 
 interface StatusResponse {
   nginx: boolean;
+  /** Aggiornamento automatico (su Linux: risto-autopull.timer) */
   webhook: boolean;
   adminServer: boolean;
   printAgent: boolean;
+  ecrAgent?: boolean;
+  waAgent?: boolean;
 }
 
 interface LogResponse {
@@ -54,6 +57,7 @@ export default function SystemPanelView() {
     { key: 'app-env',   label: 'App (.env)' },
     { key: 'ecr-env',   label: 'ECR Agent (.env)' },
     { key: 'print-env', label: 'Print Agent (.env)' },
+    { key: 'wa-env',    label: 'WhatsApp (.env)' },
   ];
   const [selectedFile, setSelectedFile] = useState('app-env');
   const [fileContent, setFileContent] = useState('');
@@ -229,11 +233,13 @@ export default function SystemPanelView() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
           {statusBadge('Nginx', status?.nginx ?? null)}
-          {statusBadge('Webhook', status?.webhook ?? null)}
+          {statusBadge('Aggiornamento auto', status?.webhook ?? null)}
           {statusBadge('Pannello Servizi', status?.adminServer ?? null)}
           {statusBadge('Print Agent', status?.printAgent ?? null)}
+          {statusBadge('ECR Agent (POS)', status ? (status.ecrAgent ?? false) : null)}
+          {statusBadge('WhatsApp Agent', status ? (status.waAgent ?? false) : null)}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
@@ -252,11 +258,11 @@ export default function SystemPanelView() {
             <Printer size={16} /> Print Agent
           </button>
           <button
-            onClick={() => runAction('webhook', 'restart-webhook', 'Riavvia Webhook')}
+            onClick={() => runAction('webhook', 'restart-webhook', 'Riavvia aggiornamento automatico')}
             disabled={busyAction !== null}
             className={`flex items-center justify-center gap-2 ${'bg-surface border-surface-light hover:border-gold/40'} border rounded-2xl py-4 font-bold text-sm disabled:opacity-40`}
           >
-            <Radio size={16} /> Webhook
+            <Radio size={16} /> Auto-update
           </button>
           <button
             onClick={() => runAction('admin', 'restart-admin', 'Riavvia Pannello Servizi')}

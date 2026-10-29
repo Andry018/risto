@@ -1,0 +1,10 @@
+[Unit]
+Description=Risto — Controlla GitHub ogni 2 minuti
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
