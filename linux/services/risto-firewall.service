@@ -1,0 +1,14 @@
+[Unit]
+Description=Risto — Chiude alla LAN Supabase e agent (si passa da nginx)
+After=docker.service network-online.target
+Wants=network-online.target
+# Se Docker si riavvia, riapplica le regole
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /opt/risto/linux/firewall.sh
+
+[Install]
+WantedBy=multi-user.target docker.service

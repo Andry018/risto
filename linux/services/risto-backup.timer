@@ -1,0 +1,11 @@
+[Unit]
+Description=Risto — Backup ogni notte alle 04:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# Se il server era spento alle 04:00, fa il backup appena si riaccende
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

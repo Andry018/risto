@@ -1,0 +1,12 @@
+[Unit]
+Description=Risto — Backup database e configurazione
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/risto
+# Copia esterna: decommentare e indicare una cartella montata (disco USB, NAS)
+# Environment=BACKUP_EXTRA_DIR=/mnt/backup-risto
+ExecStart=/bin/bash /opt/risto/linux/backup-db.sh
+TimeoutStartSec=30min

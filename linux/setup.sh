@@ -212,12 +212,12 @@ info "Installazione servizi systemd..."
 for SVC in risto-admin risto-print risto-ecr risto-wa risto-autopull; do
   cp "$RISTO_BASE/linux/services/${SVC}.service" /etc/systemd/system/
 done
-cp "$RISTO_BASE/linux/services/risto-autopull.timer" /etc/systemd/system/
+cp "$RISTO_BASE/linux/services/risto-autopull.timer" "$RISTO_BASE/linux/services/risto-backup.service" "$RISTO_BASE/linux/services/risto-backup.timer" "$RISTO_BASE/linux/services/risto-firewall.service" /etc/systemd/system/
 
 systemctl daemon-reload
 systemctl enable risto-admin risto-print risto-ecr risto-wa
 systemctl start  risto-admin risto-print risto-ecr risto-wa
-systemctl enable --now risto-autopull.timer
+systemctl enable --now risto-autopull.timer risto-backup.timer risto-firewall.service
 
 # ---------------------------------------------------------------------------
 # Fine

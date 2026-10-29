@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import WaiterMobileView from './components/WaiterMobileView';
 import StaffDashboard from './components/StaffDashboard';
-import CustomerView from './components/CustomerView';
 import TableMapView from './components/TableMapView';
 import POSView from './components/POSView';
 import TakeawayTabletView from './components/TakeawayTabletView';
@@ -69,8 +68,7 @@ export default function App() {
         <PwaUpdatePrompt />
         <Suspense fallback={<LoadingFallback />}>
         <Routes>
-          {/* Pubbliche: nessun login (il DB concede ad anon solo menu, ordini online ed etichette) */}
-          <Route path="/asporto" element={<CustomerView />} />
+          {/* Pubbliche: nessun login (il DB concede ad anon solo lettura menu ed etichette HACCP) */}
           <Route path="/menu" element={<PublicMenuView />} />
           <Route path="/qr-menu" element={<MenuQRView />} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
