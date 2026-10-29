@@ -22,8 +22,60 @@ if (import.meta.env.DEV && (!envUrl || !envKey)) {
   );
 }
 
+// ── Token operatore ─────────────────────────────────────────────────────────────
+// Le tabelle sono leggibili/scrivibili solo dallo staff (RLS): dopo il PIN, staff_login() restituisce
+// un JWT che viaggia al posto della anon key. Senza token valgono solo i permessi pubblici
+// (menu, ordini online, etichette HACCP).
+
+const STAFF_TOKEN_KEY = 'risto_staff_token';
+export const STAFF_TOKEN_INVALID_EVENT = 'risto:staff-token-invalid';
+
+interface StaffTokenClaims { sub: string; exp: number; iat: number; staff_role: string }
+
+export function decodeStaffToken(token: string): StaffTokenClaims | null {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(payload)) as StaffTokenClaims;
+  } catch {
+    return null;
+  }
+}
+
+/** Token valido (non scaduto) salvato su questo dispositivo, o null */
+export function getStaffToken(): string | null {
+  let token: string | null = null;
+  try { token = localStorage.getItem(STAFF_TOKEN_KEY); } catch { return null; }
+  if (!token) return null;
+  const claims = decodeStaffToken(token);
+  return claims && claims.exp * 1000 > Date.now() ? token : null;
+}
+
+export function setStaffToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(STAFF_TOKEN_KEY, token);
+    else localStorage.removeItem(STAFF_TOKEN_KEY);
+  } catch { /* storage bloccato: il token vale solo per questa pagina */ }
+  // Realtime usa il token alla connessione dei canali: aggiornalo subito
+  void supabase?.realtime.setAuth().catch(() => {});
+}
+
+// Token rifiutato dal server (scaduto, secret cambiato, operatore eliminato): via il token, torna la schermata PIN
+const authAwareFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input, init);
+  if (res.status === 401 && getStaffToken()) {
+    setStaffToken(null);
+    window.dispatchEvent(new Event(STAFF_TOKEN_INVALID_EVENT));
+  }
+  return res;
+};
+
 export const supabase: SupabaseClient | null =
-  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+  supabaseUrl && supabaseKey
+    ? createClient(supabaseUrl, supabaseKey, {
+        accessToken: async () => getStaffToken(),   // null → anon key
+        global: { fetch: authAwareFetch },
+      })
+    : null;
 
 export const IS_DEMO_MODE = localStorage.getItem('demo_mode') === 'true';
 

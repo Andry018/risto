@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const rpc = vi.fn();
-vi.mock('../supabase', () => ({ supabase: { rpc: (...args: unknown[]) => rpc(...args), from: vi.fn() } }));
+let storedToken: string | null = null;
+vi.mock('../supabase', () => ({
+  supabase: { rpc: (...args: unknown[]) => rpc(...args), from: vi.fn() },
+  getStaffToken: () => storedToken,
+  setStaffToken: (t: string | null) => { storedToken = t; },
+  decodeStaffToken: (t: string) => JSON.parse(atob(t.split('.')[1])),
+  STAFF_TOKEN_INVALID_EVENT: 'risto:staff-token-invalid',
+}));
 
 import {
   getDefaultStaffPin,
@@ -23,10 +30,17 @@ function seedUsers(users: object[]) {
   localStorage.setItem('risto_staff_users', JSON.stringify(users));
 }
 
+/** JWT finto (la firma la verifica il server, qui conta solo il contenuto) */
+function fakeToken(sub: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  return `h.${btoa(JSON.stringify({ sub, iat: now, exp: now + 3600, staff_role: 'waiter' }))}.s`;
+}
+
 describe('staffAuth', () => {
   beforeEach(() => {
     localStorage.clear();
     rpc.mockReset();
+    storedToken = null;
   });
 
   describe('getDefaultStaffPin', () => {
@@ -46,16 +60,26 @@ describe('staffAuth', () => {
     });
   });
 
-  describe('verifyStaffPin (sul server)', () => {
-    it('accetta il PIN confermato dal server', async () => {
-      rpc.mockResolvedValue({ data: true, error: null });
+  describe('verifyStaffPin (login sul server)', () => {
+    it('PIN giusto: salva il token restituito dal server', async () => {
+      const token = fakeToken(MARIO.id);
+      rpc.mockResolvedValue({ data: token, error: null });
       expect(await verifyStaffPin(MARIO.id, ' 1111 ')).toEqual({ ok: true });
-      expect(rpc).toHaveBeenCalledWith('staff_verify_pin', { p_user_id: MARIO.id, p_pin: '1111' });
+      expect(rpc).toHaveBeenCalledWith('staff_login', { p_user_id: MARIO.id, p_pin: '1111' });
+      expect(storedToken).toBe(token);
     });
 
-    it('rifiuta il PIN sbagliato', async () => {
-      rpc.mockResolvedValue({ data: false, error: null });
+    it('PIN sbagliato: nessun token', async () => {
+      rpc.mockResolvedValue({ data: null, error: null });
       expect((await verifyStaffPin(MARIO.id, '9999')).ok).toBe(false);
+      expect(storedToken).toBeNull();
+    });
+
+    it('cambio operatore: il token del precedente viene scartato', async () => {
+      storedToken = fakeToken('u-altro');
+      rpc.mockResolvedValue({ data: null, error: null });
+      await verifyStaffPin(MARIO.id, '9999');
+      expect(storedToken).toBeNull();
     });
 
     it('riporta il blocco per troppi tentativi', async () => {
@@ -88,15 +112,25 @@ describe('staffAuth', () => {
       expect(isStaffSessionValid()).toBe(false);
     });
 
-    it('salva e recupera la sessione dell\'operatore corrente', () => {
+    it("salva e recupera la sessione dell'operatore corrente", () => {
       seedUsers([MARIO]);
+      storedToken = fakeToken(MARIO.id);
       setStaffSessionValid(MARIO);
       expect(isStaffSessionValid()).toBe(true);
       expect(getCurrentUser()?.id).toBe(MARIO.id);
     });
 
+    it('senza un token dello stesso operatore la sessione non vale (serve il PIN)', () => {
+      seedUsers([MARIO]);
+      setStaffSessionValid(MARIO);
+      expect(getCurrentUser()).toBeNull();
+      storedToken = fakeToken('u-altro');
+      expect(getCurrentUser()).toBeNull();
+    });
+
     it('la sessione di un operatore eliminato non è più valida', () => {
       seedUsers([MARIO]);
+      storedToken = fakeToken(MARIO.id);
       setStaffSessionValid(MARIO);
       seedUsers([]);
       expect(getCurrentUser()).toBeNull();
@@ -109,11 +143,13 @@ describe('staffAuth', () => {
       expect(getCurrentUser()).toBeNull();
     });
 
-    it('clearStaffSession rimuove la sessione', () => {
+    it('clearStaffSession rimuove sessione e token', () => {
       seedUsers([MARIO]);
+      storedToken = fakeToken(MARIO.id);
       setStaffSessionValid(MARIO);
       clearStaffSession();
       expect(getCurrentUser()).toBeNull();
+      expect(storedToken).toBeNull();
     });
   });
 

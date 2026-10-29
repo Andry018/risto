@@ -2,6 +2,9 @@
 .branches
 .temp
 
+# Segreti locali (JWT secret)
+.env
+
 # dotenvx
 .env.keys
 .env.local

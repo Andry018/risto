@@ -42,33 +42,13 @@ export default function EtichettaPage() {
 
     (async () => {
       try {
-        const { data: et, error: e1 } = await db
-          .from('haccp_etichette')
-          .select('*')
-          .eq('lotto', lotto)
-          .single();
-        if (e1 || !et) { setError('Etichetta non trovata per questo lotto'); setLoading(false); return; }
-        setEtichetta(et);
-
-        const { data: prod } = await db
-          .from('haccp_prodotti')
-          .select('*')
-          .eq('id', et.prodotto_id)
-          .single();
-        if (prod) setProdotto(prod);
-
-        const { data: links } = await db
-          .from('haccp_prodotti_fornitori')
-          .select('fornitore_id')
-          .eq('prodotto_id', et.prodotto_id);
-        if (links && links.length > 0) {
-          const ids = links.map(l => l.fornitore_id);
-          const { data: forn } = await db
-            .from('haccp_fornitori')
-            .select('*')
-            .in('id', ids);
-          if (forn) setFornitori(forn);
-        }
+        // Pagina pubblica: le tabelle HACCP sono solo per lo staff, qui passa tutto da una funzione dedicata
+        const { data, error: e1 } = await db.rpc('etichetta_pubblica', { p_lotto: lotto });
+        const result = data as { etichetta: Etichetta; prodotto: Prodotto | null; fornitori: Fornitore[] } | null;
+        if (e1 || !result?.etichetta) { setError('Etichetta non trovata per questo lotto'); setLoading(false); return; }
+        setEtichetta(result.etichetta);
+        if (result.prodotto) setProdotto(result.prodotto);
+        setFornitori(result.fornitori || []);
       } catch {
         setError('Errore nel caricamento dei dati');
       } finally {

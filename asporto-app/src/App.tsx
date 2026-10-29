@@ -39,7 +39,7 @@ const WhatsAppView = lazy(() => import('./components/WhatsAppView'));
 initTheme();
 
 function RootRoute() {
-  return isTablet() ? <StaffDashboard /> : <StaffPinGuard><WaiterMobileView /></StaffPinGuard>;
+  return isTablet() ? <StaffDashboard /> : <WaiterMobileView />;
 }
 
 function LoadingFallback() {
@@ -69,27 +69,32 @@ export default function App() {
         <PwaUpdatePrompt />
         <Suspense fallback={<LoadingFallback />}>
         <Routes>
+          {/* Pubbliche: nessun login (il DB concede ad anon solo menu, ordini online ed etichette) */}
           <Route path="/asporto" element={<CustomerView />} />
           <Route path="/menu" element={<PublicMenuView />} />
           <Route path="/qr-menu" element={<MenuQRView />} />
-          <Route path="/qr-print" element={<MenuQRPrint />} />
-          <Route path="/" element={<RootRoute />} />
-          <Route path="/takeaway" element={<TakeawayTabletView />} />
-          <Route path="/waiter" element={<StaffPinGuard><WaiterMobileView /></StaffPinGuard>} />
-          <Route path="/map" element={<TableMapView />} />
-          <Route path="/kitchen" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><AdminView /></StaffPinGuard>} />
-          <Route path="/pos" element={<POSView />} />
-          <Route path="/reports" element={<StaffPinGuard requiredRoles={['admin']}><ReportsView /></StaffPinGuard>} />
-          <Route path="/fatture" element={<StaffPinGuard requiredRoles={['admin']}><FattureView /></StaffPinGuard>} />
-          <Route path="/reservations" element={<ReservationsView />} />
-          <Route path="/whatsapp" element={<StaffPinGuard requiredRoles={['admin', 'waiter']}><WhatsAppView /></StaffPinGuard>} />
-          <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
-          <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />
-          <Route path="/haccp" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><HaccpView isEmbedded={false} /></StaffPinGuard>} />
-          <Route path="/cassa" element={<StaffPinGuard requiredRoles={['admin']}><CassaFiscalePage /></StaffPinGuard>} />
-          <Route path="/servizi" element={<StaffPinGuard requiredRoles={['admin']}><SystemPanelView /></StaffPinGuard>} />
           <Route path="/etichetta/:lotto" element={<EtichettaPage />} />
-          <Route path="/rear" element={<RearScreenPreview />} />
+
+          {/* Staff: PIN una volta per dispositivo → token di accesso al DB */}
+          <Route element={<StaffPinGuard />}>
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/qr-print" element={<MenuQRPrint />} />
+            <Route path="/takeaway" element={<TakeawayTabletView />} />
+            <Route path="/waiter" element={<WaiterMobileView />} />
+            <Route path="/map" element={<TableMapView />} />
+            <Route path="/kitchen" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><AdminView /></StaffPinGuard>} />
+            <Route path="/pos" element={<POSView />} />
+            <Route path="/reports" element={<StaffPinGuard requiredRoles={['admin']}><ReportsView /></StaffPinGuard>} />
+            <Route path="/fatture" element={<StaffPinGuard requiredRoles={['admin']}><FattureView /></StaffPinGuard>} />
+            <Route path="/reservations" element={<ReservationsView />} />
+            <Route path="/whatsapp" element={<StaffPinGuard requiredRoles={['admin', 'waiter']}><WhatsAppView /></StaffPinGuard>} />
+            <Route path="/settings" element={<StaffPinGuard requiredRoles={['admin']}><SettingsView /></StaffPinGuard>} />
+            <Route path="/magazzino" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><MagazzinoView /></StaffPinGuard>} />
+            <Route path="/haccp" element={<StaffPinGuard requiredRoles={['admin', 'kitchen']}><HaccpView isEmbedded={false} /></StaffPinGuard>} />
+            <Route path="/cassa" element={<StaffPinGuard requiredRoles={['admin']}><CassaFiscalePage /></StaffPinGuard>} />
+            <Route path="/servizi" element={<StaffPinGuard requiredRoles={['admin']}><SystemPanelView /></StaffPinGuard>} />
+            <Route path="/rear" element={<RearScreenPreview />} />
+          </Route>
         </Routes>
         </Suspense>
         </ExitGuard>

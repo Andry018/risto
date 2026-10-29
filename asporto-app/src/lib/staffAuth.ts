@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, getStaffToken, setStaffToken, decodeStaffToken, STAFF_TOKEN_INVALID_EVENT } from './supabase';
 
 const PIN_STORAGE_KEY = 'risto_manager_pin';
 const USERS_STORAGE_KEY = 'risto_staff_users';
@@ -101,18 +101,46 @@ function isNetworkError(err: unknown): boolean {
 
 // ── Verifica PIN ────────────────────────────────────────────────────────────
 
-/** Login operatore: verifica sul server; offline accetta solo PIN già usati su questo dispositivo. */
+function tokenUserId(): string | null {
+  const token = getStaffToken();
+  return token ? decodeStaffToken(token)?.sub ?? null : null;
+}
+
+/**
+ * Login operatore: il server verifica il PIN e restituisce il token di accesso al DB.
+ * Offline: accetta solo un PIN già usato su questo dispositivo E con un token ancora valido per lo stesso operatore.
+ */
 export async function verifyStaffPin(userId: string, pin: string): Promise<PinCheck> {
   if (!supabase) return { ok: await checkCachedPin(userId, pin) };
-  const { data, error } = await supabase.rpc('staff_verify_pin', { p_user_id: userId, p_pin: pin.trim() });
+  // Cambio operatore: il token precedente non deve viaggiare con la richiesta di login
+  if (tokenUserId() !== userId) setStaffToken(null);
+  const { data, error } = await supabase.rpc('staff_login', { p_user_id: userId, p_pin: pin.trim() });
   if (error) {
     if (isNetworkError(error)) {
-      return (await checkCachedPin(userId, pin)) ? { ok: true } : { ok: false, error: 'Server non raggiungibile' };
+      const offlineOk = tokenUserId() === userId && await checkCachedPin(userId, pin);
+      return offlineOk ? { ok: true } : { ok: false, error: 'Server non raggiungibile' };
     }
     return { ok: false, error: error.message };
   }
-  if (data === true) void rememberPin(userId, pin);
-  return { ok: data === true };
+  if (typeof data !== 'string' || !data) return { ok: false };
+  setStaffToken(data);
+  void rememberPin(userId, pin);
+  return { ok: true };
+}
+
+/** Rinnova il token se ha più di un giorno (all'avvio dell'app). Operatore eliminato → sessione chiusa. */
+export async function refreshStaffTokenIfNeeded(): Promise<void> {
+  const token = getStaffToken();
+  const claims = token ? decodeStaffToken(token) : null;
+  if (!supabase || !claims || Date.now() - claims.iat * 1000 < 24 * 3600 * 1000) return;
+  const { data, error } = await supabase.rpc('staff_refresh_token');
+  if (error) return;   // offline: riprova al prossimo avvio
+  if (typeof data === 'string' && data) {
+    setStaffToken(data);
+  } else {
+    clearStaffSession();
+    window.dispatchEvent(new Event(STAFF_TOKEN_INVALID_EVENT));
+  }
 }
 
 /** PIN responsabile: PIN di un qualsiasi amministratore. Senza amministratori nel DB vale il PIN locale di prima configurazione. */
@@ -163,12 +191,16 @@ function readSessionUserId(): string | null {
   return localStorage.getItem(SESSION_STORAGE_KEY);
 }
 
-/** Operatore collegato su questo dispositivo (persistito in localStorage), o null se nessuno ha ancora inserito il PIN qui. */
+/**
+ * Operatore collegato su questo dispositivo, o null se serve il PIN.
+ * Serve anche un token valido dello stesso operatore: senza, il DB rifiuterebbe ogni richiesta.
+ */
 export function getCurrentUser(): StaffUser | null {
   const id = readSessionUserId();
   if (!id) return null;
   const users = readUsers();
   if (id === LEGACY_USER.id) return users.length === 0 ? LEGACY_USER : null;
+  if (tokenUserId() !== id) return null;
   return users.find(u => u.id === id) || null;
 }
 
@@ -187,6 +219,7 @@ export function legacyStaffUser(): StaffUser {
 
 export function clearStaffSession(): void {
   localStorage.removeItem(SESSION_STORAGE_KEY);
+  setStaffToken(null);
 }
 
 export function staffLogout(): void {

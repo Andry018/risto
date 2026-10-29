@@ -13,9 +13,11 @@ import {
   hasPermission,
   clearStaffSession,
   syncStaffUsersFromDb,
+  refreshStaffTokenIfNeeded,
   type StaffUser,
   type StaffRole,
 } from '../lib/staffAuth';
+import { STAFF_TOKEN_INVALID_EVENT } from '../lib/supabase';
 
 interface StaffPinGuardProps {
   children?: ReactNode;
@@ -39,7 +41,15 @@ export default function StaffPinGuard({ children, requiredRoles }: StaffPinGuard
   useEffect(() => {
     // Carica prima da localStorage, poi sincronizza dal DB (cross-device)
     setUsers(getStaffUsers());
-    syncStaffUsersFromDb().then(() => setUsers(getStaffUsers()));
+    syncStaffUsersFromDb().then(() => {
+      setUsers(getStaffUsers());
+      setAuthed(isStaffSessionValid());   // es. operatore eliminato da un altro dispositivo
+    });
+    void refreshStaffTokenIfNeeded();
+    // Il DB ha rifiutato il token (scaduto / revocato): torna la schermata PIN
+    const onInvalid = () => { setAuthed(false); setSelectedUserId(null); setPin(''); };
+    window.addEventListener(STAFF_TOKEN_INVALID_EVENT, onInvalid);
+    return () => window.removeEventListener(STAFF_TOKEN_INVALID_EVENT, onInvalid);
   }, []);
 
   useEffect(() => {
