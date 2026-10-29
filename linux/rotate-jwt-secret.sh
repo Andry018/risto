@@ -37,6 +37,18 @@ set_kv() {
   fi
 }
 
+code() { curl -s -o /dev/null -w '%{http_code}' -H "apikey: $1" -H "Authorization: Bearer ${2:-$1}" "http://127.0.0.1:54321/rest/v1/$3"; }
+
+SECRET=$(grep -s '^SUPABASE_AUTH_JWT_SECRET=' "$ENV_FILE" | cut -d= -f2- || true)
+# Rilancio dopo un errore: se Supabase rifiuta già la chiave demo, backup e riavvio sono già fatti
+ALREADY_RESTARTED=0
+BACKUP="già fatto in precedenza, vedi $BASE/backups"
+if [ -n "$SECRET" ] && [ "$(code "$DEMO_ANON" "" "prodotti?select=id&limit=1")" = 401 ]; then
+  ALREADY_RESTARTED=1
+  echo "Supabase usa già il nuovo secret: salto backup e riavvio."
+fi
+
+if [ "$ALREADY_RESTARTED" = 0 ]; then
 echo "1/5 Backup database..."
 mkdir -p "$BASE/backups"
 BACKUP="$BASE/backups/pre-jwt-$(date +%F-%H%M).sql.gz"
@@ -45,18 +57,19 @@ chmod 600 "$BACKUP"
 echo "    $BACKUP ($(du -h "$BACKUP" | cut -f1))"
 
 echo "2/5 Nuovo secret e riavvio Supabase (1-2 minuti)..."
-SECRET=$(grep -s '^SUPABASE_AUTH_JWT_SECRET=' "$ENV_FILE" | cut -d= -f2- || true)
 [ -n "$SECRET" ] || SECRET=$(openssl rand -hex 32)
 set_kv "$ENV_FILE" SUPABASE_AUTH_JWT_SECRET "$SECRET"
 chmod 600 "$ENV_FILE"
 export SUPABASE_AUTH_JWT_SECRET="$SECRET"
 supabase stop --workdir "$BASE" >/dev/null
 supabase start --workdir "$BASE" >/dev/null
+fi
+export SUPABASE_AUTH_JWT_SECRET="$SECRET"
 
 STATUS=$(supabase status --workdir "$BASE" -o env 2>/dev/null)
 val() { echo "$STATUS" | grep "^$1=" | head -1 | cut -d= -f2- | tr -d '"' || true; }
-if [ "$(val JWT_SECRET)" != "$SECRET" ]; then
-  echo "ERRORE: Supabase non ha preso il nuovo secret (la CLI non legge SUPABASE_AUTH_JWT_SECRET?)."
+if [ "$(code "$DEMO_ANON" "" "prodotti?select=id&limit=1")" != 401 ]; then
+  echo "ERRORE: Supabase accetta ancora la chiave demo, il nuovo secret non è attivo."
   echo "Nessun .env è stato modificato: il gestionale continua a funzionare con le chiavi di prima."
   exit 1
 fi
@@ -65,7 +78,8 @@ SERVICE=$(val SERVICE_ROLE_KEY)
 [ -n "$ANON" ] && [ -n "$SERVICE" ] || { echo "ERRORE: chiavi non trovate in 'supabase status'"; exit 1; }
 
 echo "3/5 Secret per i token dello staff..."
-docker exec -i "$DB" psql -U postgres -q -v ON_ERROR_STOP=1 >/dev/null <<SQL
+# Solo il superuser supabase_admin può impostare i parametri app.settings.*
+docker exec -i "$DB" psql -U supabase_admin -d postgres -q -v ON_ERROR_STOP=1 >/dev/null <<SQL
 ALTER DATABASE postgres SET "app.settings.jwt_secret" TO '$SECRET';
 SQL
 docker restart "$REST" >/dev/null   # PostgREST riapre le connessioni con il nuovo valore
@@ -79,7 +93,6 @@ systemctl restart risto-print 2>/dev/null || true
 
 echo "5/5 Verifica..."
 sleep 3
-code() { curl -s -o /dev/null -w '%{http_code}' -H "apikey: $1" -H "Authorization: Bearer ${2:-$1}" "http://127.0.0.1:54321/rest/v1/$3"; }
 OLD=$(code "$DEMO_ANON" "" "prodotti?select=id&limit=1")
 NEW=$(code "$ANON" "" "prodotti?select=id&limit=1")
 STAFF_TOKEN=$(docker exec "$DB" psql -U postgres -tAc "SELECT private.sign_staff_token(id, role) FROM staff_users LIMIT 1")
