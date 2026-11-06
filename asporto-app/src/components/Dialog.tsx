@@ -32,6 +32,10 @@ export default function Dialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const id = useId();
+  // Callers usually pass an inline onClose: keep it in a ref so the effect below
+  // doesn't re-run (and steal focus from inputs) on every parent render.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,7 +50,7 @@ export default function Dialog({
       if (dialogStack[dialogStack.length - 1] !== id) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panel) return;
@@ -70,7 +74,7 @@ export default function Dialog({
       if (idx !== -1) dialogStack.splice(idx, 1);
       restoreRef.current?.focus?.();
     };
-  }, [open, onClose, id]);
+  }, [open, id]);
 
   if (!open) return null;
 

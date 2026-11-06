@@ -1,5 +1,6 @@
-import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 import type { Ingredient } from '../../types/entities';
+import { TabHeader, SearchField, AvailabilitySwitch, StatChip, EmptyState, priceInputClass } from './kitchenUi';
 
 interface IngredientsTabProps {
   ingredients: Ingredient[];
@@ -19,90 +20,73 @@ export default function IngredientsTab({
   ingredients, ingredientSearch, onIngredientSearchChange, canEditMenu,
   onNew, onEdit, onDelete, onToggleAvailability, priceDrafts, onPriceChange, onPriceBlur,
 }: IngredientsTabProps) {
+  const search = ingredientSearch.trim().toLowerCase();
+  const list = ingredients.filter(ing => ing.nome.toLowerCase().includes(search));
+  const offCount = ingredients.filter(i => !i.disponibile).length;
+
   return (
-    <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Gestione Aggiunte</h2>
-          <p className={'text-gray-500'}>Modifica i prezzi e la disponibilità degli ingredienti extra.</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="relative w-full sm:w-64">
-            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${'text-gray-500'}`} size={18} />
-            <input
-              type="text"
-              placeholder="Cerca aggiunta..."
-              value={ingredientSearch}
-              onChange={e => onIngredientSearchChange(e.target.value)}
-              className={`w-full ${'bg-charcoal border-surface-light focus:border-gold'} border rounded-2xl py-3 pl-12 pr-12 text-white font-bold outline-none transition-all text-sm`}
-            />
-            {ingredientSearch && (
-              <button
-                onClick={() => onIngredientSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-surface border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
-                aria-label="Cancella ricerca"
+    <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <TabHeader eyebrow="Cucina" title="Aggiunte" subtitle="Prezzo e disponibilità degli ingredienti extra.">
+        <SearchField value={ingredientSearch} onChange={onIngredientSearchChange} placeholder="Cerca aggiunta..." />
+        {canEditMenu && (
+          <button
+            onClick={onNew}
+            className="bg-gold hover:bg-gold-hover text-black font-black py-3 px-5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 whitespace-nowrap"
+          >
+            <Plus size={18} /> Nuova Aggiunta
+          </button>
+        )}
+      </TabHeader>
+
+      <div className="flex flex-wrap gap-2 mb-5">
+        <StatChip value={ingredients.length} label="Aggiunte" tone="neutral" />
+        <StatChip value={offCount} label="Esaurite" tone="off" />
+      </div>
+
+      {list.length === 0 ? (
+        <EmptyState text="Nessuna aggiunta trovata" />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
+          {list.map(ing => {
+            const off = !ing.disponibile;
+            return (
+              <div
+                key={ing.id}
+                className={`relative flex items-center gap-4 rounded-2xl border pl-5 pr-4 py-4 overflow-hidden transition-all ${
+                  off ? 'bg-rose-500/[0.04] border-rose-500/25' : 'bg-surface border-surface-light hover:border-gold/30'
+                }`}
               >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          {canEditMenu && (
-            <button
-                onClick={onNew}
-                className={`${'bg-gold text-black'} font-bold py-3 px-6 rounded-2xl flex items-center gap-2 transition-all`}
-            >
-                <Plus size={20} /> Nuova Aggiunta
-            </button>
-          )}
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ingredients
-            .filter(ing => ing.nome.toLowerCase().includes(ingredientSearch.toLowerCase()))
-            .map(ing => (
-            <div key={ing.id} className={`group relative ${'bg-surface border-surface-light hover:border-gold/30'} border rounded-2xl p-5 transition-all`}>
-               <div className="flex justify-between items-start mb-4">
-                  <div>
-                      <h4 className={`font-bold text-white ${'group-hover:text-gold'} transition-colors uppercase text-sm`}>{ing.nome}</h4>
-                  </div>
-                  {canEditMenu && (
-                  <div className="flex gap-2">
-                      <button onClick={() => onEdit(ing)} className={`p-2 ${'bg-charcoal text-gray-500 hover:text-white'} rounded-lg`}><Edit2 size={16} /></button>
-                      <button onClick={() => onDelete(ing.id)} className={`p-2 ${'bg-charcoal'} rounded-lg text-rose-500/50 hover:text-rose-500`}><Trash2 size={16} /></button>
-                  </div>
-                  )}
-               </div>
-
-               <div className={`flex items-center justify-between pt-4 border-t ${'border-surface-light/50'}`}>
+                <span className={`absolute left-0 top-0 bottom-0 w-1 ${off ? 'bg-rose-500' : 'bg-emerald-500/70'}`} />
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-black ${'text-gray-500'} uppercase`}>Prezzo</span>
+                    <h4 className={`font-bold uppercase text-sm truncate ${off ? 'text-gray-400 line-through decoration-rose-500/60' : 'text-white'}`}>{ing.nome}</h4>
+                    {canEditMenu && (
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => onEdit(ing)} aria-label={`Modifica ${ing.nome}`} className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-charcoal transition-colors"><Edit2 size={14} /></button>
+                        <button onClick={() => onDelete(ing.id)} aria-label={`Elimina ${ing.nome}`} className="p-1.5 rounded-lg text-rose-500/60 hover:text-rose-400 hover:bg-charcoal transition-colors"><Trash2 size={14} /></button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Prezzo €</span>
                     <input
                       type="text"
                       inputMode="decimal"
+                      aria-label={`Prezzo ${ing.nome}`}
                       value={priceDrafts[ing.id] ?? (ing.prezzo ?? 0).toFixed(2)}
                       onChange={e => canEditMenu && onPriceChange(ing.id, e.target.value)}
                       readOnly={!canEditMenu}
                       onBlur={e => canEditMenu && onPriceBlur(ing.id, e.target.value)}
-                      className={`w-20 ${'bg-charcoal border-surface-light focus:border-gold text-gold'} border rounded-lg py-1.5 px-2 font-bold text-xs text-center outline-none transition-all ${!canEditMenu ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      className={`${priceInputClass} text-gold ${!canEditMenu ? 'opacity-60 cursor-not-allowed' : ''}`}
                     />
-                    <span className={`text-[10px] font-black ${'text-gray-500'}`}>€</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ing.disponibile ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                        {ing.disponibile ? 'Disponibile' : 'Esaurito'}
-                    </span>
-                    <button
-                        onClick={() => onToggleAvailability(ing.id, ing.disponibile)}
-                        className={`p-2.5 rounded-md transition-colors ${ing.disponibile ? 'text-emerald-500' : 'text-slate-600'}`}
-                    >
-                        {ing.disponibile ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                    </button>
-                  </div>
-               </div>
-            </div>
-          ))}
-      </div>
+                </div>
+                <AvailabilitySwitch on={ing.disponibile} onToggle={() => onToggleAvailability(ing.id, ing.disponibile)} label={ing.nome} />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Product, Ingredient } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { getCategoryOrder, saveCategoryOrder } from '../lib/categoryUtils';
-import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Menu, X, Receipt } from 'lucide-react';
+import { List, ChefHat, LayoutDashboard, Plus, Minus, SlidersHorizontal, ShieldCheck, Menu, X, Receipt, type LucideIcon } from 'lucide-react';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import ProductFormModal from './ProductFormModal';
@@ -16,6 +16,121 @@ import IngredientsTab from './admin/IngredientsTab';
 import RemovalsTab from './admin/RemovalsTab';
 import VariantsTab from './admin/VariantsTab';
 import IngredientFormModal from './admin/IngredientFormModal';
+
+type KitchenTab = 'menu' | 'ingredients' | 'removals' | 'variants' | 'haccp' | 'cassa';
+
+const NAV_GROUPS: { title: string; items: { tab: KitchenTab; label: string; hint: string; Icon: LucideIcon }[] }[] = [
+  {
+    title: 'Menu',
+    items: [
+      { tab: 'menu', label: 'Disponibilità Menu', hint: 'Piatti ed esauriti', Icon: List },
+      { tab: 'ingredients', label: 'Aggiunte', hint: 'Extra e prezzi', Icon: Plus },
+      { tab: 'removals', label: 'Rimozioni', hint: 'Sconti ingredienti', Icon: Minus },
+      { tab: 'variants', label: 'Varianti', hint: 'Opzioni dei piatti', Icon: SlidersHorizontal },
+    ],
+  },
+  {
+    title: 'Strumenti',
+    items: [
+      { tab: 'haccp', label: 'HACCP Etichette', hint: 'Lotti e stampa', Icon: ShieldCheck },
+      { tab: 'cassa', label: 'Cassa Fiscale', hint: 'Chiusure e pagamenti', Icon: Receipt },
+    ],
+  },
+];
+
+function KitchenBrand() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="bg-gold p-2.5 rounded-2xl shadow-lg shadow-gold/20">
+        <ChefHat size={24} className="text-black" />
+      </div>
+      <div className="leading-tight">
+        <h1 className="text-xl font-black tracking-tight text-white">Kitchen<span className="text-gold">Hub</span></h1>
+        <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-500">Il Girasole</p>
+      </div>
+    </div>
+  );
+}
+
+function HomeLink({ onNavigateHome, onDone }: { onNavigateHome?: () => void; onDone?: () => void }) {
+  const cls = 'w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-charcoal border border-surface-light text-gray-300 hover:text-white hover:border-gold/30 transition-all font-semibold text-sm';
+  if (onNavigateHome) {
+    return (
+      <button onClick={() => { onDone?.(); onNavigateHome(); }} className={cls}>
+        <LayoutDashboard size={18} className="text-gold" /> Dashboard
+      </button>
+    );
+  }
+  return (
+    <Link to="/" onClick={onDone} className={cls}>
+      <LayoutDashboard size={18} className="text-gold" /> Dashboard
+    </Link>
+  );
+}
+
+function KitchenNav({ activeTab, badges, onSelect }: {
+  activeTab: KitchenTab;
+  badges: Partial<Record<KitchenTab, number>>;
+  onSelect: (tab: KitchenTab) => void;
+}) {
+  return (
+    <nav className="flex flex-col gap-6">
+      {NAV_GROUPS.map(group => (
+        <div key={group.title}>
+          <p className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">{group.title}</p>
+          <div className="flex flex-col gap-1">
+            {group.items.map(({ tab, label, hint, Icon }) => {
+              const active = activeTab === tab;
+              const badge = badges[tab] ?? 0;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => onSelect(tab)}
+                  aria-current={active ? 'page' : undefined}
+                  className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-all ${
+                    active ? 'bg-gold/10 text-white' : 'text-gray-400 hover:bg-charcoal hover:text-white'
+                  }`}
+                >
+                  {active && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-gold" />}
+                  <span className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${active ? 'bg-gold text-black' : 'bg-charcoal text-gray-400'}`}>
+                    <Icon size={18} />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-bold truncate">{label}</span>
+                    <span className="block text-[11px] text-gray-500 truncate">{hint}</span>
+                  </span>
+                  {badge > 0 && (
+                    <span className="shrink-0 min-w-6 h-6 px-1.5 rounded-full bg-rose-500/15 text-rose-400 text-[11px] font-black flex items-center justify-center tabular-nums" title="Esauriti">
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+function SidebarFooter({ userName, outOfStock }: { userName?: string; outOfStock: number }) {
+  return (
+    <div className="m-4 p-4 rounded-2xl bg-charcoal border border-surface-light">
+      <div className="flex items-center gap-2">
+        <span className="relative flex w-2 h-2">
+          <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-60" />
+          <span className="relative w-2 h-2 rounded-full bg-emerald-500" />
+        </span>
+        <span className="text-xs font-bold text-emerald-400">Sistema online</span>
+      </div>
+      {userName && <p className="text-sm font-bold text-white mt-2 truncate">{userName}</p>}
+      <p className="text-xs text-gray-500 mt-0.5">
+        {outOfStock > 0 ? `${outOfStock} piatt${outOfStock === 1 ? 'o' : 'i'} esaurit${outOfStock === 1 ? 'o' : 'i'}` : 'Tutto il menu disponibile'}
+      </p>
+    </div>
+  );
+}
 
 interface AdminViewProps {
   onNavigateHome?: () => void;
@@ -299,199 +414,78 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
   };
 
   const isEmbedded = true;
+  const currentUser = getCurrentUser();
+  const outOfStock = products.filter(p => !p.disponibile).length;
+  const badges: Partial<Record<KitchenTab, number>> = {
+    menu: outOfStock,
+    ingredients: ingredients.filter(i => !i.disponibile).length,
+  };
+  const activeLabel = NAV_GROUPS.flatMap(g => g.items).find(i => i.tab === activeTab)?.label ?? '';
 
   return (
-    <div className={`min-h-screen ${'bg-charcoal text-gray-300'} font-sans ${''}`}>
-
-      {/* Sidebar / Topnav layout */}
+    <div className="min-h-screen bg-charcoal text-gray-300 font-sans">
       <div className="flex flex-col md:flex-row h-dvh overflow-hidden">
 
-        {/* Modern Sidebar Nav */}
-        <aside className={`w-full md:w-72 bg-surface md:border-r border-b md:border-b-0 border-surface-light px-4 py-3 md:p-6 flex flex-col z-20 shadow-2xl`}>
-          <div className="flex items-center justify-between gap-3 mb-0 md:mb-12">
-            <div className="flex items-center gap-3">
-              <div className={`${'bg-gold'} p-2.5 rounded-xl ${''}`}>
-                <ChefHat size={28} className={'text-black'} />
-              </div>
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Kitchen<span className={'text-gold'}>Hub</span></h1>
-            </div>
-            <button
-              onClick={() => setMenuOpen(true)}
-              className="md:hidden p-2 rounded-xl bg-charcoal text-gray-400 hover:text-white transition-colors"
-            >
-              <Menu size={22} />
-            </button>
+        {/* Sidebar (desktop/tablet) */}
+        <aside className="hidden md:flex w-72 shrink-0 bg-surface border-r border-surface-light flex-col z-20">
+          <div className="px-6 pt-6 pb-5">
+            <KitchenBrand />
           </div>
-
-          <nav className="hidden md:flex md:flex-col gap-1 md:flex-1">
-            {onNavigateHome ? (
-              <button
-                onClick={onNavigateHome}
-                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all duration-300"
-              >
-                <LayoutDashboard size={20} />
-                <span className="whitespace-nowrap">Dashboard Principale</span>
-              </button>
-            ) : (
-              <Link
-                to="/"
-                className="shrink-0 md:w-full flex items-center gap-3 p-3 md:p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all duration-300"
-              >
-                <LayoutDashboard size={20} />
-                <span className="whitespace-nowrap">Dashboard Principale</span>
-              </Link>
-            )}
-            <div className="hidden md:block h-px bg-surface-light/50 my-2" />
-            <button
-              onClick={() => setActiveTab('menu')}
-              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'menu'
-                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-               <List size={20} className={activeTab === 'menu' ? 'text-gold' : ''} />
-                <span className="whitespace-nowrap">Disponibilità Menu</span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('ingredients')}
-              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'ingredients'
-                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-                <Plus size={20} className={activeTab === 'ingredients' ? 'text-gold' : ''} />
-                <span className="whitespace-nowrap">Gestione Aggiunte</span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('removals')}
-              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'removals'
-                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-                <Minus size={20} className={activeTab === 'removals' ? 'text-gold' : ''} />
-                <span className="whitespace-nowrap">Gestione Rimozioni</span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('variants')}
-              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'variants'
-                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-                <SlidersHorizontal size={20} className={activeTab === 'variants' ? 'text-gold' : ''} />
-                <span className="whitespace-nowrap">Gestione Varianti</span>
-              </div>
-            </button>
-            <div className="hidden md:block h-px bg-surface-light/50 my-2" />
-            <button
-              onClick={() => setActiveTab('haccp')}
-              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'haccp'
-                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-                <ShieldCheck size={20} className={activeTab === 'haccp' ? 'text-gold' : ''} />
-                <span className="whitespace-nowrap">HACCP Etichette</span>
-              </div>
-            </button>
-            <button
-              onClick={() => setActiveTab('cassa')}
-              className={`shrink-0 md:w-full flex items-center justify-between p-3 md:p-4 rounded-xl transition-all duration-300 ${
-                activeTab === 'cassa'
-                  ? 'bg-charcoal text-gold shadow-md border border-surface-light'
-                  : 'text-gray-400 hover:bg-charcoal hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3 font-medium">
-                <Receipt size={20} className={activeTab === 'cassa' ? 'text-gold' : ''} />
-                <span className="whitespace-nowrap">Cassa Fiscale</span>
-              </div>
-            </button>
-          </nav>
-
-          <div className={`mt-auto hidden md:flex p-4 ${'bg-gold/10 border-gold/20'} border rounded-xl items-center gap-3`}>
-             <div className={`w-2 h-2 rounded-full ${'bg-gold'} animate-ping absolute`}></div>
-             <div className={`w-2 h-2 rounded-full ${'bg-gold'} relative`}></div>
-             <span className={`${'text-gold'} text-sm font-medium`}>Sistema Online</span>
+          <div className="px-4">
+            <HomeLink onNavigateHome={onNavigateHome} />
           </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4">
+            <KitchenNav activeTab={activeTab} badges={badges} onSelect={setActiveTab} />
+          </div>
+          <SidebarFooter userName={currentUser?.name} outOfStock={outOfStock} />
         </aside>
+
+        {/* Top bar (mobile) */}
+        <header className="md:hidden flex items-center justify-between gap-3 px-4 py-3 bg-surface border-b border-surface-light z-20">
+          <button
+            onClick={() => setMenuOpen(true)}
+            aria-label="Apri menu"
+            className="p-2.5 rounded-xl bg-charcoal text-gray-300 hover:text-white transition-colors"
+          >
+            <Menu size={22} />
+          </button>
+          <div className="flex-1 min-w-0 text-center">
+            <p className="text-[10px] font-black text-gold uppercase tracking-[0.25em]">KitchenHub</p>
+            <p className="text-sm font-black text-white truncate">{activeLabel}</p>
+          </div>
+          <div className="w-11 flex justify-end">
+            {outOfStock > 0 && (
+              <span className="min-w-7 h-7 px-2 rounded-full bg-rose-500/15 text-rose-400 text-xs font-black flex items-center justify-center tabular-nums" title="Piatti esauriti">
+                {outOfStock}
+              </span>
+            )}
+          </div>
+        </header>
 
         {/* Mobile drawer */}
         {menuOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
-            <div className="absolute left-0 top-0 bottom-0 w-72 bg-surface flex flex-col p-6 shadow-2xl">
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gold p-2.5 rounded-xl"><ChefHat size={24} className="text-black" /></div>
-                  <h1 className="text-xl font-bold text-white">Kitchen<span className="text-gold">Hub</span></h1>
-                </div>
-                <button onClick={() => setMenuOpen(false)} className="p-2 text-gray-400 hover:text-white">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setMenuOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-surface flex flex-col shadow-2xl animate-in slide-in-from-left duration-200">
+              <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                <KitchenBrand />
+                <button onClick={() => setMenuOpen(false)} aria-label="Chiudi menu" className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-charcoal">
                   <X size={20} />
                 </button>
               </div>
-              <div className="flex flex-col gap-1 flex-1">
-                {onNavigateHome ? (
-                  <button onClick={() => { setMenuOpen(false); onNavigateHome(); }} className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all">
-                    <LayoutDashboard size={20} /> Dashboard
-                  </button>
-                ) : (
-                  <a href="/" className="w-full flex items-center gap-3 p-4 rounded-xl text-gray-400 hover:bg-charcoal hover:text-white transition-all" onClick={() => setMenuOpen(false)}>
-                    <LayoutDashboard size={20} /> Dashboard
-                  </a>
-                )}
-                <div className="h-px bg-surface-light/50 my-1" />
-                {([
-                  ['menu', 'Disponibilità Menu', List],
-                  ['ingredients', 'Gestione Aggiunte', Plus],
-                  ['removals', 'Gestione Rimozioni', Minus],
-                  ['variants', 'Gestione Varianti', SlidersHorizontal],
-                ] as const).map(([tab, label, Icon]) => (
-                  <button
-                    key={tab}
-                    onClick={() => { setActiveTab(tab); setMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === tab ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-400 hover:bg-charcoal hover:text-white'}`}
-                  >
-                    <Icon size={20} className={activeTab === tab ? 'text-gold' : ''} />
-                    <span className="font-medium">{label}</span>
-                  </button>
-                ))}
-                <div className="h-px bg-surface-light/50 my-1" />
-                <button
-                  onClick={() => { setActiveTab('haccp'); setMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'haccp' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-400 hover:bg-charcoal hover:text-white'}`}
-                >
-                  <ShieldCheck size={20} className={activeTab === 'haccp' ? 'text-gold' : ''} />
-                  <span className="font-medium">HACCP Etichette</span>
-                </button>
-                <button
-                  onClick={() => { setActiveTab('cassa'); setMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${activeTab === 'cassa' ? 'bg-charcoal text-gold border border-surface-light' : 'text-gray-400 hover:bg-charcoal hover:text-white'}`}
-                >
-                  <Receipt size={20} className={activeTab === 'cassa' ? 'text-gold' : ''} />
-                  <span className="font-medium">Cassa Fiscale</span>
-                </button>
+              <div className="px-4">
+                <HomeLink onNavigateHome={onNavigateHome} onDone={() => setMenuOpen(false)} />
               </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                <KitchenNav activeTab={activeTab} badges={badges} onSelect={tab => { setActiveTab(tab); setMenuOpen(false); }} />
+              </div>
+              <SidebarFooter userName={currentUser?.name} outOfStock={outOfStock} />
             </div>
           </div>
         )}
 
         {/* Dashboard Content */}
-        <main className={`flex-1 p-4 md:p-10 overflow-y-auto ${'bg-charcoal'}`}>
+        <main className="flex-1 px-4 py-5 md:px-10 md:py-8 overflow-y-auto bg-charcoal">
 
           {activeTab === 'menu' && (
             <MenuTab
