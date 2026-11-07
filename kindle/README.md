@@ -7,9 +7,10 @@ Il Kindle (11ª gen, jailbreak + KOReader) usato come lavagna del menu del giorn
 - **Aggiornamento**: ogni 30 secondi scarica il menu dal gestionale; lo schermo si ridisegna solo se i piatti
   cambiano (piatto esaurito, nuovo piatto…). Se il menu non sta in una schermata, le pagine girano ogni 20 s.
 - **Standby**: finché il menu è aperto il Kindle non si spegne da solo. Col tasto di accensione si spegne e
-  mostra il **logo del ristorante**.
-- **Esci**: tieni premuto lo schermo → "Torna al Kindle". Il tocco semplice non fa nulla (clienti).
-  All'uscita il salvaschermo torna quello di prima.
+  mostra **l'ultimo menu** (oppure il **logo**: si sceglie dalla pressione lunga). Da spento non si aggiorna.
+- **Pressione lunga** sullo schermo: "Torna al Kindle", "In standby: menu/logo", "Resta sul menu".
+  Il tocco semplice non fa nulla (clienti).
+- All'uscita il salvaschermo torna quello di prima (anche se KOReader si era chiuso male: al riavvio).
 
 ## Cosa mostra
 L'immagine la genera il print agent del gestionale:

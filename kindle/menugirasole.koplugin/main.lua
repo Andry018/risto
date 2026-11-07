@@ -4,8 +4,10 @@ Menu Girasole: il Kindle come lavagna del menu del giorno.
 - Si apre dallo scriptlet "Menu Girasole" nella Libreria (o da KOReader: menu Strumenti → Menu Girasole).
 - Mostra a schermo intero l'immagine generata dal gestionale (print agent: /kindle/menu.png) e la
   riscarica ogni 30 secondi; ridisegna lo schermo SOLO se il menu è cambiato (ETag), niente lampeggi inutili.
-- Finché è aperto il Kindle non va in standby da solo. Col tasto di accensione lo standby mostra il logo.
-- Tocco semplice: non fa nulla (clienti). Pressione lunga: chiede se tornare al Kindle.
+- Finché è aperto il Kindle non va in standby da solo. Col tasto di accensione lo standby mostra
+  l'ultimo menu (default) oppure il logo: si sceglie dalla pressione lunga.
+- Tocco semplice: non fa nulla (clienti). Pressione lunga: Torna al Kindle / standby menu o logo.
+- Il salvaschermo dell'utente viene salvato e rimesso all'uscita (anche dopo una chiusura anomala).
 
 Configurazione (opzionale) in KOReader → settings.reader.lua:
   menugirasole_url = "https://gestionale.90-minuti.it/print-agent/kindle/menu?cat=Primi,Secondi"
@@ -15,7 +17,7 @@ metterebbe l'immagine in cache per ore.
 
 local Blitbuffer = require("ffi/blitbuffer")
 local CenterContainer = require("ui/widget/container/centercontainer")
-local ConfirmBox = require("ui/widget/confirmbox")
+local ButtonDialog = require("ui/widget/buttondialog")
 local Font = require("ui/font")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local TextBoxWidget = require("ui/widget/textboxwidget")
@@ -37,6 +39,8 @@ local REFRESH_SECONDS = 30
 local PAGE_SECONDS = 20 -- se il menu non sta in una pagina, cambia pagina ogni 20 s
 local AUTOSTART_FLAG = "/mnt/us/koreader/menugirasole.autostart"
 local CACHE_DIR = "/tmp"
+local LOGO_PATH = "/mnt/us/koreader/menugirasole-logo.png"
+local STANDBY_MENU_PATH = "/mnt/us/koreader/menugirasole-standby.png"
 
 -- ------------------------------------------------------------------------------------------------
 -- Rete
@@ -161,6 +165,10 @@ function MenuScreen:refresh()
         if writeFile(path, body) then
             self.image_path = path
             self:setImage(path)
+            -- copia per lo standby (l'immagine mostrata quando si preme il tasto di accensione)
+            if self.page == 1 and writeFile(STANDBY_MENU_PATH, body) and self.on_new_menu then
+                self.on_new_menu()
+            end
         end
     elseif code ~= 304 and not self.image_path then
         logger.warn("MenuGirasole: menu non disponibile, codice", code)
@@ -179,14 +187,24 @@ function MenuScreen:onTap()
 end
 
 function MenuScreen:onHold()
-    UIManager:show(ConfirmBox:new{
-        text = _("Uscire dal menu del ristorante e tornare al Kindle?"),
-        ok_text = _("Torna al Kindle"),
-        cancel_text = _("Resta sul menu"),
-        ok_callback = function()
-            if self.on_exit then self.on_exit() end
-        end,
-    })
+    local dialog
+    local logo = self.get_standby and self.get_standby() == "logo"
+    dialog = ButtonDialog:new{
+        title = _("Menu Girasole"),
+        buttons = {
+            {{ text = _("Torna al Kindle"), callback = function()
+                UIManager:close(dialog)
+                if self.on_exit then self.on_exit() end
+            end }},
+            {{ text = logo and _("In standby: logo  →  passa al menu") or _("In standby: menu  →  passa al logo"),
+               callback = function()
+                UIManager:close(dialog)
+                if self.set_standby then self.set_standby(logo and "menu" or "logo") end
+            end }},
+            {{ text = _("Resta sul menu"), callback = function() UIManager:close(dialog) end }},
+        },
+    }
+    UIManager:show(dialog)
     return true
 end
 
@@ -206,6 +224,8 @@ local MenuGirasole = WidgetContainer:extend{
 
 function MenuGirasole:init()
     self.ui.menu:registerToMainMenu(self)
+    -- KOReader chiuso male col menu aperto: rimetti il salvaschermo dell'utente
+    if not MenuGirasole.active then self:restoreScreensaver() end
     -- Avvio dallo scriptlet "Menu Girasole": lo scriptlet crea il file segnale prima di lanciare KOReader
     if fileExists(AUTOSTART_FLAG) then
         os.remove(AUTOSTART_FLAG)
@@ -229,29 +249,48 @@ function MenuGirasole:base()
     return DEFAULT_BASE, DEFAULT_BASE .. "menu?" .. DEFAULT_QUERY
 end
 
---- Scarica il logo per lo standby e lo imposta come salvaschermo (ricordando quello di prima).
-function MenuGirasole:setLogoScreensaver()
-    local base = self:base()
-    local path = "/mnt/us/koreader/menugirasole-logo.png"
-    if not fileExists(path) then
-        local body, code = httpGet(string.format("%slogo?w=%d&h=%d", base, Screen:getWidth(), Screen:getHeight()))
-        if code == 200 and body and #body > 0 then writeFile(path, body) end
-    end
+function MenuGirasole:getStandby()
+    return G_reader_settings:readSetting("menugirasole_standby") or "menu"
+end
+
+--- Punta il salvaschermo all'immagine giusta: ultimo menu (se c'è) o logo.
+function MenuGirasole:applyStandby()
+    local path = LOGO_PATH
+    if self:getStandby() == "menu" and fileExists(STANDBY_MENU_PATH) then path = STANDBY_MENU_PATH end
     if not fileExists(path) then return end
-    self.saved_ss = {
-        type = G_reader_settings:readSetting("screensaver_type"),
-        cover = G_reader_settings:readSetting("screensaver_document_cover"),
-    }
     -- "document_cover" con un file immagine = mostra quell'immagine (frontend/ui/screensaver.lua)
     G_reader_settings:saveSetting("screensaver_type", "document_cover")
     G_reader_settings:saveSetting("screensaver_document_cover", path)
 end
 
+--- Salva il salvaschermo dell'utente (su disco: sopravvive a una chiusura anomala) e mette il nostro.
+function MenuGirasole:takeOverScreensaver()
+    local base = self:base()
+    if not fileExists(LOGO_PATH) then
+        local body, code = httpGet(string.format("%slogo?w=%d&h=%d", base, Screen:getWidth(), Screen:getHeight()))
+        if code == 200 and body and #body > 0 then writeFile(LOGO_PATH, body) end
+    end
+    if not G_reader_settings:has("menugirasole_prev_ss") then
+        G_reader_settings:saveSetting("menugirasole_prev_ss", {
+            type = G_reader_settings:readSetting("screensaver_type") or "disable",
+            cover = G_reader_settings:readSetting("screensaver_document_cover") or "",
+        })
+    end
+    self:applyStandby()
+    G_reader_settings:flush()
+end
+
 function MenuGirasole:restoreScreensaver()
-    if not self.saved_ss then return end
-    G_reader_settings:saveSetting("screensaver_type", self.saved_ss.type)
-    G_reader_settings:saveSetting("screensaver_document_cover", self.saved_ss.cover)
-    self.saved_ss = nil
+    local prev = G_reader_settings:readSetting("menugirasole_prev_ss")
+    if not prev then return end
+    G_reader_settings:saveSetting("screensaver_type", prev.type)
+    if prev.cover and prev.cover ~= "" then
+        G_reader_settings:saveSetting("screensaver_document_cover", prev.cover)
+    else
+        G_reader_settings:delSetting("screensaver_document_cover")
+    end
+    G_reader_settings:delSetting("menugirasole_prev_ss")
+    G_reader_settings:flush()
 end
 
 local function keepAwake(on)
@@ -264,11 +303,19 @@ end
 function MenuGirasole:start(from_launcher)
     if self.screen then return end
     local _, menu_url = self:base()
-    self:setLogoScreensaver()
+    MenuGirasole.active = true
+    self:takeOverScreensaver()
     keepAwake(true)
     self.screen = MenuScreen:new{
         menu_url = menu_url,
         on_exit = function() self:stop(from_launcher) end,
+        on_new_menu = function() self:applyStandby() end,
+        get_standby = function() return self:getStandby() end,
+        set_standby = function(mode)
+            G_reader_settings:saveSetting("menugirasole_standby", mode)
+            self:applyStandby()
+            G_reader_settings:flush()
+        end,
     }
     UIManager:show(self.screen, "full")
 end
@@ -278,9 +325,9 @@ function MenuGirasole:stop(quit_koreader)
         UIManager:close(self.screen, "full")
         self.screen = nil
     end
+    MenuGirasole.active = false
     keepAwake(false)
     self:restoreScreensaver()
-    G_reader_settings:flush()
     if quit_koreader then
         -- Aperto dallo scriptlet: si esce da KOReader e si torna al Kindle normale
         local FileManager = require("apps/filemanager/filemanager")
@@ -295,6 +342,7 @@ end
 function MenuGirasole:onCloseWidget()
     -- KOReader si chiude mentre il menu è aperto: rimetti tutto com'era
     if self.screen then
+        MenuGirasole.active = false
         keepAwake(false)
         self:restoreScreensaver()
     end
