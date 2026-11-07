@@ -10,6 +10,7 @@ import BillsHistoryModal from './BillsHistoryModal';
 import CashPaymentModal from './CashPaymentModal';
 import CardPaymentModal from './CardPaymentModal';
 import PaymentChoiceModal from './PaymentChoiceModal';
+import BillReviewPanel from './BillReviewPanel';
 import type { PaymentResult } from '../lib/ecrAgent';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import PaninoBuilderModal from './PaninoBuilderModal';
@@ -927,195 +928,31 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   return (
     <>
-      {/* Bill Review Overlay */}
+      {/* Riepilogo conto */}
       {showBillReview && (
-        <div className="fixed inset-0 z-[100] flex bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="flex-1 min-h-0 p-4 md:p-6 xl:p-8">
-            <div className="h-full grid grid-cols-1 lg:grid-cols-[1.4fr_0.6fr] gap-4 md:gap-6 min-h-0">
-              <div className="bg-surface border border-surface-light rounded-[32px] shadow-2xl overflow-hidden flex flex-col min-h-0">
-                <div className="px-5 md:px-8 py-5 md:py-6 border-b border-surface-light bg-surface-light/10">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex items-start gap-4">
-                      <button
-                        onClick={() => setShowBillReview(false)}
-                        className="p-3 bg-charcoal rounded-2xl text-gray-400 hover:text-white border border-surface-light transition-all active:scale-95"
-                        aria-label="Chiudi riepilogo conto"
-                      >
-                        <X size={20} />
-                      </button>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                          <span className="px-3 py-1 rounded-full bg-gold/10 text-gold text-[10px] font-black uppercase tracking-[0.25em] border border-gold/20">
-                            Riepilogo conto
-                          </span>
-                          <span className="px-3 py-1 rounded-full bg-charcoal text-gray-300 text-[10px] font-black uppercase tracking-[0.25em] border border-surface-light">
-                            {cart.length} articoli
-                          </span>
-                        </div>
-                        <h2 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-white">
-                          Conto <span className="text-gold">corrente</span>
-                        </h2>
-                        <p className="text-[10px] md:text-xs font-black text-gray-500 uppercase tracking-[0.3em] mt-2">
-                          {tableName || 'POS'}{tableClienti > 0 ? ` · ${tableClienti} coperti` : ''}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="min-w-[220px] rounded-3xl bg-charcoal border border-surface-light px-5 py-4">
-                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-2">Totale</p>
-                      {scontoTipo ? (
-                        <div className="flex flex-col items-end">
-                          <p className="text-base font-black text-gray-500 line-through">€{total.toFixed(2)}</p>
-                          <p className="text-4xl font-black text-gold italic leading-none">€{discountedTotal.toFixed(2)}</p>
-                          <p className="text-[10px] font-black text-emerald-400 mt-2">
-                            {scontoTipo === 'percentuale' ? `${scontoValore}%` : `-€${scontoValore.toFixed(2)}`}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-4xl font-black text-gold italic leading-none">€{total.toFixed(2)}</p>
-                      )}
-                      <button
-                        type="button"
-                        onClick={openDiscountModal}
-                        className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gold border border-dashed border-surface-light hover:border-gold/40 rounded-xl py-2 transition-all"
-                      >
-                        {scontoTipo ? 'Modifica sconto' : 'Applica sconto'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 custom-scrollbar">
-                  <div className="space-y-3">
-                    {cart.map(item => (
-                      <div
-                        key={item.uniqueId}
-                        className="bg-charcoal/70 border border-surface-light rounded-3xl px-4 py-4 md:px-5 md:py-5 shadow-lg"
-                      >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gold font-black shrink-0 w-8 text-center">x{item.quantity}</span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-white text-sm md:text-base truncate">{item.nome.toUpperCase()}</p>
-                          {item.portata && (
-                            <span className={`shrink-0 px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] ${PORTATA_OPTIONS.find(p => p.value === item.portata)?.color ?? 'bg-charcoal border-surface-light text-gray-400'}`}>
-                              {PORTATA_OPTIONS.find(p => p.value === item.portata)?.label ?? `Portata ${item.portata}`}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {item.addedIngredients.map(a => <span key={a.nome} className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">+{a.nome}</span>)}
-                          {item.removedIngredients.map(r => <span key={r} className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">NO {r}</span>)}
-                        </div>
-                              </div>
-                            </div>
-                            {item.notes && (
-                              <p className="text-[10px] md:text-xs text-amber-400 italic font-bold mt-2 pl-11">
-                                * {item.notes}
-                              </p>
-                            )}
-                          </div>
-                          <span className="text-white font-black shrink-0 ml-4 text-sm md:text-base">
-                            €{calculateItemPrice(item, ingredients).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <aside className="bg-surface border border-surface-light rounded-[32px] shadow-2xl overflow-hidden flex flex-col min-h-0">
-                <div className="p-5 md:p-6 border-b border-surface-light bg-surface-light/10">
-                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Azioni rapide</p>
-                  <h3 className="text-2xl font-black italic uppercase text-white mt-1">Operazioni</h3>
-                </div>
-
-                <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto hide-scrollbar">
-                  <button
-                    onClick={() => void handlePrintReceipt()}
-                    disabled={cart.length === 0 || !!printBusy}
-                    className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                  >
-                    {printBusy === 'ricevuta' ? 'STAMPA IN CORSO...' : <><Receipt size={14} /> STAMPA RICEVUTA</>}
-                  </button>
-                  <button
-                    onClick={() => setShowBillReview(false)}
-                    className="w-full bg-surface-light hover:bg-gold/20 text-white hover:text-gold font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <Edit3 size={14} /> AGGIUNGI PIATTI / MODIFICA
-                  </button>
-                  <div className="pt-2">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-3">Gestione conto</p>
-                    <div className="space-y-2">
-                      {tableId ? (
-                        <>
-                          <button
-                            onClick={handleUpdateBill}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className={`w-full font-black text-sm py-3 rounded-2xl border transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-40 ${pending.dirty ? 'bg-amber-500/15 text-amber-200 border-amber-500/50 hover:bg-amber-500/25' : 'bg-surface-light text-gray-400 border-surface-light'}`}
-                            title="Salva la comanda sul tavolo senza chiudere"
-                          >
-                            <Save size={16} /> SALVA COMANDA
-                          </button>
-                          <button
-                            onClick={() => setIsSplitModalOpen(true)}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-surface-light hover:bg-white/10 text-gold font-black text-xs py-4 rounded-2xl border border-dashed border-gold/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            <Users size={14} /> DIVISIONE CONTO
-                          </button>
-                          <button
-                            onClick={handleFreeTable}
-                            disabled={finishingOrder}
-                            className="w-full bg-surface-light hover:bg-white/10 text-sky-400 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                            title="Libera il tavolo senza registrare una vendita"
-                          >
-                            <Trash2 size={16} /> LIBERA TAVOLO
-                          </button>
-                          <button
-                            onClick={handleHoldBill}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                            title="Metti in sospeso e libera lo schermo"
-                          >
-                            <Pause size={16} /> METTI IN SOSPESO
-                          </button>
-                          <button
-                            onClick={() => setPaymentChoiceOpen(true)}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
-                          >
-                            {finishingOrder ? <>Attendi...</> : <>CHIUDI CONTO <CheckCircle size={20} /></>}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={handleHoldBill}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-surface-light hover:bg-white/10 text-amber-500 font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            <Pause size={16} /> METTI IN SOSPESO
-                          </button>
-                          <button
-                            onClick={() => setPaymentChoiceOpen(true)}
-                            disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-gold hover:bg-gold-hover text-black font-black text-lg py-4 rounded-2xl shadow-lg shadow-gold/20 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
-                          >
-                            {finishingOrder ? <>Attendi...</> : <>CHIUDI CONTO <CheckCircle size={20} /></>}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </aside>
-            </div>
-          </div>
-        </div>
+        <BillReviewPanel
+          cart={cart}
+          ingredients={ingredients}
+          tableName={tableName}
+          covers={tableClienti}
+          total={total}
+          discountedTotal={discountedTotal}
+          scontoTipo={scontoTipo}
+          scontoValore={scontoValore}
+          pending={pending}
+          isTable={!!tableId}
+          busy={finishingOrder}
+          printBusy={!!printBusy}
+          portate={PORTATA_OPTIONS}
+          onClose={() => setShowBillReview(false)}
+          onDiscount={openDiscountModal}
+          onPrintReceipt={() => void handlePrintReceipt()}
+          onSend={() => void handleUpdateBill()}
+          onSplit={() => setIsSplitModalOpen(true)}
+          onHold={() => void handleHoldBill()}
+          onFreeTable={() => void handleFreeTable()}
+          onCheckout={() => setPaymentChoiceOpen(true)}
+        />
       )}
 
       <div className="h-dvh flex bg-charcoal text-white overflow-hidden">
@@ -1381,6 +1218,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
             <h2 className="text-lg sm:text-xl font-black text-white uppercase italic">SCONTRINO</h2>
           </div>
+          <button
+            onClick={() => setShowBillReview(true)}
+            disabled={cart.length === 0}
+            className="ml-auto mr-2 px-4 py-3 bg-charcoal border border-surface-light rounded-xl sm:rounded-2xl text-gray-200 font-bold text-sm hover:text-gold hover:border-gold/30 transition-all active:scale-95 disabled:opacity-30"
+            title="Apri il riepilogo del conto"
+          >
+            Riepilogo
+          </button>
           <button 
             onClick={clearCart}
             className="p-3 sm:p-4 bg-charcoal border border-surface-light rounded-xl sm:rounded-2xl text-gray-500 hover:text-red-500 hover:border-red-500/20 transition-all active:scale-90"
