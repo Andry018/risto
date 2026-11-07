@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Product, CustomizedItem, Portata, Ingredient } from '../types/entities';
-import { Search, Edit3, Plus, Minus, Sandwich, UtensilsCrossed, X } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, Minus, Sandwich, UtensilsCrossed, X } from 'lucide-react';
 
 interface Props {
   products: Product[];
@@ -13,6 +13,8 @@ interface Props {
   onCategoryChange: (cat: string | null) => void;
   onPortataChange: (p: Portata) => void;
   onAddToCart: (product: Product) => void;
+  /** toglie un pezzo del prodotto (correzione di un tocco di troppo) */
+  onRemoveOne?: (productId: string) => void;
   onOpenCustomization: (product: Product) => void;
   onOpenPaninoBuilder?: () => void;
   onOpenCustomItem?: () => void;
@@ -33,12 +35,77 @@ const CATEGORY_DEFS: { label: string; match: string[] }[] = [
 
 const CATEGORY_ORDER = ['Antipasti', 'Primi', 'Secondi', 'Contorni', 'Fritti', 'Pizze', 'Bevande', 'Dolci', 'Caffè e Liquori', 'Servizio'];
 const PORTATA_OPTIONS = [
-  { value: '1', label: '1ª', color: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
-  { value: '2', label: '2ª', color: 'text-sky-400 border-sky-500/30 bg-sky-500/10' },
-  { value: '3', label: '3ª', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
-  { value: '4', label: '4ª', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
-  { value: '5', label: '5ª', color: 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/10' },
+  { value: '1', label: '1ª', on: 'bg-rose-500 text-white border-rose-500', off: 'text-rose-300 border-rose-500/30' },
+  { value: '2', label: '2ª', on: 'bg-sky-500 text-white border-sky-500', off: 'text-sky-300 border-sky-500/30' },
+  { value: '3', label: '3ª', on: 'bg-amber-500 text-black border-amber-500', off: 'text-amber-300 border-amber-500/30' },
+  { value: '4', label: '4ª', on: 'bg-emerald-500 text-black border-emerald-500', off: 'text-emerald-300 border-emerald-500/30' },
+  { value: '5', label: '5ª', on: 'bg-fuchsia-500 text-white border-fuchsia-500', off: 'text-fuchsia-300 border-fuchsia-500/30' },
 ] as const;
+
+/** Etichetta di gruppo per un prodotto (Pizze Rosse/Bianche/Speciali → "Pizze"). */
+function groupLabel(categoria: string): string {
+  return CATEGORY_DEFS.find(d => d.match.includes(categoria))?.label ?? categoria;
+}
+
+function ProductRow({ product, count, flash, onAdd, onRemoveOne, onCustomize }: {
+  product: Product;
+  count: number;
+  flash: boolean;
+  onAdd: () => void;
+  onRemoveOne?: () => void;
+  onCustomize: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-3 flex items-center gap-3 transition-colors duration-300 ${
+        flash ? 'bg-gold/20 border-gold/60' : count > 0 ? 'bg-surface border-gold/30' : 'bg-surface border-surface-light'
+      }`}
+    >
+      <button type="button" onClick={onAdd} className="flex-1 min-w-0 text-left active:opacity-70">
+        <span className="block font-bold text-[17px] leading-snug text-white">{product.nome}</span>
+        <span className="flex items-center gap-2 mt-0.5">
+          <span className="text-[15px] font-black text-gold tabular-nums">€{product.prezzo.toFixed(2)}</span>
+          {product.ingredienti?.length > 0 && (
+            <span className="text-xs text-gray-400 truncate">{product.ingredienti.join(', ')}</span>
+          )}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onCustomize}
+        aria-label={`Modifica ${product.nome}`}
+        className="w-11 h-11 shrink-0 rounded-xl bg-charcoal border border-surface-light text-gray-400 flex items-center justify-center active:scale-90"
+      >
+        <SlidersHorizontal size={18} />
+      </button>
+
+      <div className={`shrink-0 flex items-center rounded-2xl ${count > 0 ? 'bg-charcoal border border-gold/40' : ''}`}>
+        {count > 0 && onRemoveOne && (
+          <>
+            <button
+              type="button"
+              onClick={onRemoveOne}
+              aria-label={`Togli un ${product.nome}`}
+              className="w-11 h-14 flex items-center justify-center text-gray-300 active:scale-90"
+            >
+              <Minus size={20} />
+            </button>
+            <span className="min-w-7 text-center font-black text-lg text-gold tabular-nums">{count}</span>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onAdd}
+          aria-label={`Aggiungi ${product.nome}`}
+          className="w-14 h-14 rounded-2xl bg-gold text-black flex items-center justify-center shadow-lg shadow-gold/10 active:scale-90 transition-transform"
+        >
+          <Plus size={28} strokeWidth={2.5} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function WaiterMenuTab({
   products,
@@ -51,12 +118,24 @@ export default function WaiterMenuTab({
   onCategoryChange,
   onPortataChange,
   onAddToCart,
+  onRemoveOne,
   onOpenCustomization,
   onOpenPaninoBuilder,
   onOpenCustomItem,
 }: Props) {
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const add = (product: Product) => {
+    onAddToCart(product);
+    // riscontro visivo: la riga si illumina un attimo
+    setFlashId(product.id);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlashId(null), 350);
+  };
+
   const filtered = useMemo(() => products.filter(p => {
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     if (q && !p.nome.toLowerCase().includes(q)) return false;
 
     if (activeCategory) {
@@ -89,93 +168,98 @@ export default function WaiterMenuTab({
       .filter(def => def.match.some(c => products.some(p => p.categoria === c && p.disponibile)));
   }, [products]);
 
-  const cartCount = (id: string) => cart.filter(c => c.id === id).reduce((s, c) => s + c.quantity, 0);
-  const activePortataMeta = PORTATA_OPTIONS.find(p => p.value === currentPortata) ?? PORTATA_OPTIONS[0];
+  /** Senza filtro né ricerca: lista divisa per categoria, nell'ordine del menu. */
+  const groups = useMemo(() => {
+    if (activeCategory || searchQuery.trim()) return [{ label: null as string | null, items: filtered }];
+    const byLabel = new Map<string, Product[]>();
+    for (const p of filtered) {
+      const l = groupLabel(p.categoria);
+      if (!byLabel.has(l)) byLabel.set(l, []);
+      byLabel.get(l)!.push(p);
+    }
+    const order = categories.map(c => c.label);
+    return [...byLabel.entries()]
+      .sort(([a], [b]) => (order.indexOf(a) === -1 ? 999 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 999 : order.indexOf(b)))
+      .map(([label, items]) => ({ label: label as string | null, items }));
+  }, [filtered, activeCategory, searchQuery, categories]);
+
+  const countById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of cart) m.set(c.id, (m.get(c.id) || 0) + c.quantity);
+    return m;
+  }, [cart]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-gradient-to-b from-charcoal via-charcoal to-surface">
-      <div className="px-3 pt-3 pb-2 shrink-0 border-b border-surface-light/70 bg-surface/40 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.35em] text-gray-400 shrink-0">Portata</span>
-          <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
+    <div className="flex h-full min-h-0 flex-col bg-charcoal">
+      {/* Uscita: un tocco per scegliere in quale uscita vanno i piatti che aggiungi */}
+      <div className="px-3 pt-1 pb-2 shrink-0 flex items-center gap-2">
+        <span className="text-xs font-bold text-gray-400 shrink-0">Uscita</span>
+        <div className="flex gap-1.5 flex-1">
+          {PORTATA_OPTIONS.map(opt => (
             <button
+              key={opt.value}
               type="button"
-              onClick={() => {
-                const idx = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
-                onPortataChange(PORTATA_OPTIONS[Math.max(idx - 1, 0)].value);
-              }}
-              disabled={currentPortata === PORTATA_OPTIONS[0].value}
-              aria-label="Portata precedente"
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
+              onClick={() => onPortataChange(opt.value)}
+              aria-pressed={currentPortata === opt.value}
+              className={`flex-1 h-10 rounded-xl border font-black text-sm transition-all active:scale-95 ${currentPortata === opt.value ? opt.on : `bg-surface ${opt.off}`}`}
             >
-              <Minus size={16} />
+              {opt.label}
             </button>
-            <span className={`min-w-[52px] text-center px-2 py-1.5 rounded-xl border text-sm font-black tracking-wider ${activePortataMeta.color} border-current`}>
-              {activePortataMeta.label}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                const idx = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
-                onPortataChange(PORTATA_OPTIONS[Math.min(idx + 1, PORTATA_OPTIONS.length - 1)].value);
-              }}
-              disabled={currentPortata === PORTATA_OPTIONS[PORTATA_OPTIONS.length - 1].value}
-              aria-label="Portata successiva"
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:text-white active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
-            >
-              <Plus size={16} />
-            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-3 pb-2 space-y-2 shrink-0 border-b border-surface-light/70">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="search"
+              placeholder="Cerca piatto…"
+              value={searchQuery}
+              onChange={e => onSearchChange(e.target.value)}
+              className="w-full bg-surface border border-surface-light rounded-xl py-2.5 pl-10 pr-10 text-white font-semibold outline-none focus:border-gold transition-colors text-[15px] [&::-webkit-search-cancel-button]:hidden"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-charcoal text-gray-400 active:scale-90"
+                aria-label="Cancella ricerca"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
           {onOpenPaninoBuilder && (
             <button
               onClick={onOpenPaninoBuilder}
-              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-gold/30 text-gold/80 hover:text-gold hover:border-gold/60 active:scale-95 transition-all flex items-center gap-1.5 bg-gold/5"
+              aria-label="Componi panino"
+              className="shrink-0 w-11 rounded-xl border border-gold/30 text-gold bg-gold/5 flex items-center justify-center active:scale-95"
             >
-              <Sandwich size={13} /> PANINO
+              <Sandwich size={18} />
             </button>
           )}
           {onOpenCustomItem && (
             <button
               onClick={onOpenCustomItem}
-              className="shrink-0 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest border border-dashed border-emerald-400/30 text-emerald-400/90 hover:text-emerald-300 hover:border-emerald-400/60 active:scale-95 transition-all flex items-center gap-1.5 bg-emerald-500/5"
+              aria-label="Piatto personalizzato"
+              className="shrink-0 w-11 rounded-xl border border-emerald-400/30 text-emerald-300 bg-emerald-500/5 flex items-center justify-center active:scale-95"
             >
-              <UtensilsCrossed size={13} /> PERS.
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="px-3 py-3 space-y-2 shrink-0 bg-charcoal border-b border-surface-light/70">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input
-            type="text"
-            placeholder="Cerca piatto..."
-            value={searchQuery}
-            onChange={e => onSearchChange(e.target.value)}
-            className="w-full bg-surface border border-surface-light rounded-2xl py-3 pl-10 pr-12 text-white font-bold outline-none focus:border-gold transition-all text-sm shadow-inner"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-charcoal border border-surface-light text-gray-400 hover:text-white active:scale-90 transition-all cursor-pointer"
-              aria-label="Cancella ricerca"
-            >
-              <X size={14} />
+              <UtensilsCrossed size={18} />
             </button>
           )}
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1">
+        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar -mx-3 px-3">
           {categories.map(def => (
             <button
               key={def.label}
               onClick={() => onCategoryChange(activeCategory === def.label ? null : def.label)}
               aria-pressed={activeCategory === def.label}
-              className={`shrink-0 px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.22em] border transition-all ${
+              className={`shrink-0 px-3.5 py-2 rounded-full font-bold text-[13px] border transition-colors ${
                 activeCategory === def.label
-                  ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20'
-                  : 'bg-surface border-surface-light text-gray-400'
+                  ? 'bg-gold border-gold text-black'
+                  : 'bg-surface border-surface-light text-gray-300'
               }`}
             >
               {def.label}
@@ -184,53 +268,35 @@ export default function WaiterMenuTab({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-32">
+      <div className="flex-1 overflow-y-auto px-3 pt-2 pb-32">
         {filtered.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
-            <p className="italic text-lg">Nessun prodotto trovato</p>
-            <p className="text-[10px] uppercase tracking-[0.3em] mt-2 text-gray-400">Controlla filtro o disponibilità</p>
+            <p className="font-bold">Nessun piatto trovato</p>
+            <p className="text-sm mt-1">Controlla la ricerca o il filtro</p>
           </div>
         ) : (
-          filtered.map(product => {
-            const count = cartCount(product.id);
-
-            return (
-              <div
-                key={product.id}
-                className="bg-gradient-to-br from-surface to-charcoal border border-surface-light rounded-[24px] p-4 flex items-center gap-3 transition-all shadow-lg shadow-black/10 active:scale-[0.99]"
-              >
-                <div className="flex-1 min-w-0" onClick={() => onAddToCart(product)}>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-xl leading-tight text-white">{product.nome}</h3>
-                    {count > 0 && (
-                      <span className="shrink-0 bg-gold/20 text-gold text-xs font-black px-3 py-0.5 rounded-full border border-gold/30">
-                        x{count}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-lg font-black text-gold">€{product.prezzo.toFixed(2)}</span>
-                    <span className="text-[10px] font-black text-gray-400 uppercase">{product.categoria}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => onOpenCustomization(product)}
-                    className="w-12 h-12 bg-charcoal text-gray-400 hover:text-gold rounded-xl flex items-center justify-center border border-surface-light active:scale-90"
-                  >
-                    <Edit3 size={20} />
-                  </button>
-                  <button
-                    onClick={() => onAddToCart(product)}
-                    className="w-16 h-16 bg-gold text-black rounded-2xl flex items-center justify-center shadow-xl active:scale-90"
-                  >
-                    <Plus size={30} />
-                  </button>
-                </div>
+          groups.map(group => (
+            <section key={group.label ?? 'tutti'} className="mb-4">
+              {group.label && (
+                <h3 className="sticky top-0 z-10 -mx-3 px-4 py-1.5 bg-charcoal/95 backdrop-blur text-xs font-black uppercase tracking-wider text-gray-400">
+                  {group.label}
+                </h3>
+              )}
+              <div className="space-y-2">
+                {group.items.map(product => (
+                  <ProductRow
+                    key={product.id}
+                    product={product}
+                    count={countById.get(product.id) || 0}
+                    flash={flashId === product.id}
+                    onAdd={() => add(product)}
+                    onRemoveOne={onRemoveOne ? () => onRemoveOne(product.id) : undefined}
+                    onCustomize={() => onOpenCustomization(product)}
+                  />
+                ))}
               </div>
-            );
-          })
+            </section>
+          ))
         )}
       </div>
     </div>

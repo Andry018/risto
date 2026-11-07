@@ -13,6 +13,7 @@ import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent, printEr
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice, roundCents } from '../lib/priceUtils';
+import { getItemKey, qtyByKey, computePending } from '../lib/orderPending';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
@@ -50,6 +51,12 @@ export default function WaiterMobileView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
+  // "INVIATO" resta visibile 2 secondi, poi il pulsante torna a mostrare cosa c'è da inviare
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(false), 2000);
+    return () => clearTimeout(t);
+  }, [success]);
   const [activeTab, setActiveTab] = useState<'MENU' | 'RIEPILOGO'>('MENU');
   const [activeSection, setActiveSection] = useState<'hub' | 'sala'>('hub');
 
@@ -131,8 +138,16 @@ export default function WaiterMobileView() {
   /** Stampa in corso (comanda o pre-conto): blocca i pulsanti, così più tocchi non mandano più stampe. */
   const [printBusy, setPrintBusy] = useState<null | 'comanda' | 'conto'>(null);
 
+  /** Ristampa TUTTA la comanda (cucina + sala): azione secondaria, chiede conferma per evitare doppioni in cucina. */
   const handlePrint = async () => {
     if (cart.length === 0 || printBusy) return;
+    const ok = await confirm({
+      title: 'Ristampare tutta la comanda?',
+      message: 'La cucina riceverà di nuovo TUTTI i piatti del tavolo. Per mandare solo le aggiunte usa INVIA.',
+      confirmLabel: 'Ristampa tutto',
+      cancelLabel: 'Annulla',
+    });
+    if (!ok) return;
     setPrintBusy('comanda');
     const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
     const tableName = selectedTable?.nome || 'Tavolo';
@@ -205,13 +220,11 @@ export default function WaiterMobileView() {
   const localUpdateOrdiniRef = useRef(false);
   const localUpdateTavoliRef = useRef(false);
   const savedItemQtysRef = useRef<Map<string, number>>(new Map());
+  /** Copia in stato delle quantità già inviate: serve a disegnare "NUOVO" e il conteggio sul pulsante INVIA. */
+  const [savedQtys, setSavedQtysState] = useState<Map<string, number>>(new Map());
+  const setSavedQtys = (m: Map<string, number>) => { savedItemQtysRef.current = m; setSavedQtysState(m); };
   const cartRef = useRef<CustomizedItem[]>(cart);
 
-  const getItemKey = (item: CustomizedItem): string => {
-    const adds = [...item.addedIngredients].map(a => a.nome).sort().join(',');
-    const rems = [...item.removedIngredients].sort().join(',');
-    return `${item.nome}|${item.portata || ''}|${adds}|${rems}|${item.notes}`;
-  };
   productsRef.current = products;
   ingredientsRef.current = ingredients;
   selectedTableRef.current = selectedTable;
@@ -266,12 +279,7 @@ export default function WaiterMobileView() {
         });
         return true;
       }
-      const qtyMap = new Map<string, number>();
-      for (const i of mappedCart) {
-        const k = getItemKey(i);
-        qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
-      }
-      savedItemQtysRef.current = qtyMap;
+      setSavedQtys(qtyByKey(mappedCart));
       if (opts.keepCart) return true;
       setCart(mappedCart);
       setActiveTab('RIEPILOGO');
@@ -283,7 +291,7 @@ export default function WaiterMobileView() {
       // la riga COPERTO appena aggiunta (che altrimenti sparirebbe e mancherebbe nel pre-conto).
       if (opts.skipIfDirty && hasUnsavedChanges()) return false;
       setActiveOrderId(null);
-      savedItemQtysRef.current = new Map();
+      setSavedQtys(new Map());
       if (opts.keepCart) return false;
       setCart([]);
       setActiveTab('MENU');
@@ -542,7 +550,7 @@ export default function WaiterMobileView() {
       setSelectedTable(table);
       setCart(draft.cart);
       setActiveOrderId(null);
-      savedItemQtysRef.current = new Map();
+      setSavedQtys(new Map());
       setActiveTab('RIEPILOGO');
       clearDraft(table.id);
       // Se il tavolo ha già un ordine salvato, recupera id e quantità salvate senza toccare la bozza:
@@ -733,6 +741,7 @@ export default function WaiterMobileView() {
   };
 
   const addToCart = (product: Product) => {
+    try { navigator.vibrate?.(12); } catch { /* non supportato */ }
     const now = Date.now();
     if (now - lastMenuFetchRef.current > 15_000) {
       lastMenuFetchRef.current = now;
@@ -753,6 +762,18 @@ export default function WaiterMobileView() {
         return newCart;
       }
       return [...prev, { ...product, quantity: 1, addedIngredients: [], removedIngredients: [], notes: '', uniqueId: newUniqueId(), portata: currentPortata }];
+    });
+  };
+
+  /** Toglie un pezzo del prodotto dal carrello (dall'ultima riga aggiunta): per correggere un tocco di troppo. */
+  const removeOneOfProduct = (productId: string) => {
+    setCart(prev => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].id !== productId) continue;
+        if (prev[i].quantity > 1) return prev.map((it, j) => j === i ? { ...it, quantity: it.quantity - 1 } : it);
+        return prev.filter((_, j) => j !== i);
+      }
+      return prev;
     });
   };
 
@@ -800,6 +821,9 @@ export default function WaiterMobileView() {
     () => roundCents(cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0)),
     [cart, ingredients]
   );
+
+  /** Cosa non è ancora stato inviato in cucina (per il pulsante INVIA e le etichette "NUOVO"). */
+  const pending = useMemo(() => computePending(cart, savedQtys, ingredients), [cart, savedQtys, ingredients]);
 
   const rearScreen = useRearScreen({ table: selectedTable?.nome ?? null, cart, total });
 
@@ -880,12 +904,7 @@ export default function WaiterMobileView() {
         setSelectedTable(prev => prev ? { ...prev, note: newNote } : prev);
       }
 
-      const newMap = new Map<string, number>();
-      for (const item of cart) {
-        const key = getItemKey(item);
-        newMap.set(key, (newMap.get(key) || 0) + item.quantity);
-      }
-      savedItemQtysRef.current = newMap;
+      setSavedQtys(qtyByKey(cart));
 
       if (!skipPrint && printItems.length > 0) {
         const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1199,14 +1218,14 @@ export default function WaiterMobileView() {
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header Mobile */}
-          <div className="p-4 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
-            <button onClick={leaveTable} aria-label="Torna alla mappa tavoli" className="p-2 bg-charcoal rounded-xl text-gray-400 active:scale-90"><ChevronLeft /></button>
+          <div className="px-3 py-3 bg-surface border-b border-surface-light flex items-center justify-between shrink-0">
+            <button onClick={leaveTable} aria-label="Torna alla mappa tavoli" className="w-11 h-11 flex items-center justify-center bg-charcoal border border-surface-light rounded-xl text-gray-300 active:scale-90"><ChevronLeft /></button>
             <div className="flex flex-col items-center">
-              <h2 className="text-xl font-black italic uppercase text-white leading-none">{selectedTable.nome}</h2>
+              <h2 className="text-2xl font-black text-white leading-none tracking-tight">{selectedTable.nome}</h2>
               <div className="flex items-center gap-3 mt-1">
-                <span className="text-[9px] font-black text-gold uppercase tracking-[0.2em]">Coperti: {selectedTable.clienti}</span>
+                <span className="text-xs font-bold text-gold">{selectedTable.clienti} coperti</span>
                 {selectedTable.status === 'OCCUPATO' && tableApertura[selectedTable.id] && (
-                  <span className="flex items-center gap-1 text-[9px] font-black text-amber-400 uppercase tracking-[0.2em]">
+                  <span className="flex items-center gap-1 text-xs font-bold text-amber-400">
                     <Clock size={10} /> {(() => {
                       const diff = now - new Date(tableApertura[selectedTable.id]).getTime();
                       const mins = Math.floor(diff / 60000);
@@ -1219,27 +1238,38 @@ export default function WaiterMobileView() {
                 <SyncStatusIndicator compact />
               </div>
             </div>
-            <div className="w-10" />
+            <div className="w-11" />
             </div>
 
-          {/* Tab Switcher */}
-          <div role="tablist" aria-label="Dettaglio ordine tavolo" className="flex p-3 bg-charcoal shrink-0">
-            <button 
-              role="tab"
-              aria-selected={activeTab === 'RIEPILOGO'}
-              onClick={() => setActiveTab('RIEPILOGO')}
-              className={`flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${activeTab === 'RIEPILOGO' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-400'}`}
-            >
-              Riepilogo
-            </button>
-            <button 
-              role="tab"
-              aria-selected={activeTab === 'MENU'}
-              onClick={() => setActiveTab('MENU')}
-              className={`flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${activeTab === 'MENU' ? 'bg-surface text-gold border border-surface-light shadow-xl' : 'text-gray-400'}`}
-            >
-              Menu
-            </button>
+          {/* Schede: Menu per aggiungere, Riepilogo per controllare. Il numero dice quanti piatti ci sono. */}
+          <div role="tablist" aria-label="Dettaglio ordine tavolo" className="flex gap-1 mx-3 my-2 p-1 bg-charcoal border border-surface-light rounded-2xl shrink-0">
+            {([
+              { tab: 'MENU' as const, label: 'Menu', badge: null as string | null },
+              {
+                tab: 'RIEPILOGO' as const,
+                label: 'Riepilogo',
+                badge: (() => {
+                  const n = cart.filter(i => i.categoria !== 'Servizio').reduce((acc, i) => acc + i.quantity, 0);
+                  return n > 0 ? String(n) : null;
+                })(),
+              },
+            ]).map(({ tab, label, badge }) => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                  activeTab === tab ? 'bg-surface text-white shadow' : 'text-gray-400'
+                }`}
+              >
+                {label}
+                {badge && <span className={`min-w-6 h-6 px-1.5 rounded-full text-xs font-black flex items-center justify-center tabular-nums ${activeTab === tab ? 'bg-gold text-black' : 'bg-surface-light text-gray-200'}`}>{badge}</span>}
+                {tab === 'RIEPILOGO' && pending.count > 0 && (
+                  <span className="text-[11px] font-black text-gold">+{pending.count} {pending.count === 1 ? 'nuovo' : 'nuovi'}</span>
+                )}
+              </button>
+            ))}
           </div>
 
           {activeTab === 'MENU' ? (
@@ -1254,17 +1284,18 @@ export default function WaiterMobileView() {
               onCategoryChange={setActiveCategory}
               onPortataChange={setCurrentPortata}
               onAddToCart={addToCart}
+              onRemoveOne={removeOneOfProduct}
               onOpenCustomization={openCustomization}
               onOpenPaninoBuilder={() => setPaninoModalOpen(true)}
               onOpenCustomItem={() => setCustomItemModalOpen(true)}
             />
           ) : (
             <div className="flex-1 overflow-y-auto pb-44">
-              <div className="bg-surface/80 backdrop-blur-xl border-b border-surface-light px-5 py-5">
+              <div className="bg-surface/80 backdrop-blur-xl border-b border-surface-light px-4 py-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Totale</p>
-                    <p className="text-4xl font-black text-gold italic">€{total.toFixed(2)}</p>
+                    <p className="text-xs font-bold text-gray-400">Totale tavolo</p>
+                    <p className="text-4xl font-black text-gold tabular-nums tracking-tight">€{total.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setBillsDayOpen(true)} className="px-3 py-2 bg-charcoal rounded-xl border border-surface-light text-[10px] font-black uppercase text-gray-400 hover:text-gold active:scale-90">
@@ -1277,11 +1308,10 @@ export default function WaiterMobileView() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 mt-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-sm font-bold text-white">{selectedTable?.nome} · {selectedTable?.clienti} coperti</span>
-                  <span className="text-[10px] font-black text-gray-400 uppercase">{activeOrderId ? 'Servizio in corso' : 'Occupato'}</span>
-                </div>
+                <p className="mt-2 text-xs text-gray-400">
+                  {activeOrderId ? 'Comanda aperta' : 'Nessuna comanda inviata'}
+                  {pending.count > 0 && <span className="text-gold font-bold"> · {pending.count} da inviare</span>}
+                </p>
               </div>
 
               <div className="p-5 space-y-6">
@@ -1336,7 +1366,7 @@ export default function WaiterMobileView() {
                           </div>
                           <div className="space-y-2 pl-2">
                             {items.map(item => (
-                              <SwipeableCartItem key={item.uniqueId} item={item} onRemove={removeFromCart} onEdit={editCartItem} onSetCart={setCart} />
+                              <SwipeableCartItem key={item.uniqueId} item={item} newQty={pending.newQtyById.get(item.uniqueId) || 0} onRemove={removeFromCart} onEdit={editCartItem} onSetCart={setCart} />
                             ))}
                           </div>
                         </div>
@@ -1355,33 +1385,54 @@ export default function WaiterMobileView() {
             </div>
           )}
 
-          {/* Sticky Footer Action Bar */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 pb-3 bg-surface/90 backdrop-blur-xl border-t border-white/5 z-40">
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={handlePrint}
-                disabled={cart.length === 0 || !!printBusy}
-                className="min-h-[44px] py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
-              >
-                {printBusy === 'comanda' ? 'STAMPA...' : <><Printer size={14} /> STAMPA</>}
-              </button>
+          {/* Barra azioni fissa (Menu e Riepilogo): INVIA è l'azione principale, sempre a portata di pollice */}
+          <div className="absolute bottom-0 left-0 right-0 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-surface/95 backdrop-blur-xl border-t border-surface-light z-40">
+            <div className="flex items-stretch gap-2">
               <button
                 onClick={() => saveOrder()}
-                disabled={cart.length === 0 || orderActionBusy}
-                className={`min-h-[44px] py-3 rounded-xl border font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                disabled={orderActionBusy || (!pending.dirty && !success)}
+                className={`flex-1 min-h-[56px] px-4 rounded-2xl flex items-center justify-between gap-3 transition-all active:scale-[0.98] disabled:opacity-100 ${
                   success
-                    ? 'bg-emerald-500 border-emerald-500 text-black'
-                    : 'bg-surface-light border-white/10 text-white hover:bg-white/10 shadow-xl'
-                } disabled:opacity-30`}
+                    ? 'bg-emerald-500 text-black'
+                    : pending.dirty
+                    ? 'bg-gold text-black shadow-lg shadow-gold/20'
+                    : 'bg-charcoal text-gray-500 border border-surface-light'
+                }`}
               >
-                {orderActionBusy ? 'INVIO...' : success ? 'INVIATO!' : <><Save size={16} /> AGGIORNA</>}
+                {orderActionBusy ? (
+                  <span className="w-full text-center font-black text-sm tracking-wider">INVIO IN CORSO…</span>
+                ) : success ? (
+                  <span className="w-full flex items-center justify-center gap-2 font-black text-sm tracking-wider"><CheckCircle2 size={18} /> INVIATO</span>
+                ) : pending.newQtyById.size > 0 ? (
+                  <>
+                    <span className="flex items-center gap-2 font-black text-sm tracking-wider"><ChefHat size={18} /> INVIA</span>
+                    <span className="text-right leading-tight">
+                      <span className="block text-xs font-bold">{pending.count > 0 ? `${pending.count} ${pending.count === 1 ? 'nuovo' : 'nuovi'}` : 'coperti'}</span>
+                      <span className="block text-sm font-black tabular-nums">€{pending.amount.toFixed(2)}</span>
+                    </span>
+                  </>
+                ) : pending.dirty ? (
+                  <span className="w-full flex items-center justify-center gap-2 font-black text-sm tracking-wider"><Save size={18} /> SALVA MODIFICHE</span>
+                ) : (
+                  <span className="w-full flex items-center justify-center gap-2 font-bold text-sm"><CheckCircle2 size={16} /> {cart.length ? 'Tutto inviato' : 'Aggiungi dei piatti'}</span>
+                )}
               </button>
               <button
                 onClick={handlePreConto}
                 disabled={cart.length === 0 || !!printBusy}
-                className="min-h-[44px] py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-surface-light disabled:opacity-30"
+                aria-label="Stampa pre-conto"
+                className="min-h-[56px] px-4 rounded-2xl bg-charcoal border border-surface-light text-sky-300 font-black text-xs tracking-wider flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all disabled:opacity-30"
               >
-                {printBusy === 'conto' ? 'STAMPA...' : <><Receipt size={14} /> CONTO</>}
+                {printBusy === 'conto' ? '…' : <><Receipt size={18} /> CONTO</>}
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={cart.length === 0 || !!printBusy}
+                aria-label="Ristampa tutta la comanda"
+                title="Ristampa tutta la comanda"
+                className="min-h-[56px] w-12 rounded-2xl bg-charcoal border border-surface-light text-gray-400 flex items-center justify-center active:scale-95 transition-all disabled:opacity-30"
+              >
+                {printBusy === 'comanda' ? '…' : <Printer size={18} />}
               </button>
             </div>
             {IS_DEMO_MODE && (
@@ -1809,12 +1860,14 @@ function HubCard({ icon, title, desc, accent, onClick }: {
 
 interface SwipeableCartItemProps {
   item: CustomizedItem;
+  /** pezzi di questa riga non ancora inviati in cucina (0 = già tutto inviato) */
+  newQty: number;
   onRemove: (id: string) => void;
   onEdit: (item: CustomizedItem) => void;
   onSetCart: React.Dispatch<React.SetStateAction<CustomizedItem[]>>;
 }
 
-function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartItemProps) {
+function SwipeableCartItem({ item, newQty, onRemove, onEdit, onSetCart }: SwipeableCartItemProps) {
   const [swipeX, setSwipeX] = useState(0);
   const swipeStartX = useRef(0);
   const DELETE_THRESHOLD = -80;
@@ -1853,20 +1906,29 @@ function SwipeableCartItem({ item, onRemove, onEdit, onSetCart }: SwipeableCartI
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative bg-surface border border-surface-light rounded-xl p-3 flex items-center gap-3 transition-transform duration-200"
+        className={`relative rounded-xl p-3 flex items-center gap-3 transition-transform duration-200 border bg-surface ${
+          newQty > 0 ? 'border-gold/60 shadow-[inset_4px_0_0_0_var(--color-gold)]' : 'border-surface-light'
+        }`}
         style={{ transform: `translateX(${swipeX}px)` }}
       >
         {/* Info (fill remaining space) */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h5 className="font-bold text-white text-sm truncate">{item.nome}</h5>
-            {item.portata && (
-              <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-400 border-gray-500/30 bg-gray-500/10'}`}>
-                {item.portata}ª
-              </span>
-            )}
-          </div>
-          <p className="text-[10px] text-gray-400 mt-0.5">
+          <h5 className="font-bold text-white text-[15px] leading-snug line-clamp-2 break-words">{item.nome}</h5>
+          {(newQty > 0 || item.portata) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              {newQty > 0 && (
+                <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded-md bg-gold text-black">
+                  {newQty === item.quantity ? 'nuovo' : `+${newQty} nuovo`}
+                </span>
+              )}
+              {item.portata && (
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${portataInfo?.color || 'text-gray-400 border-gray-500/30 bg-gray-500/10'}`}>
+                  {item.portata}ª uscita
+                </span>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-gray-400 mt-0.5">
             {item.addedIngredients.length > 0 && <span className="text-emerald-400 font-bold">+{item.addedIngredients.map(a => a.nome).join(', ')} </span>}
             {item.removedIngredients.length > 0 && <span className="text-red-400 font-bold">NO {item.removedIngredients.join(', ')} </span>}
             {item.notes && <span className="text-amber-400 italic font-bold">({item.notes})</span>}

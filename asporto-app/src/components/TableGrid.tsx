@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Tavolo } from '../types/entities';
-import { Users, Clock, MoreVertical, ArrowRightLeft, DoorOpen, Receipt, LayoutGrid } from 'lucide-react';
+import { Users, Clock, MoreVertical, ArrowRightLeft, DoorOpen, Receipt, LayoutGrid, Plus } from 'lucide-react';
 
 const ATTENTION_MINUTES = 20;
 
@@ -37,10 +37,10 @@ function getElapsedMins(t: Tavolo, tableApertura: Record<string, string>, now: n
 }
 
 function getStatusBadge(table: Tavolo, mins: number | null) {
-  if (table.status === 'LIBERO') return { label: 'LIBERO', color: 'bg-green-500/10 text-green-400 border-green-500/30' };
-  if (table.status === 'PRENOTATO') return { label: 'PRENOTATO', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' };
-  if (mins !== null && mins >= ATTENTION_MINUTES) return { label: 'ATTENZIONE', color: 'bg-red-500/10 text-red-400 border-red-500/30 animate-pulse' };
-  return { label: 'OCCUPATO', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' };
+  if (table.status === 'LIBERO') return { label: 'Libero', text: 'text-emerald-400' };
+  if (table.status === 'PRENOTATO') return { label: 'Prenotato', text: 'text-sky-300' };
+  if (mins !== null && mins >= ATTENTION_MINUTES) return { label: 'Da controllare', text: 'text-red-300' };
+  return { label: 'Occupato', text: 'text-amber-300' };
 }
 
 function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTransferTable, onCloseTable, onPreConto }: {
@@ -80,6 +80,7 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
 
   const mins = getElapsedMins(table, tableApertura, now);
   const badge = getStatusBadge(table, mins);
+  const late = table.status === 'OCCUPATO' && mins !== null && mins >= ATTENTION_MINUTES;
   const elapsed = table.status === 'OCCUPATO' ? elapsedStr(table, tableApertura, now) : null;
 
   const handleCardKeyDown = (e: React.KeyboardEvent) => {
@@ -96,20 +97,23 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
         tabIndex={0}
         onClick={() => onSelectTable(table)}
         onKeyDown={handleCardKeyDown}
-        className={`relative w-full p-5 rounded-3xl border-2 flex flex-col items-start gap-2 transition-all active:scale-95 text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-gold/60 ${
+        className={`relative w-full min-h-[118px] pl-4 pr-2 py-3 rounded-2xl border overflow-hidden flex flex-col items-start gap-1 transition-all active:scale-[0.97] text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-gold/60 ${
           table.status === 'LIBERO'
-            ? 'bg-gray-900/50 border-gray-800 text-gray-400 hover:border-green-500/30'
-            : mins !== null && mins >= ATTENTION_MINUTES
-              ? 'bg-red-500/5 border-red-500/40 text-red-300 shadow-lg shadow-red-500/10'
+            ? 'bg-surface/60 border-surface-light text-gray-300'
+            : late
+              ? 'bg-red-500/10 border-red-500/50 text-white'
               : table.status === 'PRENOTATO'
-                ? 'bg-blue-500/5 border-blue-500/30 text-blue-300'
-                : 'bg-yellow-500/5 border-yellow-500/40 text-yellow-200 shadow-lg shadow-yellow-500/10'
+                ? 'bg-sky-500/10 border-sky-500/40 text-white'
+                : 'bg-amber-500/10 border-amber-500/40 text-white'
         }`}
       >
-        <div className="w-full flex items-center justify-between">
-          <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${badge.color}`}>
-            {badge.label}
-          </span>
+        {/* barra di stato a sinistra: si legge da lontano */}
+        <span className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+          table.status === 'LIBERO' ? 'bg-emerald-500/60' : late ? 'bg-red-500' : table.status === 'PRENOTATO' ? 'bg-sky-400' : 'bg-amber-400'
+        }`} />
+
+        <div className="w-full flex items-start justify-between gap-1">
+          <div className="text-2xl font-black tracking-tight leading-none">{table.nome}</div>
           {(table.status === 'OCCUPATO' || table.status === 'PRENOTATO') && (
             <button
               ref={triggerRef}
@@ -117,37 +121,32 @@ function TableCard({ table, now, tableApertura, orderCount, onSelectTable, onTra
               onClick={handleToggleMenu}
               aria-label={`Azioni per ${table.nome}`}
               aria-expanded={menuOpen}
-              className="p-1.5 rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+              className="-mt-1 w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-white active:bg-white/10"
             >
-              <MoreVertical size={16} />
+              <MoreVertical size={18} />
             </button>
           )}
         </div>
 
-        <div className="text-2xl font-black tracking-tight">{table.nome}</div>
+        <span className={`text-[11px] font-bold ${badge.text}`}>{badge.label}</span>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          <div className="flex items-center gap-1.5 opacity-70">
-            <Users size={12} /> {table.clienti || '-'}
+        {table.status === 'LIBERO' ? (
+          <div className="mt-auto flex items-center gap-1.5 text-xs text-gray-400">
+            <Plus size={14} /> Tocca per aprire
           </div>
-          {elapsed && (
-            <div className={`flex items-center gap-1.5 font-black text-[10px] uppercase tracking-wider ${
-              mins !== null && mins >= ATTENTION_MINUTES ? 'text-red-400' : 'text-amber-400/70'
-            }`}>
-              <Clock size={11} /> {elapsed}
+        ) : (
+          <div className="mt-auto w-full flex items-end justify-between gap-2">
+            <div className="flex items-center gap-1 text-sm font-bold text-gray-200">
+              <Users size={14} className="opacity-70" /> {table.clienti || '–'}
+              {table.status === 'OCCUPATO' && orderCount !== undefined && orderCount > 0 && (
+                <span className="ml-1.5 text-xs font-bold text-emerald-300">· {orderCount} piatti</span>
+              )}
             </div>
-          )}
-          {table.status === 'OCCUPATO' && orderCount !== undefined && orderCount > 0 && (
-            <div className="flex items-center gap-1 text-[10px] font-black text-emerald-400/80 uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
-              {orderCount} piatti
-            </div>
-          )}
-        </div>
-
-        {table.status === 'LIBERO' && (
-          <div className="mt-1.5 w-full text-center py-2 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-widest text-gray-400">
-            TAP PER APRIRE
+            {elapsed && (
+              <div className={`flex items-center gap-1 text-sm font-black tabular-nums ${late ? 'text-red-300' : 'text-amber-200'}`}>
+                <Clock size={13} /> {elapsed}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -215,9 +214,20 @@ export default function TableGrid({ tables, activeRoom, now, tableApertura, tabl
     );
   }
 
+  const counts = {
+    liberi: roomTables.filter(t => t.status === 'LIBERO').length,
+    occupati: roomTables.filter(t => t.status === 'OCCUPATO').length,
+    prenotati: roomTables.filter(t => t.status === 'PRENOTATO').length,
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 pt-2">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="flex-1 overflow-y-auto px-3 pb-6 pt-1">
+      <div className="flex gap-3 px-1 pb-2 text-xs font-bold text-gray-400">
+        <span><span className="text-emerald-400 tabular-nums">{counts.liberi}</span> liberi</span>
+        <span><span className="text-amber-300 tabular-nums">{counts.occupati}</span> occupati</span>
+        {counts.prenotati > 0 && <span><span className="text-sky-300 tabular-nums">{counts.prenotati}</span> prenotati</span>}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
         {roomTables.map(table => (
           <TableCard
             key={table.id}
