@@ -12,8 +12,26 @@ export interface ProdottoOption {
   categoria: string;
 }
 
+// ── Modalità demo: un piccolo magazzino in memoria, per provare la schermata senza DB ──
+const demoNow = new Date().toISOString();
+const demoArt = (id: string, nome: string, categoria: string, unita_misura: string, quantita: number, soglia_minima: number, costo_unitario: number, fornitore_id: string | null): MagazzinoArticolo =>
+  ({ id, nome, categoria, unita_misura, quantita, soglia_minima, costo_unitario, fornitore_id, note: '', created_at: demoNow, updated_at: demoNow });
+const DEMO_FORNITORI: FornitoreOption[] = [
+  { id: 'df1', nome: 'Molino Rossi' }, { id: 'df2', nome: 'Caseificio Bianchi' }, { id: 'df3', nome: 'Ortofrutta Verdi' },
+];
+let demoArticoli: MagazzinoArticolo[] = [
+  demoArt('da1', 'Farina 00', 'Secco', 'kg', 4, 10, 0.9, 'df1'),
+  demoArt('da2', 'Semola rimacinata', 'Secco', 'kg', 12, 5, 1.2, 'df1'),
+  demoArt('da3', 'Mozzarella fior di latte', 'Latticini', 'kg', 0, 3, 7.5, 'df2'),
+  demoArt('da4', 'Parmigiano 24 mesi', 'Latticini', 'kg', 2.5, 1, 18, 'df2'),
+  demoArt('da5', 'Pomodori pelati', 'Conserve', 'pz', 18, 12, 1.1, null),
+  demoArt('da6', 'Rucola', 'Verdura', 'kg', 0.5, 1, 6, 'df3'),
+  demoArt('da7', 'Olio EVO', 'Secco', 'L', 6, 4, 9, null),
+];
+
 export async function fetchArticoli(): Promise<MagazzinoArticolo[]> {
-  if (IS_DEMO_MODE || !supabase) return [];
+  if (IS_DEMO_MODE) return demoArticoli.map(a => ({ ...a }));
+  if (!supabase) return [];
   const { data, error } = await supabase.from('magazzino_articoli').select('*').order('categoria').order('nome');
   if (error) {
     if (import.meta.env.DEV) console.error('Fetch articoli magazzino error:', error);
@@ -33,7 +51,8 @@ export async function fetchProdottiOptions(): Promise<ProdottoOption[]> {
 }
 
 export async function fetchFornitoriOptions(): Promise<FornitoreOption[]> {
-  if (IS_DEMO_MODE || !supabase) return [];
+  if (IS_DEMO_MODE) return DEMO_FORNITORI;
+  if (!supabase) return [];
   const { data, error } = await supabase.from('haccp_fornitori').select('id, nome').order('nome');
   if (error) {
     if (import.meta.env.DEV) console.error('Fetch fornitori error:', error);
@@ -92,6 +111,11 @@ export async function registraMovimento(
   nota = '',
   operatore = ''
 ): Promise<boolean> {
+  if (IS_DEMO_MODE) {
+    demoArticoli = demoArticoli.map(a => a.id !== articoloId ? a
+      : { ...a, quantita: Math.max(0, Math.round((a.quantita + (tipo === 'carico' ? quantita : -quantita)) * 1000) / 1000) });
+    return true;
+  }
   if (!supabase) return false;
   const { error } = await supabase.rpc('magazzino_registra_movimento', {
     p_articolo_id: articoloId,
