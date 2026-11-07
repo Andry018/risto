@@ -5,7 +5,7 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Order, Product, Ingredient, OrderCarrelloItem, CustomizedItem, MagazzinoArticolo } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause, UtensilsCrossed, CreditCard } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Search, CheckCircle, Calculator, Save, WifiOff, LayoutDashboard, Edit3, X, Users, Receipt, Printer, Sandwich, Pause, UtensilsCrossed, CreditCard, ChefHat } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import CashPaymentModal from './CashPaymentModal';
 import CardPaymentModal from './CardPaymentModal';
@@ -18,6 +18,7 @@ import NumericKeypad from './NumericKeypad';
 import { syncManager } from '../lib/OfflineSync';
 import { useRearScreen } from '../lib/rearScreen';
 import { calculateItemPrice, roundCents } from '../lib/priceUtils';
+import { getItemKey, qtyByKey, computePending } from '../lib/orderPending';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent, printErrorMessage } from '../lib/lanPrint';
@@ -142,16 +143,14 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const ingredientsRef = useRef(ingredients);
   const localUpdateRef = useRef(false);
   const savedItemQtysRef = useRef<Map<string, number>>(new Map());
+  /** Quantità già inviate in cucina, anche come stato: servono per "NUOVO" e per il pulsante INVIA. */
+  const [savedQtys, setSavedQtysState] = useState<Map<string, number>>(new Map());
+  const setSavedQtys = (m: Map<string, number>) => { savedItemQtysRef.current = m; setSavedQtysState(m); };
   const cartRef = useRef<CustomizedItem[]>(cart);
   productsRef.current = products;
   ingredientsRef.current = ingredients;
   cartRef.current = cart;
 
-  const getItemKey = (item: CustomizedItem): string => {
-    const adds = [...item.addedIngredients].map(a => a.nome).sort().join(',');
-    const rems = [...item.removedIngredients].sort().join(',');
-    return `${item.nome}|${item.portata || ''}|${adds}|${rems}|${item.notes}`;
-  };
 
   useEffect(() => {
     setCurrentPortata('1');
@@ -260,12 +259,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         return;
       }
       setCart(mappedCart);
-      const qtyMap = new Map<string, number>();
-      for (const i of mappedCart) {
-        const k = getItemKey(i);
-        qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
-      }
-      savedItemQtysRef.current = qtyMap;
+      setSavedQtys(qtyByKey(mappedCart));
       if (mappedCart.length > 0) setShowBillReview(true);
     } else if (tableId) {
       // Nessun ordine sul server: da un evento realtime (force=false) non sovrascrivere un carrello
@@ -288,12 +282,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               uniqueId: 'initial-coperto'
             }];
             setCart(initialCart);
-            const qtyMap = new Map<string, number>();
-            for (const i of initialCart) {
-              const k = getItemKey(i);
-              qtyMap.set(k, (qtyMap.get(k) || 0) + i.quantity);
-            }
-            savedItemQtysRef.current = qtyMap;
+            setSavedQtys(qtyByKey(initialCart));
           }
         }
       }
@@ -501,6 +490,36 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     ? Math.max(0, total - scontoValore)
     : total);
 
+  /** Cosa non è ancora stato inviato in cucina (etichette NUOVO e pulsante INVIA). */
+  const pending = computePending(cart, savedQtys, ingredients);
+
+  /** Ristampa di cucina, sala o tutto: chiede conferma (doppioni in cucina) e segnala gli errori. */
+  const reprint = async (kind: 'tutto' | 'cucina' | 'sala') => {
+    if (cart.length === 0 || printBusy) return;
+    const ok = await confirm({
+      title: kind === 'tutto' ? 'Ristampare tutta la comanda?' : `Ristampare la comanda ${kind}?`,
+      message: 'Viene stampato di nuovo TUTTO, non solo le aggiunte. Per mandare solo i piatti nuovi usa INVIA.',
+      confirmLabel: 'Ristampa',
+      cancelLabel: 'Annulla',
+    });
+    if (!ok) return;
+    if (kind === 'tutto') { await handlePrintFull(); return; }
+    const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
+    const items = cart.filter(i => i.categoria !== 'Servizio').filter(i => (kind === 'sala') === salaCats.includes(i.categoria));
+    if (items.length === 0) return;
+    setPrintBusy('comanda');
+    try {
+      const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      if (kind === 'cucina') await printKitchenViaAgent(items, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime);
+      else await printSalaViaAgent(items, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
+      toast.addToast({ type: 'success', title: 'Ristampata', message: `Comanda ${kind} inviata alla stampante.`, duration: 2500 });
+    } catch (error) {
+      toast.addToast({ type: 'error', title: 'Stampa non riuscita', message: printErrorMessage(error), duration: 4500 });
+    } finally {
+      setPrintBusy(null);
+    }
+  };
+
   const rearScreen = useRearScreen({
     table: tableName || 'Banco',
     cart,
@@ -508,19 +527,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     status: cardPaymentOpen ? 'paying' : null,
   });
 
-  const advancePortata = () => {
-    const currentIndex = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
-    const nextIndex = Math.min(currentIndex + 1, PORTATA_OPTIONS.length - 1);
-    setCurrentPortata(PORTATA_OPTIONS[nextIndex].value);
-  };
-
-  const retreatPortata = () => {
-    const currentIndex = PORTATA_OPTIONS.findIndex(p => p.value === currentPortata);
-    const prevIndex = Math.max(currentIndex - 1, 0);
-    setCurrentPortata(PORTATA_OPTIONS[prevIndex].value);
-  };
-
-  const activePortataMeta = PORTATA_OPTIONS.find(p => p.value === currentPortata) ?? PORTATA_OPTIONS[0];
 
   const handleFinishOrder = async () => {
     if (cart.length === 0 || finishingOrder) return;
@@ -566,6 +572,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       }
 
       setActiveOrderId(null);
+      setSavedQtys(new Map());
       rearScreen.pulse('paid', discountedTotal);
       setOrderSuccess(true);
       setCart([]);
@@ -701,12 +708,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       void fetchMagazzino();
 
       // Update saved quantities after successful save
-      const newMap = new Map<string, number>();
-      for (const item of cart) {
-        const key = getItemKey(item);
-        newMap.set(key, (newMap.get(key) || 0) + item.quantity);
-      }
-      savedItemQtysRef.current = newMap;
+      setSavedQtys(qtyByKey(cart));
 
       // Print delta items if any
       if (printItems.length > 0) {
@@ -745,6 +747,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       }
       await syncManager.pushTableUpdate(tableId, { status: 'LIBERO', clienti: 0 });
       setActiveOrderId(null);
+      setSavedQtys(new Map());
       setCart([]);
       setScontotipo(null);
       setScontoValore(0);
@@ -862,6 +865,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       }
 
       setActiveOrderId(null);
+      setSavedQtys(new Map());
       setCart([]);
       void fetchMagazzino();
       toast.addToast({
@@ -1051,7 +1055,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                           <button
                             onClick={handleUpdateBill}
                             disabled={cart.length === 0 || finishingOrder}
-                            className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                            className={`w-full font-black text-sm py-3 rounded-2xl border transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-40 ${pending.dirty ? 'bg-amber-500/15 text-amber-200 border-amber-500/50 hover:bg-amber-500/25' : 'bg-surface-light text-gray-400 border-surface-light'}`}
                             title="Salva la comanda sul tavolo senza chiudere"
                           >
                             <Save size={16} /> SALVA COMANDA
@@ -1244,29 +1248,23 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             )}
           </div>
 
-          {/* Portate (uscita) stepper */}
+          {/* Uscita: un tocco per scegliere dove vanno i piatti che aggiungi */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Portata</span>
-            <div className="flex items-center gap-1 bg-charcoal border border-surface-light rounded-2xl p-1">
-              <button
-                type="button"
-                onClick={retreatPortata}
-                disabled={currentPortata === PORTATA_OPTIONS[0].value}
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-surface-light active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
-              >
-                <Minus size={16} />
-              </button>
-              <span className={`min-w-[110px] text-center px-3 py-2 rounded-xl border text-[10px] font-black tracking-wider ${activePortataMeta.color} border-current`}>
-                {activePortataMeta.label}
-              </span>
-              <button
-                type="button"
-                onClick={advancePortata}
-                disabled={currentPortata === PORTATA_OPTIONS[PORTATA_OPTIONS.length - 1].value}
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-surface-light active:scale-90 transition-all disabled:opacity-20 disabled:pointer-events-none"
-              >
-                <Plus size={16} />
-              </button>
+            <span className="text-xs font-bold text-gray-400">Uscita</span>
+            <div className="flex gap-1.5">
+              {PORTATA_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setCurrentPortata(opt.value)}
+                  aria-pressed={currentPortata === opt.value}
+                  className={`min-w-[52px] h-11 px-3 rounded-xl border font-black text-sm transition-all active:scale-95 ${
+                    currentPortata === opt.value ? `${opt.color} border-current ring-2 ring-current/40` : 'bg-charcoal border-surface-light text-gray-400'
+                  }`}
+                >
+                  {opt.label.split(' ')[0]}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1401,10 +1399,15 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           ) : (
             <div className="space-y-3">
               {cart.map(item => (
-                <div key={item.uniqueId} className="bg-charcoal/50 border border-surface-light rounded-2xl p-4 flex flex-col border-l-4 border-l-gold">
+                <div key={item.uniqueId} className={`bg-charcoal/50 border rounded-2xl p-4 flex flex-col border-l-4 ${pending.newQtyById.has(item.uniqueId) ? 'border-gold/50 border-l-gold' : 'border-surface-light border-l-surface-light'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex-1 min-w-0 pr-4">
-                      <p className="font-bold text-white text-base truncate">{item.nome}</p>
+                      <p className="font-bold text-white text-base leading-snug line-clamp-2">{item.nome}</p>
+                      {pending.newQtyById.has(item.uniqueId) && (
+                        <span className="inline-block mt-1 text-[10px] font-black uppercase px-1.5 py-0.5 rounded-md bg-gold text-black">
+                          {pending.newQtyById.get(item.uniqueId) === item.quantity ? 'nuovo' : `+${pending.newQtyById.get(item.uniqueId)} nuovo`}
+                        </span>
+                      )}
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {item.addedIngredients.map(a => <span key={a.nome} className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">+{a.nome}</span>)}
                         {item.removedIngredients.map(r => <span key={r} className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded">NO {r}</span>)}
@@ -1463,49 +1466,32 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             </div>
           ) : (
               <div className="flex flex-col gap-1.5 sm:gap-2">
-                {/* STAMPA button - prints everything */}
-                <button
-                  onClick={handlePrintFull}
-                  disabled={cart.length === 0 || !!printBusy}
-                  className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                >
-                  {printBusy === 'comanda' ? 'STAMPA...' : <><Printer className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> STAMPA</>}
-                </button>
-                {(() => {
-                  const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
-                  const itemsToPrint = cart.filter(i => i.categoria !== 'Servizio');
-                  const cucinaItems = itemsToPrint.filter(i => !salaCats.includes(i.categoria));
-                  const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
-                  const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                  return (
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => printKitchenViaAgent(cucinaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime)}
-                        disabled={cucinaItems.length === 0}
-                        className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                      >
-                        <Printer className="w-3.5 h-3.5" /> CUCINA
-                      </button>
-                        <button
-                          onClick={() => printSalaViaAgent(salaItems, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort())}
-                          disabled={salaItems.length === 0}
-                          className="w-full bg-charcoal hover:bg-surface-light text-sky-400 font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
-                        >
-                          <Printer className="w-3.5 h-3.5" /> SALA
-                        </button>
-                      </div>
-                    );
-                  })()}
+                {/* Ristampe: azioni secondarie, con conferma */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-gray-500 mr-1">Ristampa</span>
+                  {(['tutto', 'cucina', 'sala'] as const).map(kind => (
+                    <button
+                      key={kind}
+                      onClick={() => void reprint(kind)}
+                      disabled={cart.length === 0 || !!printBusy}
+                      className="flex-1 bg-charcoal hover:bg-surface-light text-gray-300 font-bold text-xs py-2 rounded-xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-1 disabled:opacity-30"
+                    >
+                      <Printer className="w-3 h-3" /> {kind === 'tutto' ? (printBusy === 'comanda' ? '…' : 'Tutto') : kind === 'cucina' ? 'Cucina' : 'Sala'}
+                    </button>
+                  ))}
+                </div>
                 {tableId ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={handleUpdateBill}
-                      disabled={cart.length === 0 || finishingOrder}
-                      className="w-full bg-surface-light hover:bg-white/10 text-white font-black text-xs py-3 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
-                      title="Salva la comanda sul tavolo senza chiudere"
+                      disabled={cart.length === 0 || finishingOrder || !pending.dirty}
+                      className={`w-full font-black text-sm py-3 rounded-2xl border transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60 ${pending.dirty ? 'bg-amber-500/15 text-amber-200 border-amber-500/50 hover:bg-amber-500/25' : 'bg-surface-light text-gray-400 border-surface-light'}`}
+                      title="Manda in cucina i piatti nuovi (stampa solo le aggiunte)"
                     >
-                      Salva Comanda <Save size={16} />
+                      {pending.count > 0
+                        ? <>Invia · {pending.count} {pending.count === 1 ? 'nuovo' : 'nuovi'} <ChefHat size={16} /></>
+                        : pending.dirty ? <>Salva modifiche <Save size={16} /></> : <>Tutto inviato <CheckCircle size={16} /></>}
                     </button>
                     <button
                       onClick={handleHoldBill}
