@@ -5,9 +5,10 @@ import { printLabelViaAgent, printQuickLabelViaAgent, type HaccpLabelData } from
 import { getPrintAgentUrl } from '../lib/printConfig';
 import { useConfirm } from './ConfirmModal';
 import { toLocalISODate } from '../lib/dateUtils';
+import { scadenzaStato, isUrgente, ordinaPerScadenza } from '../lib/haccpScadenze';
 import { useToast } from './Toast';
 import { QRCodeCanvas } from 'qrcode.react';
-import { ShieldCheck, Save, Printer, Trash2, Edit2, X, Copy, Package, Truck, History, Zap, Plus, ArrowLeft } from 'lucide-react';
+import { Save, Printer, Trash2, Edit2, X, Copy, Package, Truck, History, Plus, ArrowLeft } from 'lucide-react';
 
 interface HaccpFornitore {
   id: string;
@@ -40,7 +41,7 @@ interface HaccpViewProps {
   isEmbedded: boolean;
 }
 
-type SubTab = 'recipes' | 'fornitori' | 'print' | 'storico' | 'quick';
+type SubTab = 'stampa' | 'scadenze' | 'recipes' | 'fornitori';
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -63,7 +64,8 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { addToast } = useToast();
-  const [subTab, setSubTab] = useState<SubTab>('quick');
+  const [subTab, setSubTab] = useState<SubTab>('stampa');
+  const [scadFilter, setScadFilter] = useState<'urgenti' | 'tutte'>('urgenti');
   const [prodotti, setProdotti] = useState<HaccpProdotto[]>([]);
   const [fornitori, setFornitori] = useState<HaccpFornitore[]>([]);
   const [prodottiFornitori, setProdottiFornitori] = useState<Record<string, string[]>>({});
@@ -162,7 +164,8 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
     }
   }, []);
 
-  useEffect(() => { fetchProdotti(); fetchLinks(); fetchFornitori(); }, [fetchProdotti, fetchLinks, fetchFornitori]);
+  // lo storico serve subito: le scadenze urgenti compaiono sulla scheda 'Scadenze'
+  useEffect(() => { fetchProdotti(); fetchLinks(); fetchFornitori(); fetchStorico(); }, [fetchProdotti, fetchLinks, fetchFornitori, fetchStorico]);
 
   /* ~~~ RICETTE CRUD ~~~ */
 
@@ -414,6 +417,8 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
   }
 
   const selectedProdotto = prodotti.find(x => x.id === printProdottoId);
+  const urgenti = ordinaPerScadenza(storico.filter(et => isUrgente(scadenzaStato(et.data_scadenza))));
+  const scadOggi = urgenti.filter(et => { const st = scadenzaStato(et.data_scadenza); return st === 'scaduto' || st === 'oggi'; });
   const nowDate = new Date();
   const scadDate = selectedProdotto ? new Date(nowDate.getTime() + selectedProdotto.giorni_scadenza * 86400000) : null;
 
@@ -434,27 +439,32 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
         </div>
       )}
 
-      <div className={`flex items-center gap-2 mb-6 ${isEmbedded ? 'text-gray-500' : 'text-slate-400'}`}>
-        <ShieldCheck size={18} />
-        <span className="text-xs font-black uppercase tracking-widest">Gestione Etichette HACCP</span>
-      </div>
-
-      {/* Sub-tabs */}
-      <div className="flex gap-1 mb-8 p-1 rounded-2xl w-fit border border-surface-light">
-        {([['quick', 'Rapida', Zap], ['print', 'Etichetta HACCP', Printer], ['recipes', 'Ricette', Package], ['fornitori', 'Fornitori', Truck], ['storico', 'Storico', History]] as const).map(([key, label, Icon]) => (
+      {/* Schede: Stampa (rapide + etichette complete), Scadenze, Ricette, Fornitori */}
+      <div className="flex gap-1 mb-5 p-1 rounded-2xl border border-surface-light bg-surface overflow-x-auto hide-scrollbar">
+        {([['stampa', 'Stampa', Printer], ['scadenze', 'Scadenze', History], ['recipes', 'Ricette', Package], ['fornitori', 'Fornitori', Truck]] as const).map(([key, label, Icon]) => (
           <button
             key={key}
-            onClick={() => { setSubTab(key); if (key === 'storico') fetchStorico(); }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${subTab === key ? (isEmbedded ? 'bg-gold text-black' : 'bg-white text-slate-900 shadow-md') : 'text-gray-500 hover:text-white'}`}
+            onClick={() => { setSubTab(key); if (key === 'scadenze') fetchStorico(); }}
+            className={`flex-1 min-w-fit flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${subTab === key ? 'bg-charcoal text-white shadow' : 'text-gray-400 hover:text-white'}`}
           >
-            <Icon size={16} /> {label}
+            <Icon size={16} className="hidden sm:inline" /> {label}
+            {key === 'scadenze' && urgenti.length > 0 && (
+              <span className="min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center">{urgenti.length}</span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Quick label tab */}
-      {subTab === 'quick' && (
-        <div className="max-w-2xl">
+      {subTab === 'stampa' && !printProdottoId && (
+        <div className="max-w-3xl">
+          {scadOggi.length > 0 && (
+            <button onClick={() => setSubTab('scadenze')} className="w-full mb-5 p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-left flex items-center gap-3 active:scale-[0.99]">
+              <History size={20} className="text-rose-400 shrink-0" />
+              <span className="text-sm font-bold text-rose-200">{scadOggi.length} {scadOggi.length === 1 ? 'etichetta scaduta o in scadenza oggi' : 'etichette scadute o in scadenza oggi'} · controlla</span>
+            </button>
+          )}
+          <h3 className="text-xs font-bold text-gray-400 mb-2">Etichette rapide · un tocco e stampa</h3>
           {/* Quick buttons grid */}
           {quickButtons.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
@@ -463,11 +473,11 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                   <button
                     onClick={() => quickPrint(name)}
                     disabled={quickPrinting !== null}
-                    className={`w-full ${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light hover:border-gold/50 rounded-2xl p-5 text-left transition-all active:scale-[0.97] disabled:opacity-50 ${quickPrinting === name ? 'border-gold/60 animate-pulse' : ''}`}
+                    className={`w-full bg-surface border border-surface-light hover:border-gold/50 rounded-2xl p-5 text-left transition-all active:scale-[0.97] disabled:opacity-50 ${quickPrinting === name ? 'border-gold/60 animate-pulse' : ''}`}
                   >
                     <Printer size={18} className="text-gold mb-3" />
                     <p className="text-white font-black text-lg uppercase tracking-tight leading-tight">{name}</p>
-                    <p className="text-gray-600 text-xs mt-1">
+                    <p className="text-gray-400 text-xs mt-1">
                       {quickPrinting === name ? 'Stampa...' : 'Tocca per stampare'}
                     </p>
                   </button>
@@ -483,15 +493,29 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
           )}
 
           {quickButtons.length === 0 && (
-            <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-2xl p-10 text-center mb-6`}>
-              <Zap size={36} className="mx-auto mb-3 text-gray-600" />
-              <p className="text-gray-500 font-bold">Nessun pulsante rapido.</p>
-              <p className="text-gray-600 text-sm mt-1">Aggiungine uno sotto.</p>
+            <p className="text-sm text-gray-500 mb-6">Nessuna etichetta rapida: aggiungine una in fondo alla pagina.</p>
+          )}
+
+          <h3 className="text-xs font-bold text-gray-400 mb-2">Etichetta completa · scegli il prodotto</h3>
+          {prodotti.length === 0 ? (
+            <p className="text-sm text-gray-500 mb-6">Nessun prodotto: crealo nella scheda Ricette.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-8">
+              {prodotti.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => { setPrintProdottoId(p.id); setPrintLotto(generateLotto()); setPrintQuantity(1); }}
+                  className="bg-surface border border-surface-light hover:border-gold/50 rounded-2xl p-3.5 text-left active:scale-[0.97] transition-all"
+                >
+                  <p className="text-white font-bold leading-tight">{p.nome_prodotto}</p>
+                  <p className="text-xs text-gray-400 mt-1">Scade tra {p.giorni_scadenza} {p.giorni_scadenza === 1 ? 'giorno' : 'giorni'}</p>
+                </button>
+              ))}
             </div>
           )}
 
           {/* Add new button */}
-          <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-2xl p-5`}>
+          <div className={`bg-surface border border-surface-light rounded-2xl p-5`}>
             <p className="text-xs font-black text-gray-500 uppercase tracking-widest mb-3">Aggiungi pulsante</p>
             <div className="flex gap-3">
               <input
@@ -500,12 +524,12 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                 onChange={e => setQuickNewName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addQuickButton()}
                 placeholder="es. Pomodorini, Ragù, Besciamella..."
-                className="flex-1 bg-charcoal border border-surface-light rounded-xl p-3 text-white font-bold text-sm outline-none focus:border-gold transition-colors"
+                className="flex-1 min-w-0 bg-charcoal border border-surface-light rounded-xl p-3 text-white font-bold text-sm outline-none focus:border-gold transition-colors"
               />
               <button
                 onClick={addQuickButton}
                 disabled={!quickNewName.trim()}
-                className="px-5 bg-gold hover:bg-gold-hover text-black font-black rounded-xl flex items-center gap-2 disabled:opacity-40 transition-all"
+                className="shrink-0 px-4 bg-gold hover:bg-gold-hover text-black font-black rounded-xl flex items-center gap-2 disabled:opacity-40 transition-all"
               >
                 <Plus size={18} /> Aggiungi
               </button>
@@ -515,27 +539,22 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       )}
 
       {/* Print sub-tab */}
-      {subTab === 'print' && (
+      {subTab === 'stampa' && printProdottoId && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-8`}>
-            <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white mb-6">Stampa Etichetta</h3>
+          <div className={`bg-surface border border-surface-light rounded-[32px] p-8`}>
+            <h3 className="text-xs font-bold text-gray-400 mb-2">Etichetta completa</h3>
             <div className="space-y-5">
               <div>
-                <label className="text-xs font-black text-gray-400 tracking-widest uppercase mb-2 block">Prodotto</label>
-                <select
-                  value={printProdottoId}
-                  onChange={e => { setPrintProdottoId(e.target.value); setPrintLotto(generateLotto()); }}
-                  className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-colors appearance-none"
-                >
-                  <option value="">Seleziona un prodotto...</option>
-                  {prodotti.map(p => (
-                    <option key={p.id} value={p.id}>{p.nome_prodotto}</option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xl font-black text-white">{selectedProdotto?.nome_prodotto}</p>
+                  <button onClick={() => setPrintProdottoId('')} className="shrink-0 px-3 py-2 rounded-xl border border-surface-light text-sm font-bold text-gray-300 hover:text-white">
+                    Cambia
+                  </button>
+                </div>
               </div>
 
               {selectedProdotto && (
-                <div className={`${isEmbedded ? 'bg-charcoal' : 'bg-slate-800'} rounded-2xl p-6 space-y-3`}>
+                <div className={`bg-charcoal rounded-2xl p-6 space-y-3`}>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Data preparazione</p>
@@ -575,7 +594,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                   />
                   <button
                     onClick={() => setPrintLotto(generateLotto())}
-                    className={`px-4 rounded-2xl font-bold text-xs border ${isEmbedded ? 'border-surface-light text-gray-400 hover:text-white' : 'border-slate-700 text-slate-400 hover:text-white'} transition-all`}
+                    className={`px-4 rounded-2xl font-bold text-xs border border-surface-light text-gray-400 hover:text-white transition-all`}
                   >
                     <Copy size={18} />
                   </button>
@@ -609,7 +628,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
           </div>
 
           {/* Preview */}
-          <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-6 flex flex-col items-center`}>
+          <div className={`bg-surface border border-surface-light rounded-[32px] p-6 flex flex-col items-center`}>
             <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Anteprima Etichetta</h3>
             <div className="w-[80mm] bg-white text-black text-[10px] leading-tight font-mono shadow-2xl rounded-sm overflow-hidden">
               <div className="px-3 py-3 space-y-1 text-[9px]">
@@ -649,7 +668,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       {/* Recipes sub-tab */}
       {subTab === 'recipes' && (
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-          <div className={`xl:col-span-2 ${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-6 h-fit`}>
+          <div className={`xl:col-span-2 bg-surface border border-surface-light rounded-[32px] p-6 h-fit`}>
             <h3 className="text-lg font-black italic uppercase tracking-tighter text-white mb-6">
               {editingId ? 'Modifica Ricetta' : 'Nuova Ricetta'}
             </h3>
@@ -712,7 +731,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
 
           <div className="xl:col-span-3 space-y-3">
             {prodotti.length === 0 && (
-              <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-12 text-center`}>
+              <div className={`bg-surface border border-surface-light rounded-[32px] p-12 text-center`}>
                 <Package size={40} className="mx-auto mb-4 text-gray-500" />
                 <p className="text-gray-500 font-bold">Nessuna ricetta HACCP salvata.</p>
                 <p className="text-gray-600 text-sm mt-1">Creane una usando il form a fianco.</p>
@@ -721,7 +740,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
             {prodotti.map(p => {
               const linkedFornitori = (prodottiFornitori[p.id] || []).map(fid => fornitori.find(f => f.id === fid)).filter(Boolean) as HaccpFornitore[];
               return (
-                <div key={p.id} className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[24px] p-5 flex items-start gap-4 hover:border-gold/30 transition-all group`}>
+                <div key={p.id} className={`bg-surface border border-surface-light rounded-[24px] p-5 flex items-start gap-4 hover:border-gold/30 transition-all group`}>
                   <div className="flex-1 min-w-0">
                     <h4 className="text-white font-black italic text-lg uppercase tracking-tighter">{p.nome_prodotto}</h4>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs font-bold text-gray-500">
@@ -739,7 +758,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                     {p.conservazione && <p className="text-gray-600 text-xs">{p.conservazione}</p>}
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <button onClick={() => editProdotto(p)} className={`p-2.5 ${isEmbedded ? 'bg-charcoal text-gray-500 hover:text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} rounded-xl transition-all`}>
+                    <button onClick={() => editProdotto(p)} className={`p-2.5 bg-charcoal text-gray-500 hover:text-white rounded-xl transition-all`}>
                       <Edit2 size={16} />
                     </button>
                     <button onClick={() => deleteProdotto(p.id)} className="p-2.5 bg-charcoal text-gray-500 hover:text-red-400 rounded-xl transition-all">
@@ -754,10 +773,14 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       )}
 
       {/* Storico Etichette sub-tab */}
-      {subTab === 'storico' && (
+      {subTab === 'scadenze' && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-gray-500 text-sm">{storico.length} etichette stampate</p>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex gap-1.5">
+              {([['urgenti', `Da controllare${urgenti.length ? ` (${urgenti.length})` : ''}`], ['tutte', `Tutte (${storico.length})`]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setScadFilter(k)} className={`px-3.5 py-2 rounded-full text-sm font-bold border ${scadFilter === k ? 'bg-gold border-gold text-black' : 'bg-surface border-surface-light text-gray-300'}`}>{l}</button>
+              ))}
+            </div>
             <button
               onClick={fetchStorico}
               disabled={loadingStorico}
@@ -766,26 +789,30 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
               {loadingStorico ? 'Caricamento...' : 'Aggiorna'}
             </button>
           </div>
+          {scadFilter === 'urgenti' && urgenti.length === 0 && storico.length > 0 && (
+            <p className="py-10 text-center text-emerald-400 font-bold">Nessuna etichetta scaduta o in scadenza tra oggi e domani.</p>
+          )}
           {storico.length === 0 && !loadingStorico && (
-            <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-12 text-center`}>
+            <div className={`bg-surface border border-surface-light rounded-[32px] p-12 text-center`}>
               <History size={40} className="mx-auto mb-4 text-gray-500" />
               <p className="text-gray-500 font-bold">Nessuna etichetta stampata.</p>
               <p className="text-gray-600 text-sm mt-1">Le etichette appaiono qui dopo la stampa.</p>
             </div>
           )}
           <div className="space-y-3">
-            {storico.map(et => {
+            {(scadFilter === 'urgenti' ? urgenti : ordinaPerScadenza(storico)).map(et => {
               const prod = prodotti.find(p => p.id === et.prodotto_id);
-              // Confronto tra date locali YYYY-MM-DD: il giorno di scadenza è ancora valido fino a sera
-              const isScaduto = et.data_scadenza && et.data_scadenza < toLocalISODate();
-              const isInScadenza = !isScaduto && et.data_scadenza && et.data_scadenza <= toLocalISODate(new Date(Date.now() + 2 * 86400000));
+              // date locali YYYY-MM-DD: il giorno di scadenza è ancora valido fino a sera
+              const stato = scadenzaStato(et.data_scadenza);
+              const isScaduto = stato === 'scaduto';
+              const isInScadenza = stato === 'oggi' || stato === 'domani';
               return (
-                <div key={et.id} className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border ${isScaduto ? 'border-rose-500/40' : isInScadenza ? 'border-amber-500/40' : 'border-surface-light'} rounded-[20px] p-4 flex items-start gap-4`}>
+                <div key={et.id} className={`bg-surface border ${isScaduto ? 'border-rose-500/40' : isInScadenza ? 'border-amber-500/40' : 'border-surface-light'} rounded-[20px] p-4 flex items-start gap-4`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-white font-black text-base">{prod?.nome_prodotto || et.prodotto_id}</h4>
                       {isScaduto && <span className="text-[10px] font-black bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full">SCADUTO</span>}
-                      {isInScadenza && !isScaduto && <span className="text-[10px] font-black bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">IN SCADENZA</span>}
+                      {isInScadenza && <span className="text-[10px] font-black bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">{stato === 'oggi' ? 'SCADE OGGI' : 'SCADE DOMANI'}</span>}
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs font-bold text-gray-500">
                       <span className="font-mono text-gold text-[11px]">{et.lotto}</span>
@@ -805,7 +832,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
       {/* Fornitori sub-tab */}
       {subTab === 'fornitori' && (
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-          <div className={`xl:col-span-2 ${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-6 h-fit`}>
+          <div className={`xl:col-span-2 bg-surface border border-surface-light rounded-[32px] p-6 h-fit`}>
             <h3 className="text-lg font-black italic uppercase tracking-tighter text-white mb-6">
               {fornEditId ? 'Modifica Fornitore' : 'Nuovo Fornitore'}
             </h3>
@@ -847,14 +874,14 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
 
           <div className="xl:col-span-3 space-y-3">
             {fornitori.length === 0 && (
-              <div className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[32px] p-12 text-center`}>
+              <div className={`bg-surface border border-surface-light rounded-[32px] p-12 text-center`}>
                 <Truck size={40} className="mx-auto mb-4 text-gray-500" />
                 <p className="text-gray-500 font-bold">Nessun fornitore salvato.</p>
                 <p className="text-gray-600 text-sm mt-1">Aggiungi un fornitore usando il form a fianco.</p>
               </div>
             )}
             {fornitori.map(f => (
-              <div key={f.id} className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border border-surface-light rounded-[24px] p-5 flex items-start gap-4 hover:border-gold/30 transition-all group`}>
+              <div key={f.id} className={`bg-surface border border-surface-light rounded-[24px] p-5 flex items-start gap-4 hover:border-gold/30 transition-all group`}>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-white font-black italic text-lg uppercase tracking-tighter">{f.nome}</h4>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs font-bold text-gray-500">
@@ -865,7 +892,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
                   {f.note && <p className="text-gray-500 text-xs mt-1">{f.note}</p>}
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button onClick={() => editFornitore(f)} className={`p-2.5 ${isEmbedded ? 'bg-charcoal text-gray-500 hover:text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} rounded-xl transition-all`}>
+                  <button onClick={() => editFornitore(f)} className={`p-2.5 bg-charcoal text-gray-500 hover:text-white rounded-xl transition-all`}>
                     <Edit2 size={16} />
                   </button>
                   <button onClick={() => deleteFornitore(f.id)} className="p-2.5 bg-charcoal text-gray-500 hover:text-red-400 rounded-xl transition-all">
