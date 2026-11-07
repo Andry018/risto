@@ -101,9 +101,7 @@ function MenuScreen:init()
     self.counter = 0
     self.image_path = nil
     self._refresh = function() self:refresh() end
-    self:setMessage(_("Il Girasole
-
-Caricamento del menu…"))
+    self:setMessage(_("Il Girasole\n\nCaricamento del menu…"))
 end
 
 function MenuScreen:pageUrl()
@@ -166,12 +164,7 @@ function MenuScreen:refresh()
         end
     elseif code ~= 304 and not self.image_path then
         logger.warn("MenuGirasole: menu non disponibile, codice", code)
-        self:setMessage(_("Il Girasole
-
-Menu non raggiungibile.
-Controlla il Wi-Fi: riprovo ogni minuto.
-
-(tieni premuto per uscire)"))
+        self:setMessage(_("Il Girasole\n\nMenu non raggiungibile.\nControlla il Wi-Fi: riprovo ogni minuto.\n\n(tieni premuto per uscire)"))
     end
     UIManager:scheduleIn(self.pages > 1 and PAGE_SECONDS or REFRESH_SECONDS, self._refresh)
 end
