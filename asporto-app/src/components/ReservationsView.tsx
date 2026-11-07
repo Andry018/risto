@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import type { Reservation, Tavolo } from '../types/entities';
-import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, ArrowLeft, Phone } from 'lucide-react';
+import { Plus, X, Calendar, Clock, Users, CheckCircle2, Trash2, MapPin, ChevronLeft, ChevronRight, Edit3, Save, ArrowLeft, Phone, MessageCircle, BellRing } from 'lucide-react';
+import { newUniqueId } from '../lib/id';
+import { waAvailable, phoneToJid, sendReservationWhatsapp, type WaReservationKind } from '../lib/reservationWhatsapp';
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { toLocalISODate } from '../lib/dateUtils';
@@ -19,6 +21,10 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Conferma WhatsApp alla creazione (solo se questo tablet ha WhatsApp e il numero è valido) */
+  const [sendWaConfirm, setSendWaConfirm] = useState(true);
+  const [waSending, setWaSending] = useState<string | null>(null); // id prenotazione (o 'all') in invio
+  const canWa = waAvailable();
   
   // New Reservation State
   const [newRes, setNewRes] = useState<Partial<Reservation>>({
@@ -110,8 +116,12 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
           await setTableStatus(newRes.tavolo_id, 'PRENOTATO');
         }
       } else {
-        const { error } = await supabase.from('prenotazioni').insert([newRes]);
+        const created = { ...newRes, id: newUniqueId() } as Reservation;
+        const { error } = await supabase.from('prenotazioni').insert([created]);
         if (error) throw error;
+        if (canWa && sendWaConfirm && phoneToJid(created.telefono)) {
+          void sendWa(created, 'conferma');
+        }
 
         if (newRes.tavolo_id) {
           await setTableStatus(newRes.tavolo_id, 'PRENOTATO');
@@ -126,8 +136,42 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     }
   }
 
+  async function sendWa(res: Reservation, kind: WaReservationKind, silent = false) {
+    setWaSending(res.id);
+    try {
+      const at = await sendReservationWhatsapp(res, kind);
+      const field = kind === 'conferma' ? 'wa_conferma_at' : 'wa_promemoria_at';
+      setReservations(prev => prev.map(r => r.id === res.id ? { ...r, [field]: at } : r));
+      if (!silent) addToast({ type: 'success', title: kind === 'conferma' ? 'Conferma inviata' : 'Promemoria inviato', message: `WhatsApp a ${res.nome}`, duration: 2500 });
+      return true;
+    } catch (e) {
+      addToast({ type: 'error', title: 'WhatsApp non inviato', message: e instanceof Error ? e.message : 'Errore di invio', duration: 4500 });
+      return false;
+    } finally {
+      setWaSending(null);
+    }
+  }
+
+  /** Promemoria a tutte le prenotazioni di oggi confermate, con cellulare, non ancora avvisate. */
+  async function sendAllReminders() {
+    const targets = reservations.filter(r => r.status === 'CONFERMATA' && !r.wa_promemoria_at && phoneToJid(r.telefono));
+    if (targets.length === 0) return;
+    const ok = await confirm({ title: 'Promemoria WhatsApp', message: `Mandare il promemoria di oggi a ${targets.length} ${targets.length === 1 ? 'cliente' : 'clienti'}?` });
+    if (!ok) return;
+    let sent = 0;
+    for (const r of targets) {
+      // uno alla volta, con una piccola pausa: WhatsApp non ama le raffiche
+      if (await sendWa(r, 'promemoria', true)) sent++;
+      setWaSending('all');
+      await new Promise(done => setTimeout(done, 1200));
+    }
+    setWaSending(null);
+    addToast({ type: sent === targets.length ? 'success' : 'warning', title: 'Promemoria inviati', message: `${sent} su ${targets.length}`, duration: 3500 });
+  }
+
   function openNewModal() {
     setEditingReservation(null);
+    setSendWaConfirm(true);
     setNewRes({
       nome: '',
       telefono: '',
@@ -302,6 +346,38 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
               </button>
             </div>
             <p className="text-2xl font-black text-gold mt-2">{reservations.length} {reservations.length === 1 ? 'prenotazione' : 'prenotazioni'}</p>
+            {(() => {
+              const active = reservations.filter(r => r.status !== 'ANNULLATA');
+              const sum = (list: Reservation[]) => list.reduce((acc, r) => acc + (r.persone || 0), 0);
+              const pranzo = active.filter(r => (r.ora || '') < '16:00');
+              const sera = active.filter(r => (r.ora || '') >= '16:00');
+              const arrivati = active.filter(r => r.status === 'ARRIVATA').length;
+              return active.length > 0 ? (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-xl bg-charcoal border border-surface-light px-3 py-2">
+                    <p className="text-xs text-gray-400 font-bold">Pranzo</p>
+                    <p className="font-black text-white">{sum(pranzo)} coperti <span className="text-gray-500 font-bold">· {pranzo.length}</span></p>
+                  </div>
+                  <div className="rounded-xl bg-charcoal border border-surface-light px-3 py-2">
+                    <p className="text-xs text-gray-400 font-bold">Sera</p>
+                    <p className="font-black text-white">{sum(sera)} coperti <span className="text-gray-500 font-bold">· {sera.length}</span></p>
+                  </div>
+                  {arrivati > 0 && <p className="col-span-2 text-xs text-emerald-400 font-bold">{arrivati} già arrivati</p>}
+                </div>
+              ) : null;
+            })()}
+            {canWa && selectedDate === today && (() => {
+              const toRemind = reservations.filter(r => r.status === 'CONFERMATA' && !r.wa_promemoria_at && phoneToJid(r.telefono)).length;
+              return (
+                <button
+                  onClick={() => void sendAllReminders()}
+                  disabled={toRemind === 0 || waSending !== null}
+                  className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold text-sm active:scale-95 disabled:opacity-40"
+                >
+                  <BellRing size={16} /> {waSending === 'all' ? 'Invio in corso…' : toRemind > 0 ? `Promemoria WhatsApp a ${toRemind}` : 'Promemoria già inviati'}
+                </button>
+              );
+            })()}
           </div>
         </div>
 
@@ -337,6 +413,36 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                         <a href={`tel:${res.telefono}`} onClick={e => e.stopPropagation()} className="flex items-center gap-2 px-3 py-1 bg-charcoal border border-surface-light rounded-full text-xs font-bold text-gray-400 hover:text-gold hover:border-gold/30 transition-colors">
                           <Phone size={14} /> {res.telefono}
                         </a>
+                      )}
+                      {canWa && res.status !== 'ANNULLATA' && phoneToJid(res.telefono) && (
+                        res.wa_conferma_at ? (
+                          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-bold text-emerald-400">
+                            <MessageCircle size={14} /> Conferma inviata
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => void sendWa(res, 'conferma')}
+                            disabled={waSending !== null}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-charcoal border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-40"
+                          >
+                            <MessageCircle size={14} /> {waSending === res.id ? 'Invio…' : 'Invia conferma'}
+                          </button>
+                        )
+                      )}
+                      {canWa && res.status === 'CONFERMATA' && res.data === today && phoneToJid(res.telefono) && (
+                        res.wa_promemoria_at ? (
+                          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-bold text-emerald-400">
+                            <BellRing size={14} /> Promemoria inviato
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => void sendWa(res, 'promemoria')}
+                            disabled={waSending !== null}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-charcoal border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-40"
+                          >
+                            <BellRing size={14} /> {waSending === res.id ? 'Invio…' : 'Promemoria'}
+                          </button>
+                        )
                       )}
                       {res.tavolo_id && (
                         <div className="flex items-center gap-2 px-3 py-1 bg-gold/10 border border-gold/20 rounded-full text-xs font-bold text-gold">
@@ -425,6 +531,18 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                       onChange={e => setNewRes({...newRes, telefono: e.target.value})}
                       className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all"
                     />
+                    {canWa && !editingReservation && (
+                      <label className={`flex items-center gap-2 ml-1 text-sm font-bold ${phoneToJid(newRes.telefono) ? 'text-emerald-300' : 'text-gray-500'}`}>
+                        <input
+                          type="checkbox"
+                          checked={sendWaConfirm && !!phoneToJid(newRes.telefono)}
+                          disabled={!phoneToJid(newRes.telefono)}
+                          onChange={e => setSendWaConfirm(e.target.checked)}
+                          className="w-5 h-5 accent-emerald-500"
+                        />
+                        <MessageCircle size={16} /> Invia conferma su WhatsApp
+                      </label>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-6">

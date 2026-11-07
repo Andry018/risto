@@ -78,6 +78,9 @@ export type Reservation = {
   status: 'CONFERMATA' | 'ANNULLATA' | 'ARRIVATA';
   note?: string;
   created_at?: string;
+  /** quando è partita la conferma / il promemoria WhatsApp (null = mai) */
+  wa_conferma_at?: string | null;
+  wa_promemoria_at?: string | null;
 };
 
 export type DocumentoEmesso = {
