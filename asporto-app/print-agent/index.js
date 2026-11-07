@@ -591,6 +591,33 @@ console.log('=== Print Agent Avviato ===');
 console.log(`HTTP print bridge on :${serverPort}`);
 console.log('Stampa automatica ordini DB disattivata (solo richieste esplicite /print)');
 
+/**
+ * Piatti per il menu Kindle, letti come fa la pagina pubblica /menu (chiave anon, sola lettura).
+ * La chiave si prende da asporto-app/.env (sempre aggiornata, la usa la build) e in mancanza dal .env
+ * dell'agent. Risultato tenuto 20 s per non interrogare il DB a ogni richiesta.
+ */
+let menuProductsCache = { at: 0, data: null };
+function readAnonKey() {
+  try {
+    const env = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '.env'), 'utf8');
+    const m = /^VITE_SUPABASE_ANON_KEY=(.+)$/m.exec(env);
+    if (m) return m[1].trim().replace(/^["']|["']$/g, '');
+  } catch { /* nessun asporto-app/.env (es. sviluppo) */ }
+  return supabaseKey;
+}
+async function fetchMenuProducts() {
+  if (menuProductsCache.data && Date.now() - menuProductsCache.at < 20_000) return menuProductsCache.data;
+  const base = (process.env.KINDLE_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/+$/, '');
+  const key = readAnonKey();
+  const r = await fetch(`${base}/rest/v1/prodotti?select=nome,prezzo,categoria,sottocategoria,ingredienti,disponibile&disponibile=eq.true`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) throw new Error(`Lettura menu fallita (${r.status})`);
+  menuProductsCache = { at: Date.now(), data: await r.json() };
+  return menuProductsCache.data;
+}
+
 const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -600,6 +627,28 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     return res.end();
+  }
+
+  // Immagini per il Kindle (plugin KOReader in /kindle): menu del giorno e logo per lo standby
+  if (req.method === 'GET' && (reqUrl.pathname === '/kindle/menu.png' || reqUrl.pathname === '/kindle/logo.png')) {
+    try {
+      const km = require('./kindleMenu');
+      const query = Object.fromEntries(reqUrl.searchParams);
+      const result = reqUrl.pathname === '/kindle/logo.png'
+        ? km.renderLogoPng(query)
+        : km.renderMenuPng(await fetchMenuProducts(), query);
+      res.setHeader('ETag', result.etag);
+      res.setHeader('Cache-Control', 'no-cache');
+      if (result.pages) res.setHeader('X-Pages', String(result.pages));
+      if (req.headers['if-none-match'] === result.etag) { res.statusCode = 304; return res.end(); }
+      res.setHeader('Content-Type', 'image/png');
+      return res.end(result.png);
+    } catch (error) {
+      console.error('[KINDLE ERROR]', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.end(String(error.message || error));
+    }
   }
 
   if (req.method === 'GET' && reqUrl.pathname === '/health') {
