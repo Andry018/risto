@@ -26,6 +26,18 @@
     <link rel="apple-touch-startup-image" href="/splash/apple-splash-1290-2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/splash/apple-splash-1668-2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/splash/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <script>
+      // Kindle e browser e-ink non reggono l'app React: su /menu li mandiamo al menu leggero.
+      // Scritto in ES5 e in linea, così gira prima (e anche se) il bundle non parte.
+      (function () {
+        var p = location.pathname.replace(/\/+$/, '');
+        var lite = /[?&]lite=1/.test(location.search);
+        var kindle = /Kindle/i.test(navigator.userAgent);
+        if (p === '/kindle' || p === '/menu-lite' || (p === '/menu' && (kindle || lite))) {
+          location.replace('/menu-lite.html' + (p === '/menu' ? location.search.replace(/([?&])lite=1&?/, '$1').replace(/[?&]$/, '') : location.search));
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

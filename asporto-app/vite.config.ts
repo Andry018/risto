@@ -27,6 +27,8 @@ export default defineConfig({
       ],
       workbox: {
         navigateFallback: '/index.html',
+        // Il menu leggero per Kindle è una pagina a sé: non va mai sostituito dall'app React
+        navigateFallbackDenylist: [/^\/menu-lite/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) =>
@@ -95,6 +97,8 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
+      // menu-lite.html: menu per Kindle/e-ink, senza React (vedi commento nel file)
+      input: { main: 'index.html', 'menu-lite': 'menu-lite.html' },
       output: {
         // Forma a funzione: accettata sia da Rollup (Vite 5) sia da Rolldown (Vite 7+),
         // che non supporta più la forma a oggetto
