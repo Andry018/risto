@@ -39,6 +39,16 @@ local REFRESH_SECONDS = 30
 local PAGE_SECONDS = 20 -- se il menu non sta in una pagina, cambia pagina ogni 20 s
 local AUTOSTART_FLAG = "/mnt/us/koreader/menugirasole.autostart"
 local CACHE_DIR = "/tmp"
+-- Dimensione del testo (scelta dalla pressione lunga): normale, grande, molto grande
+local ZOOMS = { { value = 1, label = "normale" }, { value = 1.2, label = "grande" }, { value = 1.4, label = "molto grande" } }
+local LANGS = { { value = "it", label = "Italiano" }, { value = "en", label = "English" } }
+
+local function nextOf(list, current)
+    for i, item in ipairs(list) do
+        if item.value == current then return list[i % #list + 1], item end
+    end
+    return list[2] or list[1], list[1]
+end
 local LOGO_PATH = "/mnt/us/koreader/menugirasole-logo.png"
 local STANDBY_MENU_PATH = "/mnt/us/koreader/menugirasole-standby.png"
 
@@ -110,7 +120,17 @@ end
 
 function MenuScreen:pageUrl()
     local sep = self.menu_url:find("?", 1, true) and "&" or "?"
-    return string.format("%s%sw=%d&h=%d&page=%d", self.menu_url, sep, Screen:getWidth(), Screen:getHeight(), self.page)
+    local view = self.get_view and self.get_view() or { zoom = 1, lang = "it" }
+    return string.format("%s%sw=%d&h=%d&page=%d&zoom=%s&lang=%s", self.menu_url, sep,
+        Screen:getWidth(), Screen:getHeight(), self.page, tostring(view.zoom), view.lang)
+end
+
+--- Dopo un cambio di testo/lingua: ricarica subito dalla prima pagina.
+function MenuScreen:reload()
+    self.etag = nil
+    self.page = 1
+    self.pages = 1
+    self:refresh()
 end
 
 --- Schermata bianca con un messaggio (prima del primo menu, o se il menu non arriva).
@@ -201,6 +221,23 @@ function MenuScreen:onHold()
                 UIManager:close(dialog)
                 if self.set_standby then self.set_standby(logo and "menu" or "logo") end
             end }},
+            (function()
+                local view = self.get_view and self.get_view() or { zoom = 1, lang = "it" }
+                local nextZoom, curZoom = nextOf(ZOOMS, view.zoom)
+                local nextLang, curLang = nextOf(LANGS, view.lang)
+                return {
+                    { text = string.format(_("Testo: %s  →  %s"), curZoom.label, nextZoom.label), callback = function()
+                        UIManager:close(dialog)
+                        if self.set_view then self.set_view({ zoom = nextZoom.value }) end
+                        self:reload()
+                    end },
+                    { text = string.format(_("Lingua: %s  →  %s"), curLang.label, nextLang.label), callback = function()
+                        UIManager:close(dialog)
+                        if self.set_view then self.set_view({ lang = nextLang.value }) end
+                        self:reload()
+                    end },
+                }
+            end)(),
             {{ text = _("Resta sul menu"), callback = function() UIManager:close(dialog) end }},
         },
     }
@@ -311,6 +348,17 @@ function MenuGirasole:start(from_launcher)
         on_exit = function() self:stop(from_launcher) end,
         on_new_menu = function() self:applyStandby() end,
         get_standby = function() return self:getStandby() end,
+        get_view = function()
+            return {
+                zoom = G_reader_settings:readSetting("menugirasole_zoom") or 1,
+                lang = G_reader_settings:readSetting("menugirasole_lang") or "it",
+            }
+        end,
+        set_view = function(changes)
+            if changes.zoom then G_reader_settings:saveSetting("menugirasole_zoom", changes.zoom) end
+            if changes.lang then G_reader_settings:saveSetting("menugirasole_lang", changes.lang) end
+            G_reader_settings:flush()
+        end,
         set_standby = function(mode)
             G_reader_settings:saveSetting("menugirasole_standby", mode)
             self:applyStandby()

@@ -19,6 +19,19 @@ const crypto = require('node:crypto');
 
 const CATEGORY_ORDER = ['Antipasti', 'Fritti', 'Primi', 'Secondi', 'Contorni', 'Pizze Rosse', 'Pizze Bianche', 'Pizze Speciali', 'Dolci', 'Caffè e Liquori', 'Bevande'];
 const HIDDEN = new Set(['EXTRA', 'Servizio']);
+// Testi in inglese (i nomi dei piatti restano in italiano, come nei menu veri)
+const EN = {
+  title: "TODAY'S MENU",
+  page: (n, tot) => `page ${n} of ${tot}`,
+  empty: 'No dishes available right now',
+  days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  cats: {
+    'Antipasti': 'Starters', 'Fritti': 'Fried', 'Primi': 'First courses', 'Secondi': 'Main courses',
+    'Contorni': 'Side dishes', 'Pizze Rosse': 'Red pizzas', 'Pizze Bianche': 'White pizzas',
+    'Pizze Speciali': 'Special pizzas', 'Dolci': 'Desserts', 'Caffè e Liquori': 'Coffee & liqueurs', 'Bevande': 'Drinks',
+  },
+};
 const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
 
@@ -133,7 +146,8 @@ function buildBlocks(groups, size, colW, opts) {
   const ingrLineH = ingrSize * 1.25;
   for (const { cat, items } of groups) {
     const catSize = Math.round(size * 1.08);
-    blocks.push({ type: 'cat', text: cat.toUpperCase(), size: catSize, h: catSize * 1.9, keepWithNext: true });
+    const label = opts.lang === 'en' ? (EN.cats[cat] || cat) : cat;
+    blocks.push({ type: 'cat', text: label.toUpperCase(), size: catSize, h: catSize * 1.9, keepWithNext: true });
     const hasSub = items.some(p => p.sottocategoria);
     const subs = hasSub ? [...new Set(items.map(p => p.sottocategoria || 'Altro'))] : [null];
     for (const sub of subs) {
@@ -179,19 +193,30 @@ function layout(groups, W, H, opts) {
   const bodyTop = margin + headerH;
   const bodyH = H - bodyTop - margin;
   const gap = Math.round(W * 0.04);
-  // Prova prima una colonna con testo grande, poi due colonne; tieni la prima che sta in UNA pagina.
+  const tryLayout = (cols, baseSize) => {
+    const size = Math.round(baseSize * (W / 1072));
+    const colW = (W - margin * 2 - gap * (cols - 1)) / cols;
+    return { cols, size, colW, pages: flow(buildBlocks(groups, size, colW, opts), cols, bodyH) };
+  };
+  // Normale: prima una colonna con testo grande, poi due colonne; la prima che sta in UNA pagina.
   const tries = [];
   for (const s of [40, 36, 33, 30, 28, 26]) tries.push({ cols: 1, size: s });
   for (const s of [30, 28, 26, 24, 22, 20]) tries.push({ cols: 2, size: s });
   let best = null;
   for (const t of tries) {
-    const size = Math.round(t.size * (W / 1072));
-    const colW = (W - margin * 2 - gap * (t.cols - 1)) / t.cols;
-    const pages = flow(buildBlocks(groups, size, colW, opts), t.cols, bodyH);
-    best = { ...t, size, colW, pages };
-    if (pages.length <= 1) break;
+    best = tryLayout(t.cols, t.size);
+    if (best.pages.length <= 1) break;
   }
-  return { ...best, margin, headerH, bodyTop, bodyH, gap };
+  // Testo più grande (scelta dal Kindle): la dimensione normale × scala, anche se servono più pagine
+  // (girano da sole). Fra una e due colonne tiene quella con meno pagine.
+  const k = opts.scale || 1;
+  if (k > 1) {
+    const target = (best.size / (W / 1072)) * k;
+    const one = tryLayout(1, target);
+    const two = tryLayout(2, target);
+    best = two.pages.length < one.pages.length ? two : one;
+  }
+  return { ...best, margin, headerH, bodyTop, bodyH, gap, lang: opts.lang };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -207,10 +232,13 @@ function renderPageSvg(L, pageIndex, W, H, date) {
   const m = L.margin;
   const titleSize = Math.round(L.headerH * 0.48);
   t(m, m + titleSize * 0.95, 'Il Girasole', titleSize, { weight: 'bold' });
-  t(m, m + titleSize * 0.95 + titleSize * 0.62, 'MENU DEL GIORNO', Math.round(titleSize * 0.36), { fill: '#333' });
-  const dateText = `${GIORNI[date.getDay()]} ${date.getDate()} ${MESI[date.getMonth()]}`;
+  const en = L.lang === 'en';
+  t(m, m + titleSize * 0.95 + titleSize * 0.62, en ? EN.title : 'MENU DEL GIORNO', Math.round(titleSize * 0.36), { fill: '#333' });
+  const dateText = en
+    ? `${EN.days[date.getDay()]} ${date.getDate()} ${EN.months[date.getMonth()]}`
+    : `${GIORNI[date.getDay()]} ${date.getDate()} ${MESI[date.getMonth()]}`;
   t(W - m, m + titleSize * 0.95, dateText, Math.round(titleSize * 0.42), { anchor: 'end' });
-  if (L.pages.length > 1) t(W - m, m + titleSize * 0.95 + titleSize * 0.62, `pagina ${pageIndex + 1} di ${L.pages.length}`, Math.round(titleSize * 0.32), { anchor: 'end', fill: '#333' });
+  if (L.pages.length > 1) t(W - m, m + titleSize * 0.95 + titleSize * 0.62, (en ? EN.page(pageIndex + 1, L.pages.length) : `pagina ${pageIndex + 1} di ${L.pages.length}`), Math.round(titleSize * 0.32), { anchor: 'end', fill: '#333' });
   out.push(`<rect x="${m}" y="${L.bodyTop - L.headerH * 0.22}" width="${W - m * 2}" height="4" fill="#000"/>`);
 
   const page = L.pages[pageIndex] || [];
@@ -239,7 +267,7 @@ function renderPageSvg(L, pageIndex, W, H, date) {
       y += b.h;
     }
   });
-  if (!page.length) t(W / 2, H / 2, 'Nessun piatto disponibile al momento', Math.round(W / 30), { anchor: 'middle' });
+  if (!page.length) t(W / 2, H / 2, en ? EN.empty : 'Nessun piatto disponibile al momento', Math.round(W / 30), { anchor: 'middle' });
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="#fff"/>${out.join('')}</svg>`;
 }
@@ -261,7 +289,8 @@ const cache = new Map(); // chiave → { png, pages, etag }
 function renderMenuPng(products, query = {}, date = new Date()) {
   const W = Math.min(2000, Math.max(300, Number(query.w) || 1072));
   const H = Math.min(3000, Math.max(300, Number(query.h) || 1448));
-  const opts = { cat: query.cat || '', ingr: query.ingr !== '0', prezzi: query.prezzi !== '0' };
+  const scale = Math.min(1.6, Math.max(1, Number(query.zoom) || 1));
+  const opts = { cat: query.cat || '', ingr: query.ingr !== '0', prezzi: query.prezzi !== '0', scale, lang: query.lang === 'en' ? 'en' : 'it' };
   const groups = groupProducts(products, opts);
   const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   const key = crypto.createHash('sha1').update(JSON.stringify([groups, W, H, opts, dayKey, query.page || 1])).digest('hex');
