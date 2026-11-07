@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateItemPrice } from '../priceUtils';
+import { calculateItemPrice, roundCents } from '../priceUtils';
 import type { Ingredient } from '../../types/entities';
 
 const mockIngredients: Ingredient[] = [
@@ -81,5 +81,14 @@ describe('calculateItemPrice', () => {
       mockIngredients
     );
     expect(result).toBe(10);
+  });
+});
+
+describe('roundCents', () => {
+  it('toglie i decimali sporchi dei calcoli in virgola mobile', () => {
+    expect(roundCents(23.5 * 0.9)).toBe(21.15);
+    expect(roundCents(0.1 + 0.2)).toBe(0.3);
+    expect(roundCents(1.005)).toBe(1.01);
+    expect(roundCents(12)).toBe(12);
   });
 });

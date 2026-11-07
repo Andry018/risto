@@ -18,3 +18,8 @@ export function calculateItemPrice(
   }, 0);
   return Math.max(0, (item.prezzo + extrasPrice - removalsPrice)) * item.quantity;
 }
+
+/** Arrotonda ai centesimi (evita totali tipo 21.150000000000002 salvati nel DB e sommati nei report). */
+export function roundCents(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}

@@ -17,7 +17,7 @@ import CustomItemModal from './CustomItemModal';
 import NumericKeypad from './NumericKeypad';
 import { syncManager } from '../lib/OfflineSync';
 import { useRearScreen } from '../lib/rearScreen';
-import { calculateItemPrice } from '../lib/priceUtils';
+import { calculateItemPrice, roundCents } from '../lib/priceUtils';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent } from '../lib/lanPrint';
@@ -310,7 +310,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     const sb = supabase;
 
     const productsChannel = sb
-      .channel('public:prodotti')
+      .channel('public:prodotti-pos')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts())
       .subscribe();
     const ingredientsChannel = sb
@@ -495,11 +495,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
   const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
 
-  const discountedTotal = scontoTipo === 'percentuale'
+  const discountedTotal = roundCents(scontoTipo === 'percentuale'
     ? total * (1 - scontoValore / 100)
     : scontoTipo === 'fisso'
     ? Math.max(0, total - scontoValore)
-    : total;
+    : total);
 
   const rearScreen = useRearScreen({
     table: tableName || 'Banco',
@@ -669,7 +669,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       if (isUpdate) {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
-        await syncManager.pushOrder(orderData);
+        // L'ordine appena creato diventa quello attivo: i salvataggi successivi lo aggiornano
+        // invece di crearne un altro (e stampano solo le aggiunte).
+        setActiveOrderId(await syncManager.pushOrder(orderData));
         await syncManager.pushTableUpdate(tableId, { status: 'OCCUPATO' });
       }
       void fetchMagazzino();

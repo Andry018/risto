@@ -12,7 +12,7 @@ import { staffLogout, getCurrentUser } from '../lib/staffAuth';
 import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent, printErrorMessage } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
-import { calculateItemPrice } from '../lib/priceUtils';
+import { calculateItemPrice, roundCents } from '../lib/priceUtils';
 import ProductCustomizationModal from './ProductCustomizationModal';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
@@ -421,7 +421,7 @@ export default function WaiterMobileView() {
     void fetchReservationsForDate();
     if (!supabase) return;
     const sb = supabase;
-    const tablesChannel = sb.channel('public:tavoli').on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTables()).subscribe();
+    const tablesChannel = sb.channel('public:tavoli-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTables()).subscribe();
     const productsChannel = sb.channel('public:prodotti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchProducts()).subscribe();
     const ingredientsChannel = sb.channel('public:ingredienti-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'ingredienti' }, () => void fetchIngredients()).subscribe();
     const prenotazioniChannel = sb.channel('public:prenotazioni-waiter').on('postgres_changes', { event: '*', schema: 'public', table: 'prenotazioni' }, () => void fetchReservationsForDate()).subscribe();
@@ -797,7 +797,7 @@ export default function WaiterMobileView() {
   };
 
   const total = useMemo(
-    () => cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0),
+    () => roundCents(cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0)),
     [cart, ingredients]
   );
 
@@ -869,7 +869,9 @@ export default function WaiterMobileView() {
         await syncManager.pushOrder({ ...orderData, id: activeOrderId });
       } else {
         const nowISO = new Date().toISOString();
-        await syncManager.pushOrder(orderData);
+        // Da qui in poi i salvataggi aggiornano QUESTO ordine (senza, il secondo AGGIORNA creava un
+        // ordine duplicato e ristampava tutta la comanda se l'evento realtime non era ancora arrivato)
+        setActiveOrderId(await syncManager.pushOrder(orderData));
         localUpdateTavoliRef.current = true;
         const newNote = setAperturaInNote(selectedTable.note, nowISO);
         await syncManager.pushTableUpdate(selectedTable.id, { status: 'OCCUPATO', note: newNote });

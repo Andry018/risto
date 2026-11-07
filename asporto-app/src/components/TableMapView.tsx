@@ -256,7 +256,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     void fetchReservationsForDate();
     if (!IS_DEMO_MODE && supabase) {
       const sb = supabase;
-      const tavoliChannel = sb.channel('public:tavoli')
+      const tavoliChannel = sb.channel('public:tavoli-map')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchTavoli())
         .subscribe();
       const prenotazioniChannel = sb.channel('public:prenotazioni-map')

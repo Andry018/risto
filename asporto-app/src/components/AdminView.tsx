@@ -265,7 +265,7 @@ export default function AdminView({ onNavigateHome }: AdminViewProps = {}) {
     void fetchIngredients();
 
     const productsChannel = sb
-      .channel('public:prodotti')
+      .channel('public:prodotti-admin')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prodotti' }, (payload: { new: Record<string, unknown> }) => {
         const row = payload.new as Pick<Product, 'id' | 'disponibile'>;
         setProducts(current => current.map(p => p.id === row.id ? { ...p, disponibile: row.disponibile } : p));

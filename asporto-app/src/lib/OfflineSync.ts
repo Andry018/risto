@@ -104,7 +104,9 @@ class OfflineSync {
     }
   }
 
-  public async pushOrder(orderData: Partial<Order>) {
+  /** Accoda insert/update di un ordine. Restituisce l'id dell'ordine (quello nuovo per gli insert):
+   *  chi chiama DEVE usarlo come ordine attivo, altrimenti il salvataggio successivo crea un duplicato. */
+  public async pushOrder(orderData: Partial<Order>): Promise<string> {
     // Un ordine nuovo riceve subito un id stabile: se il push va in retry (timeout di rete con
     // esito reale ambiguo), l'upsert in drainQueue userà lo stesso id invece di creare un duplicato.
     const isInsert = !orderData.id;
@@ -117,6 +119,7 @@ class OfflineSync {
     this.saveQueue();
     this.drainTail = this.drainTail.then(() => this.drainQueue());
     await this.drainTail;
+    return pending.data.id as string;
   }
 
   public async pushTableUpdate(tableId: string, updates: Partial<Tavolo>) {

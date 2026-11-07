@@ -4,6 +4,7 @@ import { supabase, IS_DEMO_MODE } from '../lib/supabase';
 import { printLabelViaAgent, printQuickLabelViaAgent, type HaccpLabelData } from '../lib/lanPrint';
 import { getPrintAgentUrl } from '../lib/printConfig';
 import { useConfirm } from './ConfirmModal';
+import { toLocalISODate } from '../lib/dateUtils';
 import { useToast } from './Toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { ShieldCheck, Save, Printer, Trash2, Edit2, X, Copy, Package, Truck, History, Zap, Plus, ArrowLeft } from 'lucide-react';
@@ -364,7 +365,7 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
         lotto: lottoValue,
         prodotto_id: p.id,
         data_preparazione: now.toISOString(),
-        data_scadenza: scad.toISOString().split('T')[0],
+        data_scadenza: toLocalISODate(scad), // stessa data stampata sull'etichetta (non UTC)
       };
       if (IS_DEMO_MODE || !supabase) {
         const stored = JSON.parse(localStorage.getItem('risto_haccp_etichette') || '[]');
@@ -775,8 +776,9 @@ export default function HaccpView({ isEmbedded }: HaccpViewProps) {
           <div className="space-y-3">
             {storico.map(et => {
               const prod = prodotti.find(p => p.id === et.prodotto_id);
-              const isScaduto = et.data_scadenza && new Date(et.data_scadenza) < new Date();
-              const isInScadenza = !isScaduto && et.data_scadenza && new Date(et.data_scadenza) < new Date(Date.now() + 2 * 86400000);
+              // Confronto tra date locali YYYY-MM-DD: il giorno di scadenza è ancora valido fino a sera
+              const isScaduto = et.data_scadenza && et.data_scadenza < toLocalISODate();
+              const isInScadenza = !isScaduto && et.data_scadenza && et.data_scadenza <= toLocalISODate(new Date(Date.now() + 2 * 86400000));
               return (
                 <div key={et.id} className={`${isEmbedded ? 'bg-surface' : 'bg-slate-900'} border ${isScaduto ? 'border-rose-500/40' : isInScadenza ? 'border-amber-500/40' : 'border-surface-light'} rounded-[20px] p-4 flex items-start gap-4`}>
                   <div className="flex-1 min-w-0">
