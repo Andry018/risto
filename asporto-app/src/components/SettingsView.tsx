@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, Palette, Printer, KeyRound,
   BarChart3, Trash2, RotateCcw, Sun, Store, UtensilsCrossed,
   Smartphone, MonitorCog, Info, Save, Check, Wifi, Database, FileText,
-  Users, Plus, Edit3, X, CalendarClock, ChevronLeft, Globe, UploadCloud,
+  Users, Plus, Edit3, X, CalendarClock, ChevronLeft, ChevronRight, Globe, UploadCloud,
   Download, FolderOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -34,8 +34,8 @@ const SECTIONS = [
   { id: 'stampa', label: 'Stampa', icon: Printer, desc: 'Stampanti e agent' },
   { id: 'comande', label: 'Comande', icon: UtensilsCrossed, desc: 'Ordini in cucina' },
   { id: 'schermo', label: 'Schermo', icon: Smartphone, desc: 'Display e sospensione' },
-  { id: 'sicurezza', label: 'Sicurezza', icon: KeyRound, desc: 'PIN responsabile' },
-  { id: 'personale', label: 'Personale', icon: CalendarClock, desc: 'Turni pranzo/sera' },
+  { id: 'sicurezza', label: 'Sicurezza', icon: KeyRound, desc: 'PIN del responsabile' },
+  { id: 'personale', label: 'Personale', icon: CalendarClock, desc: 'Operatori e turni' },
   { id: 'menu-online', label: 'Menu Online', icon: Globe, desc: 'Pubblica il menu su internet' },
   { id: 'sistema', label: 'Sistema', icon: MonitorCog, desc: 'Database e manutenzione' },
   { id: 'files', label: 'File Manager', icon: FolderOpen, desc: 'Gestisci file server' },
@@ -61,14 +61,14 @@ function Field({ label, value, onChange, placeholder, type = 'text', suffix }: {
 }) {
   return (
     <label className="block">
-      <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">{label}</span>
+      <span className="text-xs font-bold text-gray-400">{label}</span>
       <div className="flex items-center gap-2 mt-1.5">
         <input
           type={type}
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-charcoal border border-surface-light rounded-xl px-3 py-2.5 text-sm text-white font-bold placeholder:text-gray-600 focus:outline-none focus:border-gold/50 transition"
+          className="w-full bg-charcoal border border-surface-light rounded-xl px-3 py-3 text-[15px] text-white font-semibold placeholder:text-gray-600 focus:outline-none focus:border-gold/50 transition"
         />
         {suffix && <span className="text-xs text-gray-500 font-bold shrink-0">{suffix}</span>}
       </div>
@@ -80,9 +80,9 @@ const SECTION_IDS = SECTIONS.map(s => s.id);
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="border border-surface-light rounded-2xl p-5 md:p-6 bg-charcoal/40">
-      <h3 className="text-base font-black text-white">{title}</h3>
-      {subtitle && <p className="text-xs text-gray-500 mt-0.5 mb-4">{subtitle}</p>}
+    <div className="border border-surface-light rounded-2xl p-4 md:p-6 bg-surface/60">
+      <h3 className="text-lg font-black text-white">{title}</h3>
+      {subtitle && <p className="text-sm text-gray-400 mt-0.5 mb-4">{subtitle}</p>}
       {!subtitle && <div className="mb-4" />}
       {children}
     </div>
@@ -416,29 +416,30 @@ export default function SettingsView() {
 
   return (
     <div className="min-h-screen bg-charcoal text-white font-sans flex flex-col h-dvh overflow-hidden">
-      {/* Header */}
-      <div className="flex justify-between items-center py-4 md:py-6 px-5 md:px-8 shrink-0 border-b border-surface-light">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/')}
-            className="w-10 h-10 flex items-center justify-center bg-surface border border-surface-light rounded-xl text-gray-400 hover:text-gold transition cursor-pointer"
-            title="Torna al Dashboard"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="text-gold">
-              <Sun size={34} strokeWidth={1.5} />
-            </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-serif tracking-widest text-[#f5f5f5] leading-tight">IMPOSTAZIONI</h1>
-              <p className="text-[10px] tracking-[0.2em] text-gold uppercase font-semibold">Configurazione sistema</p>
-            </div>
-          </div>
+      {/* Intestazione: su telefono, dentro una sezione, 'indietro' torna all'elenco */}
+      <div className="flex items-center gap-3 px-3 md:px-8 py-3 md:py-5 shrink-0 border-b border-surface-light">
+        <button
+          onClick={() => {
+            if (mobileShowContent && window.matchMedia('(max-width: 767px)').matches) setMobileShowContent(false);
+            else navigate('/');
+          }}
+          className="w-11 h-11 flex items-center justify-center bg-surface border border-surface-light rounded-xl text-gray-300 hover:text-gold transition shrink-0"
+          aria-label="Indietro"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-gray-400">
+            <span className={mobileShowContent ? 'md:hidden' : 'hidden'}>Impostazioni</span>
+            <span className={mobileShowContent ? 'hidden md:inline' : ''}>Configurazione del locale</span>
+          </p>
+          <h1 className="text-2xl font-black text-white tracking-tight truncate">
+            <span className="md:hidden">{mobileShowContent ? SECTIONS.find(s => s.id === section)?.label : 'Impostazioni'}</span>
+            <span className="hidden md:inline">Impostazioni</span>
+          </h1>
         </div>
-        <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-          <Wifi size={14} className="text-emerald-400" />
-          Rete Locale
+        <div className="ml-auto hidden md:flex items-center gap-2 text-xs font-bold text-gray-400">
+          <Wifi size={14} className="text-emerald-400" /> Rete locale
         </div>
       </div>
 
@@ -446,7 +447,7 @@ export default function SettingsView() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
         <aside className={`w-full md:w-72 border-r border-surface-light bg-surface/30 overflow-y-auto custom-scrollbar shrink-0 flex flex-col ${mobileShowContent ? 'hidden md:flex' : ''}`}>
-          <nav className="p-3 md:p-4 space-y-1.5">
+          <nav className="m-3 md:m-0 md:p-4 md:space-y-1.5 bg-surface md:bg-transparent border border-surface-light md:border-0 rounded-2xl md:rounded-none overflow-hidden">
             {SECTIONS.map((s) => {
               const Icon = s.icon;
               const isActive = section === s.id;
@@ -454,18 +455,19 @@ export default function SettingsView() {
                 <button
                   key={s.id}
                   onClick={() => { setSection(s.id); setMobileShowContent(true); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-gold text-black shadow-lg shadow-gold/20'
-                      : 'text-gray-400 hover:bg-surface hover:text-white'
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 md:py-3 md:rounded-xl border-b border-surface-light last:border-b-0 md:border-0 transition-all cursor-pointer active:bg-charcoal ${
+                    isActive ? 'md:bg-gold md:text-black md:shadow-lg md:shadow-gold/20' : 'md:text-gray-400 md:hover:bg-surface md:hover:text-white'
                   }`}
                 >
-                  <Icon size={20} className="shrink-0" />
+                  <span className={`w-10 h-10 md:w-auto md:h-auto rounded-xl md:rounded-none bg-charcoal md:bg-transparent flex items-center justify-center shrink-0 ${isActive ? 'text-gold md:text-black' : 'text-gold md:text-current'}`}>
+                    <Icon size={20} />
+                  </span>
                   <div className="text-left flex-1 min-w-0">
-                    <p className={`text-sm font-bold ${isActive ? 'text-black' : ''}`}>{s.label}</p>
-                    <p className={`text-[10px] truncate ${isActive ? 'text-black/60' : 'text-gray-600'}`}>{s.desc}</p>
+                    <p className={`text-base md:text-sm font-bold ${isActive ? 'text-white md:text-black' : 'text-white md:text-inherit'}`}>{s.label}</p>
+                    <p className={`text-sm md:text-[11px] truncate ${isActive ? 'text-gray-400 md:text-black/60' : 'text-gray-400 md:text-gray-500'}`}>{s.desc}</p>
                   </div>
-                  {isActive && <ArrowRight size={16} className="shrink-0" />}
+                  <ChevronRight size={18} className="md:hidden text-gray-500 shrink-0" />
+                  {isActive && <ArrowRight size={16} className="hidden md:block shrink-0" />}
                 </button>
               );
             })}
@@ -484,14 +486,7 @@ export default function SettingsView() {
         </aside>
 
         {/* Content */}
-        <main className={`flex-1 overflow-y-auto custom-scrollbar p-5 md:p-8 ${!mobileShowContent ? 'hidden md:block' : ''}`}>
-          {/* Back button — mobile only */}
-          <button
-            onClick={() => setMobileShowContent(false)}
-            className="md:hidden flex items-center gap-2 text-gray-400 hover:text-white mb-4 text-sm font-bold"
-          >
-            <ChevronLeft size={18} /> {SECTIONS.find(s => s.id === section)?.label}
-          </button>
+        <main className={`flex-1 overflow-y-auto custom-scrollbar px-3 py-4 md:p-8 ${!mobileShowContent ? 'hidden md:block' : ''}`}>
           <div className="max-w-2xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300" key={section}>
 
             {/* ===== RISTORANTE ===== */}
@@ -671,11 +666,11 @@ export default function SettingsView() {
               </Card>
             )}
 
-            {section === 'sicurezza' && (
+            {section === 'personale' && (
               <Card title="Operatori" subtitle="Aggiungi, modifica o rimuovi gli operatori che possono accedere da cameriere.">
                 <div className="space-y-2 mb-4">
                   {staffUsers.length === 0 && !isAddingUser && (
-                    <p className="text-xs text-gray-500 font-bold py-4 text-center">Nessun operatore configurato. Il PIN responsabile qui sopra resta valido come accesso di riserva.</p>
+                    <p className="text-xs text-gray-500 font-bold py-4 text-center">Nessun operatore configurato. Il PIN del responsabile (sezione Sicurezza) resta valido come accesso di riserva.</p>
                   )}
                   {staffUsers.map(user => (
                     <div key={user.id} className="bg-charcoal border border-surface-light rounded-2xl p-4">
@@ -790,7 +785,7 @@ export default function SettingsView() {
 
                 <div key={turniTick} className="space-y-2">
                   {staffUsers.length === 0 && (
-                    <p className="text-xs text-gray-500 font-bold py-6 text-center">Nessun operatore configurato (vedi sopra in Sicurezza).</p>
+                    <p className="text-xs text-gray-500 font-bold py-6 text-center">Nessun operatore: aggiungili nel riquadro qui sopra.</p>
                   )}
                   {staffUsers.map(user => (
                     <div key={user.id} className="bg-charcoal border border-surface-light rounded-2xl p-3.5 flex items-center justify-between gap-3">
