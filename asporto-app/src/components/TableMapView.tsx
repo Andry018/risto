@@ -41,6 +41,26 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     }
   };
 
+  /** Salva la configurazione del tavolo. Se cambia il nome sposta anche i conti aperti: gli ordini sono
+   *  legati al tavolo tramite `ordini.nome_cliente = tavoli.nome`, e senza questo il conto resterebbe
+   *  orfano (il tavolo risulterebbe vuoto e l'ordine "in attesa" per sempre). */
+  async function saveTableConfig(edited: Tavolo) {
+    const nome = edited.nome.trim();
+    if (!nome) { addToast({ type: 'error', title: 'Nome mancante', message: 'Dai un nome al tavolo.' }); return; }
+    const dup = tavoli.find(t => t.id !== edited.id && t.nome.trim().toLowerCase() === nome.toLowerCase());
+    if (dup) { addToast({ type: 'error', title: 'Nome già esistente', message: `Esiste già un tavolo chiamato "${nome}"` }); return; }
+    const oldNome = tavoli.find(t => t.id === edited.id)?.nome;
+    if (oldNome && oldNome !== nome && !IS_DEMO_MODE && supabase) {
+      const { error } = await supabase.from('ordini').update({ nome_cliente: nome }).eq('nome_cliente', oldNome).eq('status', 'IN_ATTESA');
+      if (error) {
+        addToast({ type: 'error', title: 'Rinomina non riuscita', message: 'Impossibile spostare il conto aperto sul nuovo nome. Riprova.' });
+        return;
+      }
+    }
+    await updateTable(edited.id, { ...edited, nome });
+    setEditingTable(null);
+  }
+
   async function fetchTavoli() {
     if (IS_DEMO_MODE) {
       setTavoli(MOCK_TABLES);
@@ -705,11 +725,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                    <MapPin size={20} /> SPOSTA ORDINE / TAVOLO
                  </button>
                  <button
-                    onClick={() => {
-                      const dup = tavoli.find(t => t.id !== editingTable.id && t.nome === editingTable.nome);
-                      if (dup) { addToast({ type: 'error', title: 'Nome già esistente', message: `Esiste già un tavolo chiamato "${editingTable.nome}"` }); return; }
-                      updateTable(editingTable.id, editingTable); setEditingTable(null);
-                    }}
+                    onClick={() => void saveTableConfig(editingTable)}
                     className="w-full bg-gold text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-opacity active:opacity-80 mt-2 shadow-xl"
                   >
                     <Save size={20} /> SALVA CONFIGURAZIONE

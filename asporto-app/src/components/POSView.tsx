@@ -20,7 +20,7 @@ import { useRearScreen } from '../lib/rearScreen';
 import { calculateItemPrice, roundCents } from '../lib/priceUtils';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent, printErrorMessage } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import {
   addedIngredientsFromStoredOrderLine,
@@ -581,8 +581,30 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     }
   };
 
+  /** Stampa in corso: blocca i pulsanti di stampa così più tocchi non mandano più copie. */
+  const [printBusy, setPrintBusy] = useState<null | 'comanda' | 'ricevuta'>(null);
+
+  const handlePrintReceipt = async () => {
+    if (cart.length === 0 || printBusy) return;
+    setPrintBusy('ricevuta');
+    try {
+      await printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), {
+        lineTotals: cart.map(i => calculateItemPrice(i, ingredients)),
+        subtotal: total,
+        discount: Math.max(0, total - discountedTotal),
+        discountLabel: scontoTipo === 'percentuale' ? `${scontoValore}%` : (scontoTipo === 'fisso' ? `-€${scontoValore.toFixed(2)}` : undefined),
+      });
+      toast.addToast({ type: 'success', title: 'Ricevuta stampata', message: 'Inviata alla stampante.', duration: 2500 });
+    } catch (error) {
+      toast.addToast({ type: 'error', title: 'Stampa non riuscita', message: printErrorMessage(error), duration: 4500 });
+    } finally {
+      setPrintBusy(null);
+    }
+  };
+
   const handlePrintFull = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || printBusy) return;
+    setPrintBusy('comanda');
     const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
     const tableLabel = tableName || 'Tavolo';
 
@@ -609,9 +631,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       toast.addToast({
         type: 'error',
         title: 'Stampa non riuscita',
-        message: 'Controlla print agent, IP stampante e rete LAN.',
+        message: printErrorMessage(error),
         duration: 4500,
       });
+    } finally {
+      setPrintBusy(null);
     }
   };
 
@@ -1007,16 +1031,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
                 <div className="flex-1 min-h-0 p-4 md:p-6 space-y-3 overflow-y-auto hide-scrollbar">
                   <button
-                    onClick={() => printReceiptViaAgent(cart, tableName || 'POS', discountedTotal, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), {
-                      lineTotals: cart.map(i => calculateItemPrice(i, ingredients)),
-                      subtotal: total,
-                      discount: Math.max(0, total - discountedTotal),
-                      discountLabel: scontoTipo === 'percentuale' ? `${scontoValore}%` : (scontoTipo === 'fisso' ? `-€${scontoValore.toFixed(2)}` : undefined),
-                    })}
-                    disabled={cart.length === 0}
+                    onClick={() => void handlePrintReceipt()}
+                    disabled={cart.length === 0 || !!printBusy}
                     className="w-full bg-charcoal hover:bg-surface-light text-white font-black text-xs py-4 rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                   >
-                    <Receipt size={14} /> STAMPA RICEVUTA
+                    {printBusy === 'ricevuta' ? 'STAMPA IN CORSO...' : <><Receipt size={14} /> STAMPA RICEVUTA</>}
                   </button>
                   <button
                     onClick={() => setShowBillReview(false)}
@@ -1447,10 +1466,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 {/* STAMPA button - prints everything */}
                 <button
                   onClick={handlePrintFull}
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || !!printBusy}
                   className="w-full bg-charcoal hover:bg-surface-light text-amber-400 font-black text-xs py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-surface-light transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
                 >
-                  <Printer className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> STAMPA
+                  {printBusy === 'comanda' ? 'STAMPA...' : <><Printer className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> STAMPA</>}
                 </button>
                 {(() => {
                   const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
