@@ -268,6 +268,11 @@ export default function WaiterMobileView() {
       setActiveTab('RIEPILOGO');
       return true;
     } else {
+      // Nessun ordine sul server. Se arriviamo da un evento realtime (skipIfDirty) e il carrello ha
+      // righe non ancora inviate, NON svuotarlo: succede subito dopo l'apertura del tavolo, quando
+      // il salvataggio di stato/coperti genera un evento su `tavoli` mentre il carrello contiene solo
+      // la riga COPERTO appena aggiunta (che altrimenti sparirebbe e mancherebbe nel pre-conto).
+      if (opts.skipIfDirty && hasUnsavedChanges()) return false;
       setActiveOrderId(null);
       savedItemQtysRef.current = new Map();
       if (opts.keepCart) return false;

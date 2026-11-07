@@ -268,6 +268,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       savedItemQtysRef.current = qtyMap;
       if (mappedCart.length > 0) setShowBillReview(true);
     } else if (tableId) {
+      // Nessun ordine sul server: da un evento realtime (force=false) non sovrascrivere un carrello
+      // con piatti non ancora inviati, altrimenti resterebbe solo la riga COPERTO.
+      if (!force && hasUnsavedChanges()) return;
       const { data: table } = await supabase.from('tavoli').select('clienti').eq('id', tableId).single();
       if (table) {
         setTableClienti(table.clienti || 0);
