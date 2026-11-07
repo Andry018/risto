@@ -20,6 +20,10 @@ const CATEGORY_ICONS: Record<string, { icon: React.ReactNode; bg: string; text: 
   'Bevande':       { icon: <Wine size={22} />, bg: 'from-cyan-600/80 to-cyan-700', text: 'text-cyan-50' },
 };
 
+const ZOOM_KEY = 'risto_menu_zoom';
+const ZOOM_STEPS = [1, 1.15, 1.3, 1.5];
+const LANG_LABEL: Record<string, string> = { it: 'IT', en: 'EN', fr: 'FR', de: 'DE' };
+
 declare global {
   interface Window { googleTranslateElementInit: () => void; }
 }
@@ -30,6 +34,16 @@ export default function PublicMenuView() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentLang, setCurrentLang] = useState('it');
+  /** Testo più grande: SOLO se il cliente lo sceglie (A+). Parte sempre da 100% e resta salvato su quel telefono. */
+  const [zoom, setZoom] = useState<number>(() => {
+    try { const z = Number(localStorage.getItem(ZOOM_KEY)); return ZOOM_STEPS.includes(z) ? z : 1; } catch { return 1; }
+  });
+  const changeZoom = (dir: 1 | -1) => {
+    const i = ZOOM_STEPS.indexOf(zoom);
+    const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, i + dir))];
+    setZoom(next);
+    try { localStorage.setItem(ZOOM_KEY, String(next)); } catch { /* storage non disponibile */ }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -162,14 +176,33 @@ export default function PublicMenuView() {
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-black tracking-tight leading-none">Il Girasole</h1>
-            <p className="text-[10px] font-bold text-[#ebc22d] mt-0.5 uppercase tracking-[0.15em]">Ristorante &bull; Pizzeria &bull; Gastronomia</p>
+            <p className="text-[10px] font-bold text-[#ebc22d] mt-0.5 uppercase tracking-wide truncate">Ristorante &bull; Pizzeria</p>
             {tableName && <p className="text-xs font-black text-white/80 mt-1">Tavolo {tableName}</p>}
+          </div>
+          <div className="flex items-center bg-white/10 backdrop-blur-md rounded-full">
+            <button
+              onClick={() => changeZoom(-1)}
+              disabled={zoom === ZOOM_STEPS[0]}
+              aria-label="Testo più piccolo"
+              className="w-8 h-9 flex items-center justify-center text-white font-bold text-xs disabled:opacity-30"
+            >
+              A−
+            </button>
+            <button
+              onClick={() => changeZoom(1)}
+              disabled={zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1]}
+              aria-label="Testo più grande"
+              className="w-8 h-9 flex items-center justify-center text-white font-bold text-base disabled:opacity-30"
+            >
+              A+
+            </button>
           </div>
           <button
             onClick={() => setShowLangPicker(!showLangPicker)}
-            className="p-2 bg-white/10 backdrop-blur-md rounded-full hover:bg-white/20 transition-all active:scale-95"
+            aria-label="Cambia lingua"
+            className="h-9 px-3 bg-white/10 backdrop-blur-md rounded-full hover:bg-white/20 transition-all active:scale-95"
           >
-            <Globe size={16} className="text-white" />
+            <span className="flex items-center gap-1 text-white text-xs font-bold"><Globe size={16} className="text-white" /> {LANG_LABEL[currentLang] ?? 'IT'}</span>
           </button>
         </div>
 
@@ -198,7 +231,7 @@ export default function PublicMenuView() {
       </header>
 
       {/* Scrollable area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar" style={zoom !== 1 ? { zoom } : undefined}>
         {/* Search */}
         <div className="px-5 -mt-4 relative z-10">
           <div className="bg-white rounded-2xl shadow-lg shadow-black/5 border border-gray-100 flex items-center px-4 py-0">
