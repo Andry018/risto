@@ -5,7 +5,7 @@ import type { Product, Ingredient, Tavolo, OrderCarrelloItem, CustomizedItem, Po
 import { PORTATE } from '../types/entities';
 import { newUniqueId } from '../lib/id';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_TABLES } from '../lib/MockData';
-import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Receipt, WifiOff, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, CalendarClock, LayoutGrid, BarChart3, Settings, Package, ShieldCheck, AlertTriangle, Info } from 'lucide-react';
+import { Plus, Minus, Save, ChevronLeft, Edit3, Trash2, Receipt, RefreshCw, BookOpen, X, CheckCircle2, Clock, Printer, ChefHat, AlertTriangle } from 'lucide-react';
 import BillsHistoryModal from './BillsHistoryModal';
 import ChangelogModal from './ChangelogModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
@@ -29,6 +29,7 @@ import { parseAperturaFromNote, setAperturaInNote, clearAperturaInNote } from '.
 import { notifyNewOrder } from '../lib/notify';
 import TableGrid from './TableGrid';
 import WaiterMenuTab from './WaiterMenuTab';
+import WaiterHub from './WaiterHub';
 import Dialog from './Dialog';
 import PaninoBuilderModal from './PaninoBuilderModal';
 import CustomItemModal from './CustomItemModal';
@@ -1055,117 +1056,26 @@ export default function WaiterMobileView() {
       
       {!selectedTable ? (
         activeSection === 'hub' ? (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-6 pb-4 shrink-0">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h1 className="text-3xl font-black italic text-gold uppercase tracking-tighter">
-                    {currentUser ? `Ciao, ${currentUser.name}` : 'Il Girasole'}
-                  </h1>
-                  {currentUser && (
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-0.5">{currentUser.role}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <PrinterStatusBadge />
-                  {pendingSyncCount > 0 && (
-                    <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] font-black uppercase tracking-wider animate-pulse">
-                      <WifiOff size={10} /> {pendingSyncCount}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => setShowChangelog(true)}
-                    className="p-2 bg-surface rounded-xl text-gray-400 hover:text-gold transition-colors"
-                    title="Novità e changelog"
-                    aria-label="Novità e changelog"
-                  >
-                    <Info size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
-                      if (ok) staffLogout();
-                    }}
-                    className="p-2 bg-surface rounded-xl text-gray-400 hover:text-red-400 transition-colors"
-                    title="Esci staff"
-                    aria-label="Esci dall'area staff"
-                  >
-                    <LogOut size={20} />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3 custom-scrollbar">
-              <HubCard
-                icon={<LayoutGrid size={24} />}
-                title="Sala & Tavoli"
-                desc="Gestisci i tavoli e prendi le comande"
-                accent="bg-gold/10 text-gold"
-                onClick={() => setActiveSection('sala')}
-              />
-              <HubCard
-                icon={<BookOpen size={24} />}
-                title="Prenotazioni"
-                desc="Libro prenotazioni di oggi"
-                accent="bg-amber-500/10 text-amber-400"
-                onClick={() => setIsReservationsOpen(true)}
-              />
-              {currentUser && (
-                <HubCard
-                  icon={<CalendarClock size={24} />}
-                  title="Il mio turno"
-                  desc="Segna pranzo e/o sera"
-                  accent="bg-emerald-500/10 text-emerald-400"
-                  onClick={() => setTurnoModalOpen(true)}
-                />
-              )}
-              {(!currentUser || currentUser.role === 'admin' || currentUser.role === 'kitchen') && (
-                <>
-                  <HubCard
-                    icon={<ChefHat size={24} />}
-                    title="Cucina"
-                    desc="Disponibilità piatti e menu"
-                    accent="bg-sky-500/10 text-sky-400"
-                    onClick={() => navigate('/kitchen')}
-                  />
-                  <HubCard
-                    icon={<Package size={24} />}
-                    title="Magazzino"
-                    desc="Scorte e carico/scarico"
-                    accent="bg-orange-500/10 text-orange-400"
-                    onClick={() => navigate('/magazzino')}
-                  />
-                  <HubCard
-                    icon={<ShieldCheck size={24} />}
-                    title="HACCP"
-                    desc="Etichette & tracciabilità"
-                    accent="bg-emerald-600/10 text-emerald-400"
-                    onClick={() => navigate('/haccp')}
-                  />
-                </>
-              )}
-              {(!currentUser || currentUser.role === 'admin') && (
-                <>
-                  <HubCard
-                    icon={<BarChart3 size={24} />}
-                    title="Report"
-                    desc="Incassi e statistiche"
-                    accent="bg-fuchsia-500/10 text-fuchsia-400"
-                    onClick={() => navigate('/reports')}
-                  />
-                  <HubCard
-                    icon={<Settings size={24} />}
-                    title="Impostazioni"
-                    desc="Configurazione del locale"
-                    accent="bg-gray-500/10 text-gray-400"
-                    onClick={() => navigate('/settings')}
-                  />
-                </>
-              )}
-            </div>
-          </div>
+          <WaiterHub
+            key={turnoTick}
+            user={currentUser}
+            tables={tables}
+            reservations={reservations}
+            now={now}
+            turnoPranzo={!!currentUser && hasTurno(currentUser.id, toLocalISODate(), 'pranzo')}
+            turnoSera={!!currentUser && hasTurno(currentUser.id, toLocalISODate(), 'sera')}
+            pendingSync={pendingSyncCount}
+            printerBadge={<PrinterStatusBadge />}
+            onOpenSala={() => setActiveSection('sala')}
+            onOpenReservations={() => setIsReservationsOpen(true)}
+            onOpenTurno={() => setTurnoModalOpen(true)}
+            onNavigate={path => navigate(path)}
+            onChangelog={() => setShowChangelog(true)}
+            onLogout={async () => {
+              const ok = await confirm({ title: 'Uscita', message: 'Uscire? Dovrai reinserire il PIN.' });
+              if (ok) staffLogout();
+            }}
+          />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-6 pb-2 space-y-4">
@@ -1835,26 +1745,6 @@ export default function WaiterMobileView() {
         </Dialog>
       )}
     </div>
-  );
-}
-
-function HubCard({ icon, title, desc, accent, onClick }: {
-  icon: React.ReactNode; title: string; desc: string; accent: string; onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full bg-surface border border-surface-light rounded-3xl p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all hover:border-gold/30"
-    >
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${accent}`}>
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <h3 className="font-black text-white text-base uppercase tracking-tight">{title}</h3>
-        <p className="text-xs text-gray-400 font-bold mt-0.5">{desc}</p>
-      </div>
-      <ChevronRight size={20} className="text-gray-400 shrink-0" />
-    </button>
   );
 }
 
