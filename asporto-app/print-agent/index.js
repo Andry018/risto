@@ -594,7 +594,7 @@ console.log('Stampa automatica ordini DB disattivata (solo richieste esplicite /
 /**
  * Piatti per il menu Kindle, letti come fa la pagina pubblica /menu (chiave anon, sola lettura).
  * La chiave si prende da asporto-app/.env (sempre aggiornata, la usa la build) e in mancanza dal .env
- * dell'agent. Risultato tenuto 20 s per non interrogare il DB a ogni richiesta.
+ * dell'agent. Risultato tenuto 10 s per non interrogare il DB a ogni richiesta.
  */
 let menuProductsCache = { at: 0, data: null };
 function readAnonKey() {
@@ -606,7 +606,7 @@ function readAnonKey() {
   return supabaseKey;
 }
 async function fetchMenuProducts() {
-  if (menuProductsCache.data && Date.now() - menuProductsCache.at < 20_000) return menuProductsCache.data;
+  if (menuProductsCache.data && Date.now() - menuProductsCache.at < 10_000) return menuProductsCache.data;
   const base = (process.env.KINDLE_SUPABASE_URL || 'http://127.0.0.1:54321').replace(/\/+$/, '');
   const key = readAnonKey();
   const r = await fetch(`${base}/rest/v1/prodotti?select=nome,prezzo,categoria,sottocategoria,ingredienti,disponibile&disponibile=eq.true`, {

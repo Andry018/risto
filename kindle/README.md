@@ -4,7 +4,7 @@ Il Kindle (11ª gen, jailbreak + KOReader) usato come lavagna del menu del giorn
 
 - **Apri**: nella Libreria del Kindle tocca **"Menu Girasole"** (ha il logo come copertina).
   KOReader si apre direttamente sul menu a schermo intero, senza barre.
-- **Aggiornamento**: ogni minuto scarica il menu dal gestionale; lo schermo si ridisegna solo se i piatti
+- **Aggiornamento**: ogni 30 secondi scarica il menu dal gestionale; lo schermo si ridisegna solo se i piatti
   cambiano (piatto esaurito, nuovo piatto…). Se il menu non sta in una schermata, le pagine girano ogni 20 s.
 - **Standby**: finché il menu è aperto il Kindle non si spegne da solo. Col tasto di accensione si spegne e
   mostra il **logo del ristorante**.

@@ -3,7 +3,7 @@ Menu Girasole: il Kindle come lavagna del menu del giorno.
 
 - Si apre dallo scriptlet "Menu Girasole" nella Libreria (o da KOReader: menu Strumenti → Menu Girasole).
 - Mostra a schermo intero l'immagine generata dal gestionale (print agent: /kindle/menu.png) e la
-  riscarica ogni minuto; ridisegna lo schermo SOLO se il menu è cambiato (ETag), niente lampeggi inutili.
+  riscarica ogni 30 secondi; ridisegna lo schermo SOLO se il menu è cambiato (ETag), niente lampeggi inutili.
 - Finché è aperto il Kindle non va in standby da solo. Col tasto di accensione lo standby mostra il logo.
 - Tocco semplice: non fa nulla (clienti). Pressione lunga: chiede se tornare al Kindle.
 
@@ -33,7 +33,7 @@ local Screen = Device.screen
 
 local DEFAULT_BASE = "https://gestionale.90-minuti.it/print-agent/kindle/"
 local DEFAULT_QUERY = "cat=Antipasti,Primi,Secondi,Contorni,Dolci"
-local REFRESH_SECONDS = 60
+local REFRESH_SECONDS = 30
 local PAGE_SECONDS = 20 -- se il menu non sta in una pagina, cambia pagina ogni 20 s
 local AUTOSTART_FLAG = "/mnt/us/koreader/menugirasole.autostart"
 local CACHE_DIR = "/tmp"
