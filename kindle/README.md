@@ -10,7 +10,8 @@ Il Kindle (11ª gen, jailbreak + KOReader) usato come lavagna del menu del giorn
   mostra **l'ultimo menu** (oppure il **logo**: si sceglie dalla pressione lunga). Da spento non si aggiorna.
 - **Pressione lunga** sullo schermo: "Torna al Kindle", "In standby: menu/logo", "Testo: normale/grande/molto grande",
   "Lingua: Italiano/English", "Resta sul menu". Testo e lingua restano salvati sul Kindle (default: normale, italiano).
-  Con il testo grande il menu può andare su più pagine, che girano da sole.
+  Con il testo grande il menu può andare su più pagine: girano da sole ogni 20 s, oppure si sfogliano col dito
+  (sinistra/su = avanti, destra/giù = indietro; dopo uno sfoglio il giro automatico si ferma 1 minuto).
   Il tocco semplice non fa nulla (clienti).
 - All'uscita il salvaschermo torna quello di prima (anche se KOReader si era chiuso male: al riavvio).
 

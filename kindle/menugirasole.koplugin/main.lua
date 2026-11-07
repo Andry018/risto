@@ -37,6 +37,7 @@ local DEFAULT_BASE = "https://gestionale.90-minuti.it/print-agent/kindle/"
 local DEFAULT_QUERY = "cat=Antipasti,Primi,Secondi,Contorni,Dolci"
 local REFRESH_SECONDS = 30
 local PAGE_SECONDS = 20 -- se il menu non sta in una pagina, cambia pagina ogni 20 s
+local MANUAL_PAUSE_SECONDS = 60 -- dopo che qualcuno sfoglia a mano, niente giro automatico per 1 minuto
 local AUTOSTART_FLAG = "/mnt/us/koreader/menugirasole.autostart"
 local CACHE_DIR = "/tmp"
 -- Dimensione del testo (scelta dalla pressione lunga): normale, grande, molto grande
@@ -107,6 +108,7 @@ function MenuScreen:init()
         self.ges_events = {
             Tap = { GestureRange:new{ ges = "tap", range = self.dimen } },
             Hold = { GestureRange:new{ ges = "hold", range = self.dimen } },
+            Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } },
         }
     end
     self.etag = nil
@@ -167,13 +169,8 @@ function MenuScreen:setImage(path)
 end
 
 --- Scarica il menu; se è cambiato lo ridisegna. Si ripianifica da solo.
-function MenuScreen:refresh()
-    UIManager:unschedule(self._refresh)
-    local multi = self.pages > 1
-    if multi then
-        self.page = self.page % self.pages + 1
-        self.etag = nil -- pagina diversa = immagine diversa
-    end
+--- Scarica la pagina corrente (self.page); se è cambiata la ridisegna.
+function MenuScreen:load()
     local body, code, headers = httpGet(self:pageUrl(), self.etag)
     if code == 200 and body and #body > 0 then
         self.pages = tonumber(headers["x-pages"]) or 1
@@ -192,9 +189,39 @@ function MenuScreen:refresh()
         end
     elseif code ~= 304 and not self.image_path then
         logger.warn("MenuGirasole: menu non disponibile, codice", code)
-        self:setMessage(_("Il Girasole\n\nMenu non raggiungibile.\nControlla il Wi-Fi: riprovo ogni minuto.\n\n(tieni premuto per uscire)"))
+        self:setMessage(_("Il Girasole\n\nMenu non raggiungibile.\nControlla il Wi-Fi: riprovo tra poco.\n\n(tieni premuto per uscire)"))
     end
+end
+
+--- Giro automatico: controlla il menu e, se ha più pagine, passa alla successiva
+--- (salvo che qualcuno abbia appena sfogliato a mano). Si ripianifica da solo.
+function MenuScreen:refresh()
+    UIManager:unschedule(self._refresh)
+    if self.pages > 1 and os.time() >= (self.manual_until or 0) then
+        self.page = self.page % self.pages + 1
+        self.etag = nil -- pagina diversa = immagine diversa
+    end
+    self:load()
     UIManager:scheduleIn(self.pages > 1 and PAGE_SECONDS or REFRESH_SECONDS, self._refresh)
+end
+
+--- Sfoglia a mano: dito verso sinistra/su = pagina dopo, verso destra/giù = pagina prima.
+function MenuScreen:onSwipe(_, ges)
+    if self.pages <= 1 then return true end
+    local dir = ges and ges.direction
+    if dir == "west" or dir == "north" then
+        self.page = self.page % self.pages + 1
+    elseif dir == "east" or dir == "south" then
+        self.page = (self.page - 2) % self.pages + 1
+    else
+        return true
+    end
+    self.etag = nil
+    self.manual_until = os.time() + MANUAL_PAUSE_SECONDS
+    UIManager:unschedule(self._refresh)
+    self:load()
+    UIManager:scheduleIn(PAGE_SECONDS, self._refresh)
+    return true
 end
 
 function MenuScreen:onShow()
