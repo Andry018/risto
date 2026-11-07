@@ -8,10 +8,17 @@ Menu Girasole: il Kindle come lavagna del menu del giorno.
 - Tocco semplice: non fa nulla (clienti). Pressione lunga: chiede se tornare al Kindle.
 
 Configurazione (opzionale) in KOReader → settings.reader.lua:
-  menugirasole_url = "http://192.168.1.250/print-agent/kindle/menu.png?cat=Antipasti,Primi,Secondi,Contorni,Dolci"
+  menugirasole_url = "https://gestionale.90-minuti.it/print-agent/kindle/menu?cat=Primi,Secondi"
+Si usa l'indirizzo pubblico (funziona da qualsiasi Wi-Fi). Niente estensione .png: Cloudflare
+metterebbe l'immagine in cache per ore.
 --]]--
 
+local Blitbuffer = require("ffi/blitbuffer")
+local CenterContainer = require("ui/widget/container/centercontainer")
 local ConfirmBox = require("ui/widget/confirmbox")
+local Font = require("ui/font")
+local FrameContainer = require("ui/widget/container/framecontainer")
+local TextBoxWidget = require("ui/widget/textboxwidget")
 local Device = require("device")
 local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
@@ -24,7 +31,7 @@ local logger = require("logger")
 local _ = require("gettext")
 local Screen = Device.screen
 
-local DEFAULT_BASE = "http://192.168.1.250/print-agent/kindle/"
+local DEFAULT_BASE = "https://gestionale.90-minuti.it/print-agent/kindle/"
 local DEFAULT_QUERY = "cat=Antipasti,Primi,Secondi,Contorni,Dolci"
 local REFRESH_SECONDS = 60
 local PAGE_SECONDS = 20 -- se il menu non sta in una pagina, cambia pagina ogni 20 s
@@ -37,7 +44,7 @@ local CACHE_DIR = "/tmp"
 
 --- GET con timeout brevi. Ritorna body, status, headers (body nil se errore di rete).
 local function httpGet(url, etag)
-    local http = require("socket.http")
+    local http = url:sub(1, 6) == "https:" and require("ssl.https") or require("socket.http")
     local ltn12 = require("ltn12")
     local socketutil = require("socketutil")
     local chunks = {}
@@ -93,13 +100,35 @@ function MenuScreen:init()
     self.pages = 1
     self.counter = 0
     self.image_path = nil
-    self[1] = nil
     self._refresh = function() self:refresh() end
+    self:setMessage(_("Il Girasole
+
+Caricamento del menu…"))
 end
 
 function MenuScreen:pageUrl()
     local sep = self.menu_url:find("?", 1, true) and "&" or "?"
     return string.format("%s%sw=%d&h=%d&page=%d", self.menu_url, sep, Screen:getWidth(), Screen:getHeight(), self.page)
+end
+
+--- Schermata bianca con un messaggio (prima del primo menu, o se il menu non arriva).
+function MenuScreen:setMessage(text)
+    if self.image_path then return end -- c'è già un menu da mostrare: meglio quello che un errore
+    if self[1] then self[1]:free() end
+    self[1] = FrameContainer:new{
+        width = self.dimen.w, height = self.dimen.h,
+        background = Blitbuffer.COLOR_WHITE, bordersize = 0, padding = 0,
+        CenterContainer:new{
+            dimen = Geom:new{ w = self.dimen.w, h = self.dimen.h },
+            TextBoxWidget:new{
+                text = text,
+                face = Font:getFace("cfont", 26),
+                width = math.floor(self.dimen.w * 0.8),
+                alignment = "center",
+            },
+        },
+    }
+    UIManager:setDirty(self, "full")
 end
 
 function MenuScreen:setImage(path)
@@ -137,6 +166,12 @@ function MenuScreen:refresh()
         end
     elseif code ~= 304 and not self.image_path then
         logger.warn("MenuGirasole: menu non disponibile, codice", code)
+        self:setMessage(_("Il Girasole
+
+Menu non raggiungibile.
+Controlla il Wi-Fi: riprovo ogni minuto.
+
+(tieni premuto per uscire)"))
     end
     UIManager:scheduleIn(self.pages > 1 and PAGE_SECONDS or REFRESH_SECONDS, self._refresh)
 end
@@ -198,7 +233,7 @@ function MenuGirasole:base()
     if url and url ~= "" then
         return url:match("^(.-/kindle/)") or DEFAULT_BASE, url
     end
-    return DEFAULT_BASE, DEFAULT_BASE .. "menu.png?" .. DEFAULT_QUERY
+    return DEFAULT_BASE, DEFAULT_BASE .. "menu?" .. DEFAULT_QUERY
 end
 
 --- Scarica il logo per lo standby e lo imposta come salvaschermo (ricordando quello di prima).
@@ -206,7 +241,7 @@ function MenuGirasole:setLogoScreensaver()
     local base = self:base()
     local path = "/mnt/us/koreader/menugirasole-logo.png"
     if not fileExists(path) then
-        local body, code = httpGet(string.format("%slogo.png?w=%d&h=%d", base, Screen:getWidth(), Screen:getHeight()))
+        local body, code = httpGet(string.format("%slogo?w=%d&h=%d", base, Screen:getWidth(), Screen:getHeight()))
         if code == 200 and body and #body > 0 then writeFile(path, body) end
     end
     if not fileExists(path) then return end

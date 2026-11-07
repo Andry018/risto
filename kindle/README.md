@@ -13,14 +13,14 @@ Il Kindle (11ª gen, jailbreak + KOReader) usato come lavagna del menu del giorn
 
 ## Cosa mostra
 L'immagine la genera il print agent del gestionale:
-`http://192.168.1.250/print-agent/kindle/menu.png?cat=Antipasti,Primi,Secondi,Contorni,Dolci`
+`https://gestionale.90-minuti.it/print-agent/kindle/menu?cat=Antipasti,Primi,Secondi,Contorni,Dolci`
 
 Parametri: `cat` (categorie, separate da virgola), `ingr=0` (senza ingredienti), `prezzi=0` (senza prezzi).
 Per cambiarli, in KOReader → `settings.reader.lua` aggiungi:
 ```lua
-["menugirasole_url"] = "http://192.168.1.250/print-agent/kindle/menu.png?cat=Primi,Secondi",
+["menugirasole_url"] = "https://gestionale.90-minuti.it/print-agent/kindle/menu?cat=Primi,Secondi",
 ```
-Anteprima dal PC: apri l'URL sopra nel browser (rete del locale).
+Anteprima dal PC: apri l'URL sopra nel browser. Usa sempre l'indirizzo senza `.png` (Cloudflare metterebbe in cache i .png).
 
 ## Installazione (via SSH/SFTP, porta 2222)
 - `menugirasole.koplugin/` → `/mnt/us/koreader/plugins/menugirasole.koplugin/`

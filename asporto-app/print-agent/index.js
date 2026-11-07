@@ -630,15 +630,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Immagini per il Kindle (plugin KOReader in /kindle): menu del giorno e logo per lo standby
-  if (req.method === 'GET' && (reqUrl.pathname === '/kindle/menu.png' || reqUrl.pathname === '/kindle/logo.png')) {
+  // Senza estensione: Cloudflare mette in cache i .png per ore (menu vecchio sul Kindle), le rotte senza no.
+  const kindleRoute = { '/kindle/menu': 'menu', '/kindle/menu.png': 'menu', '/kindle/logo': 'logo', '/kindle/logo.png': 'logo' }[reqUrl.pathname];
+  if (req.method === 'GET' && kindleRoute) {
     try {
       const km = require('./kindleMenu');
       const query = Object.fromEntries(reqUrl.searchParams);
-      const result = reqUrl.pathname === '/kindle/logo.png'
+      const result = kindleRoute === 'logo'
         ? km.renderLogoPng(query)
         : km.renderMenuPng(await fetchMenuProducts(), query);
       res.setHeader('ETag', result.etag);
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-store'); // niente cache intermedie (Cloudflare)
       if (result.pages) res.setHeader('X-Pages', String(result.pages));
       if (req.headers['if-none-match'] === result.etag) { res.statusCode = 304; return res.end(); }
       res.setHeader('Content-Type', 'image/png');
