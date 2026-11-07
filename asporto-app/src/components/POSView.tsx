@@ -1253,6 +1253,13 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           {(() => {
             const showSub = activeCategory === 'Bevande' || (!activeCategory && filteredProducts.some(p => p.categoria === 'Bevande'));
             const gridClass = 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 xxl:grid-cols-5 gap-4';
+            // Va dichiarata PRIMA dei return: renderProductCard (sotto) la usa, e il codice dopo un return
+            // non viene mai eseguito (il minificatore lo elimina → "P is not defined" all'apertura del tavolo)
+            const stockByProdotto = new Map<string, MagazzinoArticolo>(
+              magazzino
+                .filter((a): a is MagazzinoArticolo & { prodotto_id: string } => !!a.prodotto_id)
+                .map(a => [a.prodotto_id, a]),
+            );
 
             if (showSub) {
               const bevande = filteredProducts.filter(p => p.categoria === 'Bevande');
@@ -1278,12 +1285,6 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
             }
 
             return <div className={gridClass}>{filteredProducts.map(p => renderProductCard(p))}</div>;
-
-            const stockByProdotto = new Map<string, MagazzinoArticolo>(
-              magazzino
-                .filter((a): a is MagazzinoArticolo & { prodotto_id: string } => !!a.prodotto_id)
-                .map(a => [a.prodotto_id, a]),
-            );
 
             function renderProductCard(product: Product) {
               const missingIngredients = product.ingredienti?.filter(ingName => {
