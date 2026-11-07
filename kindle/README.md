@@ -8,6 +8,8 @@ Il Kindle (11ª gen, jailbreak + KOReader) usato come lavagna del menu del giorn
   cambiano (piatto esaurito, nuovo piatto…). Se il menu non sta in una schermata, le pagine girano ogni 20 s.
 - **Standby**: finché il menu è aperto il Kindle non si spegne da solo. Col tasto di accensione si spegne e
   mostra **l'ultimo menu** (oppure il **logo**: si sceglie dalla pressione lunga). Da spento non si aggiorna.
+- **Barra in basso**: bandiere 🇮🇹/🇬🇧 per la lingua (quella attiva ha il bordo spesso), **a** / **A** per
+  rimpicciolire/ingrandire il testo, e se il menu ha più pagine **‹ 1/2 ›** per sfogliarle.
 - **Pressione lunga** sullo schermo: "Torna al Kindle", "In standby: menu/logo", "Testo: normale/grande/molto grande",
   "Lingua: Italiano/English", "Resta sul menu". Testo e lingua restano salvati sul Kindle (default: normale, italiano).
   Con il testo grande il menu può andare su più pagine: girano da sole ogni 20 s, oppure si sfogliano col dito

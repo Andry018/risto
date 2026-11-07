@@ -21,6 +21,13 @@ local ButtonDialog = require("ui/widget/buttondialog")
 local Font = require("ui/font")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local TextBoxWidget = require("ui/widget/textboxwidget")
+local TextWidget = require("ui/widget/textwidget")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
+local LineWidget = require("ui/widget/linewidget")
+local OverlapGroup = require("ui/widget/overlapgroup")
+local VerticalGroup = require("ui/widget/verticalgroup")
+local Size = require("ui/size")
 local Device = require("device")
 local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
@@ -51,6 +58,10 @@ local function nextOf(list, current)
     return list[2] or list[1], list[1]
 end
 local LOGO_PATH = "/mnt/us/koreader/menugirasole-logo.png"
+-- cartella del plugin (per le icone delle bandiere)
+local PLUGIN_DIR = (debug.getinfo(1, "S").source:match("^@(.*/)") or "./")
+local FLAG_IT = PLUGIN_DIR .. "icons/flag-it.png"
+local FLAG_EN = PLUGIN_DIR .. "icons/flag-en.png"
 local STANDBY_MENU_PATH = "/mnt/us/koreader/menugirasole-standby.png"
 
 -- ------------------------------------------------------------------------------------------------
@@ -96,6 +107,47 @@ end
 -- Schermata del menu
 -- ------------------------------------------------------------------------------------------------
 
+--- Pulsante della barra in basso: bordo spesso se selezionato, grigio se disattivato.
+local BarButton = InputContainer:extend{
+    width = nil, height = nil,
+    content = nil, -- widget mostrato dentro (bandiera o testo)
+    selected = false,
+    enabled = true,
+    callback = nil,
+}
+
+function BarButton:init()
+    self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height }
+    local bs = self.selected and Size.border.thick * 2 or Size.border.thin * 2
+    self[1] = FrameContainer:new{
+        width = self.width, height = self.height,
+        padding = 0, margin = 0, bordersize = bs,
+        radius = Size.radius.button,
+        background = Blitbuffer.COLOR_WHITE, -- selezione = bordo spesso (lo sfondo grigio sull'e-ink sembra sporco)
+        CenterContainer:new{
+            dimen = Geom:new{ w = self.width - 2 * bs, h = self.height - 2 * bs },
+            self.content,
+        },
+    }
+    self.ges_events = {
+        TapBarButton = { GestureRange:new{ ges = "tap", range = function() return self.dimen end } },
+    }
+end
+
+function BarButton:onTapBarButton()
+    if self.enabled and self.callback then self.callback() end
+    return true -- il tocco sulla barra non arriva al menu sotto
+end
+
+local function barText(text, size, enabled)
+    return TextWidget:new{
+        text = text,
+        face = Font:getFace("cfont", size),
+        bold = true,
+        fgcolor = enabled == false and Blitbuffer.COLOR_GRAY or Blitbuffer.COLOR_BLACK,
+    }
+end
+
 local MenuScreen = InputContainer:extend{
     menu_url = nil,
     on_exit = nil,
@@ -117,14 +169,92 @@ function MenuScreen:init()
     self.counter = 0
     self.image_path = nil
     self._refresh = function() self:refresh() end
+    -- barra dei pulsanti in basso; il menu usa lo spazio sopra
+    self.bar_h = math.floor(self.dimen.h * 0.075)
+    self.line_h = Size.line.thick or 2
+    self.content_h = self.dimen.h - self.bar_h - self.line_h
     self:setMessage(_("Il Girasole\n\nCaricamento del menu…"))
+end
+
+--- Barra: bandiere (lingua) a sinistra, pagine al centro, a / A (testo) a destra.
+function MenuScreen:buildBar()
+    local h = self.bar_h
+    local bh = math.floor(h * 0.78)
+    local view = self.get_view and self.get_view() or { zoom = 1, lang = "it" }
+    local gap = HorizontalSpan:new{ width = math.floor(h * 0.18) }
+    local edge = HorizontalSpan:new{ width = math.floor(self.dimen.w * 0.03) }
+
+    local function flag(file, lang)
+        return BarButton:new{
+            width = math.floor(bh * 1.45), height = bh,
+            selected = view.lang == lang,
+            content = ImageWidget:new{ file = file, width = math.floor(bh * 1.05), height = math.floor(bh * 0.7), scale_factor = 0, file_do_cache = true },
+            callback = function()
+                if view.lang ~= lang and self.set_view then self.set_view({ lang = lang }); self:reload() end
+            end,
+        }
+    end
+
+    local zi = 1
+    for i, z in ipairs(ZOOMS) do if z.value == view.zoom then zi = i end end
+    local function zoomBtn(label, size, dir)
+        local target = ZOOMS[zi + dir]
+        return BarButton:new{
+            width = bh, height = bh,
+            enabled = target ~= nil,
+            content = barText(label, size, target ~= nil),
+            callback = function()
+                if target and self.set_view then self.set_view({ zoom = target.value }); self:reload() end
+            end,
+        }
+    end
+
+    local left = HorizontalGroup:new{ edge, flag(FLAG_IT, "it"), gap, flag(FLAG_EN, "en") }
+    local right = HorizontalGroup:new{ zoomBtn("a", math.floor(bh * 0.32), -1), gap, zoomBtn("A", math.floor(bh * 0.5), 1), edge }
+    left.overlap_align = "left"
+    right.overlap_align = "right"
+    local group = OverlapGroup:new{ dimen = Geom:new{ w = self.dimen.w, h = h }, left, right }
+
+    if self.pages > 1 then
+        local pager = HorizontalGroup:new{
+            BarButton:new{ width = bh, height = bh, content = barText("‹", math.floor(bh * 0.5)), callback = function() self:goPage(-1) end },
+            HorizontalSpan:new{ width = math.floor(h * 0.3) },
+            barText(string.format("%d/%d", self.page, self.pages), math.floor(bh * 0.34)),
+            HorizontalSpan:new{ width = math.floor(h * 0.3) },
+            BarButton:new{ width = bh, height = bh, content = barText("›", math.floor(bh * 0.5)), callback = function() self:goPage(1) end },
+        }
+        pager.overlap_align = "center"
+        table.insert(group, pager)
+    end
+    return FrameContainer:new{
+        width = self.dimen.w, height = h, padding = 0, bordersize = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        CenterContainer:new{ dimen = Geom:new{ w = self.dimen.w, h = h }, group },
+    }
+end
+
+--- Rimonta la schermata: area menu (self.content) + linea + barra.
+function MenuScreen:rebuild()
+    self[1] = VerticalGroup:new{
+        align = "center",
+        self.content,
+        LineWidget:new{ dimen = Geom:new{ w = self.dimen.w, h = self.line_h } },
+        self:buildBar(),
+    }
+    UIManager:setDirty(self, "full")
+end
+
+function MenuScreen:setContent(widget)
+    if self.content then self.content:free() end
+    self.content = widget
+    self:rebuild()
 end
 
 function MenuScreen:pageUrl()
     local sep = self.menu_url:find("?", 1, true) and "&" or "?"
     local view = self.get_view and self.get_view() or { zoom = 1, lang = "it" }
     return string.format("%s%sw=%d&h=%d&page=%d&zoom=%s&lang=%s", self.menu_url, sep,
-        Screen:getWidth(), Screen:getHeight(), self.page, tostring(view.zoom), view.lang)
+        Screen:getWidth(), self.content_h, self.page, tostring(view.zoom), view.lang)
 end
 
 --- Dopo un cambio di testo/lingua: ricarica subito dalla prima pagina.
@@ -138,12 +268,11 @@ end
 --- Schermata bianca con un messaggio (prima del primo menu, o se il menu non arriva).
 function MenuScreen:setMessage(text)
     if self.image_path then return end -- c'è già un menu da mostrare: meglio quello che un errore
-    if self[1] then self[1]:free() end
-    self[1] = FrameContainer:new{
-        width = self.dimen.w, height = self.dimen.h,
+    self:setContent(FrameContainer:new{
+        width = self.dimen.w, height = self.content_h,
         background = Blitbuffer.COLOR_WHITE, bordersize = 0, padding = 0,
         CenterContainer:new{
-            dimen = Geom:new{ w = self.dimen.w, h = self.dimen.h },
+            dimen = Geom:new{ w = self.dimen.w, h = self.content_h },
             TextBoxWidget:new{
                 text = text,
                 face = Font:getFace("cfont", 26),
@@ -151,21 +280,18 @@ function MenuScreen:setMessage(text)
                 alignment = "center",
             },
         },
-    }
-    UIManager:setDirty(self, "full")
+    })
 end
 
 function MenuScreen:setImage(path)
-    if self[1] then self[1]:free() end
-    self[1] = ImageWidget:new{
+    -- rebuild() fa un refresh "full" dell'e-ink: niente ombre dell'immagine precedente
+    self:setContent(ImageWidget:new{
         file = path,
         file_do_cache = false,
         width = self.dimen.w,
-        height = self.dimen.h,
-        scale_factor = 0, -- adatta allo schermo mantenendo le proporzioni
-    }
-    -- "full": refresh completo dell'e-ink, niente ombre dell'immagine precedente
-    UIManager:setDirty(self, "full")
+        height = self.content_h,
+        scale_factor = 0, -- adatta all'area mantenendo le proporzioni
+    })
 end
 
 --- Scarica il menu; se è cambiato lo ridisegna. Si ripianifica da solo.
@@ -207,15 +333,19 @@ end
 
 --- Sfoglia a mano: dito verso sinistra/su = pagina dopo, verso destra/giù = pagina prima.
 function MenuScreen:onSwipe(_, ges)
-    if self.pages <= 1 then return true end
     local dir = ges and ges.direction
     if dir == "west" or dir == "north" then
-        self.page = self.page % self.pages + 1
+        self:goPage(1)
     elseif dir == "east" or dir == "south" then
-        self.page = (self.page - 2) % self.pages + 1
-    else
-        return true
+        self:goPage(-1)
     end
+    return true
+end
+
+--- Pagina dopo (+1) o prima (-1), dalle frecce della barra o dallo scorrimento.
+function MenuScreen:goPage(delta)
+    if self.pages <= 1 then return true end
+    self.page = (self.page - 1 + delta) % self.pages + 1
     self.etag = nil
     self.manual_until = os.time() + MANUAL_PAUSE_SECONDS
     UIManager:unschedule(self._refresh)
@@ -274,7 +404,7 @@ end
 
 function MenuScreen:onCloseWidget()
     UIManager:unschedule(self._refresh)
-    if self[1] then self[1]:free() end
+    if self.content then self.content:free() end
 end
 
 -- ------------------------------------------------------------------------------------------------
