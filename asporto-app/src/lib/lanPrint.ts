@@ -150,18 +150,43 @@ export async function printQuickLabelViaAgent(nome: string, agentUrl: string): P
   await sendPrintJob({ kind: 'quick_label', nome }, agentUrl);
 }
 
+/** Più dei nuovi tentativi lato agent (~5 s) + timeout socket (15 s): oltre, la richiesta è persa. */
+const PRINT_REQUEST_TIMEOUT_MS = 30_000;
+
 async function sendPrintJob(job: PrintJob, agentUrl: string): Promise<void> {
   const url = `${normalizeAgentUrl(agentUrl)}/print`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(job),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PRINT_REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(job),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new Error('La stampante non ha risposto in tempo.');
+    throw new Error('Print agent non raggiungibile (rete o server).', { cause: e });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(text || `Print agent error (${res.status})`);
+    let msg = text;
+    try { msg = (JSON.parse(text) as { error?: string }).error || text; } catch { /* testo semplice */ }
+    throw new Error(msg || `Print agent error (${res.status})`);
   }
+}
+
+/** Messaggio leggibile per il toast di errore stampa (codici di rete tradotti). */
+export function printErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  if (/ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|connect timeout|Socket timeout/i.test(raw)) {
+    return 'Stampante non raggiungibile: controlla che sia accesa e collegata alla rete.';
+  }
+  return raw || 'Controlla print agent, IP stampante e rete LAN.';
 }

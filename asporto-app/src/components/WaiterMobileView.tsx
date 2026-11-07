@@ -9,7 +9,7 @@ import { Plus, Minus, Save, ChevronLeft, ChevronRight, Edit3, Trash2, LogOut, Re
 import BillsHistoryModal from './BillsHistoryModal';
 import ChangelogModal from './ChangelogModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
-import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent, printErrorMessage } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice } from '../lib/priceUtils';
@@ -128,8 +128,12 @@ export default function WaiterMobileView() {
     }
   }, [allergieNote, selectedTable?.id]);
 
+  /** Stampa in corso (comanda o pre-conto): blocca i pulsanti, così più tocchi non mandano più stampe. */
+  const [printBusy, setPrintBusy] = useState<null | 'comanda' | 'conto'>(null);
+
   const handlePrint = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || printBusy) return;
+    setPrintBusy('comanda');
     const salaCats = ['Bevande', 'Dolce', 'Dolci', 'Caffè e Liquori'];
     const tableName = selectedTable?.nome || 'Tavolo';
 
@@ -157,9 +161,11 @@ export default function WaiterMobileView() {
       toast.addToast({
         type: 'error',
         title: 'Stampa non riuscita',
-        message: 'Controlla print agent, IP stampante e rete LAN.',
+        message: printErrorMessage(error),
         duration: 4500,
       });
+    } finally {
+      setPrintBusy(null);
     }
   };
 
@@ -167,7 +173,8 @@ export default function WaiterMobileView() {
   const { confirm } = useConfirm();
 
   const handlePreConto = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || printBusy) return;
+    setPrintBusy('conto');
     try {
       await printPreContoViaAgent(
         cart,
@@ -183,8 +190,10 @@ export default function WaiterMobileView() {
         }, 0)),
       );
       toast.addToast({ type: 'success', title: 'Pre-conto stampato', message: 'Conto non fiscale inviato alla stampante.', duration: 2500 });
-    } catch {
-      toast.addToast({ type: 'error', title: 'Stampa non riuscita', message: 'Controlla print agent e rete LAN.', duration: 4000 });
+    } catch (error) {
+      toast.addToast({ type: 'error', title: 'Stampa non riuscita', message: printErrorMessage(error), duration: 4500 });
+    } finally {
+      setPrintBusy(null);
     }
   };
   const productsRef = useRef(products);
@@ -1349,10 +1358,10 @@ export default function WaiterMobileView() {
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={handlePrint}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || !!printBusy}
                 className="min-h-[44px] py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-amber-400 hover:bg-surface-light disabled:opacity-30"
               >
-                <Printer size={14} /> STAMPA
+                {printBusy === 'comanda' ? 'STAMPA...' : <><Printer size={14} /> STAMPA</>}
               </button>
               <button
                 onClick={() => saveOrder()}
@@ -1367,10 +1376,10 @@ export default function WaiterMobileView() {
               </button>
               <button
                 onClick={handlePreConto}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || !!printBusy}
                 className="min-h-[44px] py-3 rounded-xl border border-surface-light bg-charcoal font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-1.5 transition-all active:scale-95 text-blue-400 hover:bg-surface-light disabled:opacity-30"
               >
-                <Receipt size={14} /> CONTO
+                {printBusy === 'conto' ? 'STAMPA...' : <><Receipt size={14} /> CONTO</>}
               </button>
             </div>
             {IS_DEMO_MODE && (

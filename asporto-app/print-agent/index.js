@@ -15,11 +15,15 @@ function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const socket = new net.Socket();
     let done = false;
+    let connected = false;
 
     const fail = (err) => {
       if (done) return;
       done = true;
       socket.destroy();
+      // Segna se l'errore è avvenuto prima di inviare dati: solo in quel caso si può riprovare
+      // senza rischiare una doppia stampa.
+      if (err && typeof err === 'object') err.beforeConnect = !connected;
       reject(err);
     };
 
@@ -27,6 +31,7 @@ function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
     const timer = setTimeout(() => fail(new Error('Socket timeout')), timeoutMs);
 
     socket.connect(port, host, () => {
+      connected = true;
       clearTimeout(timer);
       // Disabilita timeout di inattività ora che la connessione è stabilita:
       // buffer grandi (cucina con testo quad) possono richiedere più tempo.
@@ -45,6 +50,40 @@ function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
     socket.on('timeout', () => fail(new Error('Socket connect timeout')));
     socket.setTimeout(5000); // solo per la fase di connect
   });
+}
+
+/**
+ * Coda di stampa + nuovi tentativi.
+ * - Le stampanti termiche di rete accettano di solito UNA connessione alla volta: due stampe insieme
+ *   (es. comanda + pre-conto da due dispositivi) facevano fallire la seconda. Ora vanno in fila.
+ * - Se la connessione non riesce (stampante che si sveglia dallo standby, rete Wi-Fi lenta, stampante
+ *   ancora occupata) si riprova da soli. Si riprova SOLO se l'errore è avvenuto prima di inviare dati,
+ *   così una stampa non può uscire due volte.
+ */
+const PRINT_RETRY_DELAYS_MS = [500, 1500, 3000];
+let printQueue = Promise.resolve();
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function sendWithRetry(host, port, buffer, context) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await sendBufferToTcp(host, port, buffer);
+      if (attempt > 0) console.log(`[PRINT RETRY OK] ${context} al tentativo ${attempt + 1}`);
+      return;
+    } catch (err) {
+      const delay = PRINT_RETRY_DELAYS_MS[attempt];
+      if (!err || !err.beforeConnect || delay === undefined) throw err;
+      console.warn(`[PRINT RETRY] ${context}: ${err.code || err.message}, nuovo tentativo tra ${delay} ms`);
+      await sleep(delay);
+    }
+  }
+}
+
+function enqueuePrint(task) {
+  const run = printQueue.then(task, task);
+  printQueue = run.catch(() => {}); // un errore non blocca le stampe successive
+  return run;
 }
 
 function getDisplayName(item) {
@@ -194,9 +233,9 @@ async function executePrinter(printer, context, printerSource = null) {
     if (match) {
       const host = match[1];
       const port = Number(match[2]);
-      await sendBufferToTcp(host, port, buffer);
+      await enqueuePrint(() => sendWithRetry(host, port, buffer, context));
     } else {
-      await printer.execute();
+      await enqueuePrint(() => printer.execute());
     }
     console.log(`[PRINT SUCCESS] ${context}`);
   } catch (error) {
