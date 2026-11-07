@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Rete di sicurezza: se lo script si blocca, la pagina si ricarica da sola ogni 30 minuti -->
-<meta http-equiv="refresh" content="1800">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Menu · Il Girasole</title>
 <!--
   Menu leggero per Kindle / e-ink.
@@ -18,6 +18,7 @@
     ?col=1|2             colonne (default: 2 se lo schermo è largo, altrimenti 1)
     ?ingr=0              nasconde gli ingredienti
     ?prezzi=0            nasconde i prezzi
+    ?fs=0                non propone lo schermo intero al tocco
     ?refresh=1           minuti tra un controllo e l'altro (default 1). Lo schermo
                          si ridisegna solo se i piatti sono cambiati.
 -->
@@ -44,6 +45,7 @@
   .ingr { font-size: 0.78em; font-style: italic; display: block; margin-top: 1px; }
   .price { text-align: right; white-space: nowrap; padding-left: 14px !important; font-weight: bold; width: 1%; }
   .foot { margin-top: 22px; border-top: 1px solid #000; padding-top: 6px; font-size: 0.7em; }
+  .fs-hint { float: right; }
   .msg { margin: 40px 0; font-size: 1.1em; text-align: center; }
 </style>
 </head>
@@ -55,7 +57,7 @@
     </tr></table>
   </div>
   <div id="menu"><p class="msg">Caricamento menu…</p></div>
-  <div class="foot" id="foot">&nbsp;</div>
+  <div class="foot"><span class="fs-hint" id="fshint" style="display:none">Tocca lo schermo per lo schermo intero</span><span id="foot">&nbsp;</span></div>
 
 <script>
 (function () {
@@ -199,6 +201,23 @@
       }
     };
     xhr.send(null);
+  }
+
+  // Schermo intero: i browser lo concedono solo dopo un tocco, quindi il primo tocco sulla pagina lo attiva.
+  // Sui browser che non hanno la Fullscreen API (Kindle vecchi) non succede nulla.
+  var root = document.documentElement;
+  var reqFs = root.requestFullscreen || root.webkitRequestFullscreen || root.webkitRequestFullScreen || root.mozRequestFullScreen;
+  function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement || document.webkitCurrentFullScreenElement || document.mozFullScreenElement); }
+  if (reqFs && param('fs') !== '0') {
+    var hint = document.getElementById('fshint');
+    var updHint = function () { hint.style.display = isFs() ? 'none' : ''; };
+    document.addEventListener('click', function () {
+      if (isFs()) return;
+      try { var r = reqFs.call(root); if (r && r['catch']) r['catch'](function () {}); } catch (e) {}
+    }, false);
+    document.addEventListener('fullscreenchange', updHint, false);
+    document.addEventListener('webkitfullscreenchange', updHint, false);
+    updHint();
   }
 
   load();
