@@ -1,11 +1,13 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getCurrentUser, getDefaultRouteForRole } from '../lib/staffAuth';
 import { supabase, IS_DEMO_MODE } from '../lib/supabase';
-import type { Product, Ingredient, Order, CustomizedItem } from '../types/entities';
-import { MOCK_PRODUCTS, MOCK_INGREDIENTS, MOCK_ORDERS } from '../lib/MockData';
-import { capacityUtils, CAPACITY_CONFIG } from '../lib/CapacityUtils';
-import { calculateItemPrice } from '../lib/priceUtils';
+import type { Product, Ingredient, CustomizedItem } from '../types/entities';
+import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
+import { calculateItemPrice, roundCents } from '../lib/priceUtils';
+import { syncManager } from '../lib/OfflineSync';
+import { printKitchenViaAgent, printErrorMessage } from '../lib/lanPrint';
+import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { useToast } from './Toast';
 import { newUniqueId } from '../lib/id';
 import { 
@@ -21,7 +23,6 @@ import {
   Utensils,
   ShoppingCart,
   Eye,
-  AlertTriangle
 } from 'lucide-react';
 import ProductCustomizationModal from './ProductCustomizationModal';
 
@@ -39,10 +40,10 @@ export default function TakeawayTabletView() {
   }, []);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CustomizedItem[]>([]);
   const [customerName, setCustomerName] = useState(() => searchParams.get('nome') || '');
-  const [pickupTime, setPickupTime] = useState(''); // This will now represent the selected slot
+  const [pickupTime, setPickupTime] = useState(''); // HH:MM di ritiro, scelto liberamente
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -52,23 +53,10 @@ export default function TakeawayTabletView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  async function fetchOrders() {
-    if (IS_DEMO_MODE) {
-      setAllOrders(MOCK_ORDERS);
-      return;
-    }
-    if (!supabase) return;
-    const localMidnight = new Date();
-    localMidnight.setHours(0, 0, 0, 0);
-    const { data } = await supabase.from('ordini').select('*').gte('created_at', localMidnight.toISOString());
-    if (data) setAllOrders(data);
-  }
-
   async function fetchData() {
     if (IS_DEMO_MODE) {
       setProducts(MOCK_PRODUCTS);
       setIngredients(MOCK_INGREDIENTS);
-      setAllOrders(MOCK_ORDERS);
       return;
     }
     if (!supabase) return;
@@ -78,7 +66,6 @@ export default function TakeawayTabletView() {
     ]);
     if (pData) setProducts(pData);
     if (iData) setIngredients(iData);
-    void fetchOrders();
   }
 
   useEffect(() => {
@@ -86,16 +73,15 @@ export default function TakeawayTabletView() {
     if (!supabase) return;
     const sb = supabase;
     const productsSub = sb.channel('products-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'prodotti' }, () => void fetchData()).subscribe();
-    const ordersSub = sb.channel('orders-sync').on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => void fetchOrders()).subscribe();
-    
-    return () => { 
-      sb.removeChannel(productsSub); 
-      sb.removeChannel(ordersSub);
-    };
+    return () => { sb.removeChannel(productsSub); };
   }, []);
 
-  const loadMap = useMemo(() => capacityUtils.calculateLoadMap(allOrders), [allOrders]);
-  const availableSlots = useMemo(() => capacityUtils.generateSlots(), []);
+  /** Orari rapidi: tra 15/20/30/45 minuti, arrotondati ai 5 minuti. */
+  const quickTimes = [15, 20, 30, 45].map(min => {
+    const d = new Date(Date.now() + min * 60000);
+    d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0);
+    return { min, time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` };
+  });
 
   const addToCartDirectly = (product: Product) => {
     setCart(prev => {
@@ -164,78 +150,82 @@ export default function TakeawayTabletView() {
     setCart(prev => prev.filter(i => i.uniqueId !== uniqueId));
   };
 
-  const total = cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0);
-  const currentPizzasInCart = cart.reduce((sum, item) => {
-    const isPizza = item.nome?.toLowerCase().includes('pizza') || item.categoria?.toLowerCase().includes('pizze');
-    return isPizza ? sum + item.quantity : sum;
-  }, 0);
-
-  const getSlotStatus = (slot: string) => {
-    const load = loadMap[slot] || 0;
-    const futureLoad = pickupTime === slot ? load + currentPizzasInCart : load;
-    
-    if (futureLoad >= CAPACITY_CONFIG.MAX_PIZZAS_PER_SLOT) return 'FULL';
-    if (futureLoad >= CAPACITY_CONFIG.MAX_PIZZAS_PER_SLOT * 0.8) return 'WARNING';
-    return 'OK';
-  };
-
+  const total = roundCents(cart.reduce((sum, item) => sum + calculateItemPrice(item, ingredients), 0));
   const submitOrder = async () => {
-    if (!customerName || cart.length === 0 || !pickupTime) {
-      addToast({ type: 'warning', title: 'Dati mancanti', message: 'Inserisci Nome, Orario e almeno un prodotto' });
+    if (!customerName.trim() || cart.length === 0 || !pickupTime) {
+      addToast({ type: 'warning', title: 'Dati mancanti', message: 'Inserisci nome, orario di ritiro e almeno un prodotto' });
       return;
     }
+    if (saving) return;
+    const nome = customerName.trim().toUpperCase();
 
     if (IS_DEMO_MODE) {
-      addToast({ type: 'info', title: 'Demo', message: 'ORDINE SIMULATO: L\'ordine apparirebbe ora nel database reale.' });
+      addToast({ type: 'info', title: 'Demo', message: `Ordine simulato: ${nome}, ritiro ${pickupTime}.` });
       setCart([]);
       setCustomerName('');
       setPickupTime('');
       return;
     }
 
-    if (!supabase) return;
-    const { error } = await supabase.from('ordini').insert([{
-      nome_cliente: customerName.toUpperCase(),
-      orario_ritiro: pickupTime,
-      totale: total,
-      status: 'IN_ATTESA',
-      carrello: cart.map(i => {
-        const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
-        const removals = i.removedIngredients.reduce((s, rName) => {
-          const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
-          return s + (ing?.prezzo_rimozione || 0);
-        }, 0);
-        return {
-          nome: i.nome,
-          quantity: i.quantity,
-          prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
-          modifiche: {
-            aggiunte: i.addedIngredients.map(a => a.nome),
-            rimozioni: i.removedIngredients,
-            note: i.notes
-          }
-        };
-      })
-    }]);
-
-    if (!error) {
-      addToast({ type: 'success', title: 'Ordine salvato!' });
-      if (returnTo) {
-        const back = new URL(returnTo, window.location.origin);
-        back.searchParams.set('asporto', pickupTime);
-        back.searchParams.set('totale', total.toFixed(2));
-        back.searchParams.set('nome', customerName);
-        navigate(back.pathname + back.search);
-        return;
-      }
-      setCart([]);
-      setCustomerName('');
-      setPickupTime('');
+    setSaving(true);
+    try {
+      // Coda offline come gli ordini al tavolo: se la rete cade, l'ordine parte appena torna
+      await syncManager.pushOrder({
+        nome_cliente: nome,
+        orario_ritiro: pickupTime,
+        totale: total,
+        status: 'IN_ATTESA',
+        carrello: cart.map(i => {
+          const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+          const removals = i.removedIngredients.reduce((s, rName) => {
+            const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
+            return s + (ing?.prezzo_rimozione || 0);
+          }, 0);
+          return {
+            nome: i.nome,
+            quantity: i.quantity,
+            prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+            modifiche: {
+              aggiunte: i.addedIngredients.map(a => a.nome),
+              rimozioni: i.removedIngredients,
+              note: i.notes
+            }
+          };
+        }),
+      });
+    } catch {
+      addToast({ type: 'error', title: 'Errore', message: 'Ordine non salvato. Riprova.' });
+      setSaving(false);
+      return;
     }
+
+    // Comanda in cucina: intestazione con nome e orario di ritiro (tutto su un foglio, bevande comprese)
+    const items = cart.filter(i => i.categoria !== 'Servizio');
+    try {
+      await printKitchenViaAgent(items, `ASP ${nome}`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), `RITIRO ${pickupTime}`);
+      addToast({ type: 'success', title: 'Ordine salvato e stampato', message: `${nome} · ritiro ${pickupTime}` });
+    } catch (error) {
+      addToast({ type: 'warning', title: 'Ordine salvato, stampa non riuscita', message: printErrorMessage(error), duration: 6000 });
+    }
+    setSaving(false);
+
+    if (returnTo) {
+      const back = new URL(returnTo, window.location.origin);
+      back.searchParams.set('asporto', pickupTime);
+      back.searchParams.set('totale', total.toFixed(2));
+      back.searchParams.set('nome', customerName);
+      navigate(back.pathname + back.search);
+      return;
+    }
+    setCart([]);
+    setCustomerName('');
+    setPickupTime('');
   };
 
-  const categories = Array.from(new Set(products.map(p => p.categoria)));
-  const filteredProducts = products.filter(p => 
+  // Coperto/servizio ed extra non servono all'asporto
+  const takeawayProducts = products.filter(p => p.categoria !== 'Servizio' && p.categoria !== 'EXTRA');
+  const categories = Array.from(new Set(takeawayProducts.map(p => p.categoria)));
+  const filteredProducts = takeawayProducts.filter(p => 
     (!activeCategory || p.categoria === activeCategory) &&
     (!searchQuery || p.nome.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -328,13 +318,13 @@ export default function TakeawayTabletView() {
               const subcats = [...new Set(bevande.map(p => p.sottocategoria || 'Altro'))];
               return (
                 <>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 mb-4">
                     {other.map(product => renderProductCard(product))}
                   </div>
                   {subcats.map(sub => (
                     <div key={sub}>
                       <div className="text-[10px] font-black text-gold uppercase tracking-widest py-2 px-1 mt-6 mb-3">{sub}</div>
-                      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                         {bevande.filter(p => (p.sottocategoria || 'Altro') === sub).map(product => renderProductCard(product))}
                       </div>
                     </div>
@@ -343,7 +333,7 @@ export default function TakeawayTabletView() {
               );
             }
             return (
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                 {filteredProducts.map(product => renderProductCard(product))}
               </div>
             );
@@ -352,7 +342,7 @@ export default function TakeawayTabletView() {
       </main>
 
       {/* Right: Checkout Sidebar (30%) */}
-      <aside className="w-[480px] bg-surface flex flex-col shadow-2xl relative">
+      <aside className="w-[420px] shrink-0 bg-surface flex flex-col shadow-2xl relative">
         <header className="p-8 border-b border-surface-light bg-surface-light/20">
           <h2 className="text-xl font-black italic uppercase tracking-tighter text-white mb-6 flex items-center gap-3">
              <Utensils size={24} className="text-gold" /> Ordine Attuale
@@ -370,47 +360,33 @@ export default function TakeawayTabletView() {
               />
             </div>
             
-            {/* Slot Picker */}
+            {/* Orario di ritiro: scorciatoie o ora scritta a mano */}
             <div>
-              <div className="flex justify-between items-center mb-3 px-1">
-                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                    <Clock size={12} /> Seleziona Orario (15 min)
-                 </span>
-                 {pickupTime && (
-                   <span className="text-[10px] font-bold text-gold bg-gold/10 px-2 py-0.5 rounded">
-                     {loadMap[pickupTime] || 0}/{CAPACITY_CONFIG.MAX_PIZZAS_PER_SLOT} Pizze occ.
-                   </span>
-                 )}
+              <div className="flex items-center gap-2 mb-2 px-1 text-xs font-bold text-gray-400">
+                <Clock size={14} /> Orario di ritiro
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-4 hide-scrollbar">
-                  {availableSlots.map(slot => {
-                    const status = getSlotStatus(slot);
-                    const isSelected = pickupTime === slot;
-                    
-                    return (
-                      <button
-                        key={slot}
-                        onClick={() => status !== 'FULL' && setPickupTime(slot)}
-                        className={`
-                          flex-shrink-0 min-w-[90px] p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-1
-                          ${isSelected ? 'bg-gold border-gold text-black shadow-lg shadow-gold/20 scale-105' : 
-                            status === 'FULL' ? 'bg-red-500/10 border-red-500/20 text-red-500/50 cursor-not-allowed' :
-                            status === 'WARNING' ? 'bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20' :
-                            'bg-charcoal border-surface-light text-gray-500 hover:text-white hover:border-surface-light-hover'}
-                        `}
-                      >
-                        <span className="text-[10px] font-black uppercase tracking-widest">{slot}</span>
-                        <div className="flex items-center gap-1">
-                           {status === 'WARNING' && <AlertTriangle size={10} className="text-amber-500" />}
-                           {status === 'FULL' && <AlertTriangle size={10} className="text-red-500" />}
-                           <span className={`text-[9px] font-bold ${isSelected ? 'text-black' : 'text-gray-600'}`}>
-                             {loadMap[slot] || 0}/{CAPACITY_CONFIG.MAX_PIZZAS_PER_SLOT}
-                           </span>
-                        </div>
-                      </button>
-                    );
-                  })}
+              <div className="flex gap-2">
+                {quickTimes.map(q => (
+                  <button
+                    key={q.min}
+                    type="button"
+                    onClick={() => setPickupTime(q.time)}
+                    className={`flex-1 py-2.5 rounded-xl border font-bold text-sm transition-all active:scale-95 ${
+                      pickupTime === q.time ? 'bg-gold border-gold text-black' : 'bg-charcoal border-surface-light text-gray-300'
+                    }`}
+                  >
+                    <span className="block text-base font-black tabular-nums">{q.time}</span>
+                    <span className="block text-[11px] opacity-70">+{q.min} min</span>
+                  </button>
+                ))}
               </div>
+              <input
+                type="time"
+                value={pickupTime}
+                onChange={e => setPickupTime(e.target.value)}
+                aria-label="Orario di ritiro"
+                className="mt-2 w-full bg-charcoal border border-surface-light rounded-xl py-3 px-4 text-white text-lg font-black tabular-nums outline-none focus:border-gold"
+              />
             </div>
           </div>
         </header>
@@ -475,7 +451,7 @@ export default function TakeawayTabletView() {
               disabled={cart.length === 0 || !pickupTime}
               className="flex-1 bg-gold hover:bg-gold-hover text-black py-6 rounded-3xl font-black text-xl uppercase tracking-tighter shadow-2xl shadow-gold/20 flex items-center justify-center gap-3 transition-all active:scale-95 disabled:grayscale disabled:opacity-50"
              >
-              SALVA ORDINE <Save size={24} />
+              {saving ? 'SALVATAGGIO…' : <>SALVA E STAMPA <Save size={24} /></>}
              </button>
           </div>
         </div>
