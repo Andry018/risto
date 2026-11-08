@@ -15,6 +15,7 @@ import Dialog from './Dialog';
 import { useWaUnread } from '../lib/whatsapp';
 import { syncManager } from '../lib/OfflineSync';
 import { salaDi } from '../lib/salas';
+import { confirmedFor, pickReservation } from '../lib/tableReservations';
 
 type Section = 'hub' | 'sala';
 
@@ -109,7 +110,7 @@ export default function StaffDashboard() {
 
   function handleTableTap(t: Tavolo) {
     if (t.status === 'OCCUPATO') { goToPos(t); return; }
-    const prenotazione = reservations.find(r => r.tavolo_id === t.id && r.status === 'CONFERMATA');
+    const prenotazione = pickReservation(confirmedFor(reservations, t.id), now);
     setCoversTable({ tavolo: t, coperti: prenotazione?.persone || t.clienti || 2, prenotazione });
   }
 
@@ -296,7 +297,8 @@ export default function StaffDashboard() {
                         key={t.id}
                         tavolo={t}
                         apertoDa={tableOpenedAt[t.nome]}
-                        prenotazione={reservations.find(r => r.tavolo_id === t.id && r.status !== 'ANNULLATA')}
+                        prenotazione={pickReservation(confirmedFor(reservations, t.id), now)}
+                        altrePrenotazioni={Math.max(0, confirmedFor(reservations, t.id).length - 1)}
                         now={now}
                         onClick={() => handleTableTap(t)}
                       />
@@ -539,8 +541,8 @@ function PosBox({ icon, title, desc, onClick }: { icon: React.ReactNode, title: 
 }
 
 /** Tavolo nella card Sala: colore per stato, coperti e da quanto è aperto. */
-function TableTile({ tavolo, apertoDa, prenotazione, now, onClick }: {
-  tavolo: Tavolo; apertoDa?: string; prenotazione?: Reservation; now: Date; onClick: () => void;
+function TableTile({ tavolo, apertoDa, prenotazione, altrePrenotazioni = 0, now, onClick }: {
+  tavolo: Tavolo; apertoDa?: string; prenotazione?: Reservation; altrePrenotazioni?: number; now: Date; onClick: () => void;
 }) {
   const occupato = tavolo.status === 'OCCUPATO';
   const prenotato = tavolo.status === 'PRENOTATO';
@@ -565,7 +567,7 @@ function TableTile({ tavolo, apertoDa, prenotazione, now, onClick }: {
         </span>
       )}
       {prenotato && prenotazione && (
-        <span className="text-[10px] font-bold leading-none truncate max-w-full">{prenotazione.ora?.slice(0, 5)} {prenotazione.nome}</span>
+        <span className="text-[10px] font-bold leading-none truncate max-w-full">{prenotazione.ora?.slice(0, 5)} {prenotazione.nome}{altrePrenotazioni > 0 && ` +${altrePrenotazioni}`}</span>
       )}
       {!occupato && !prenotato && <span className="text-[10px] font-bold leading-none">libero</span>}
     </button>

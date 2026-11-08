@@ -10,6 +10,7 @@ import { useToast } from './Toast';
 import { toLocalISODate } from '../lib/dateUtils';
 import Dialog from './Dialog';
 import MiniTableMap from './MiniTableMap';
+import { nearbyReservations, syncTableReservationStatus } from '../lib/tableReservations';
 import { salaDi } from '../lib/salas';
 
 export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void }) {
@@ -110,15 +111,10 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     try {
       if (editingReservation) {
         const oldRes = editingReservation;
-        await supabase.from('prenotazioni').update(newRes).eq('id', editingReservation.id);
-
-        // Se cambia tavolo: libera il vecchio, prenota il nuovo
-        if (oldRes.tavolo_id && oldRes.tavolo_id !== newRes.tavolo_id) {
-          await setTableStatus(oldRes.tavolo_id, 'LIBERO');
-        }
-        if (newRes.tavolo_id && oldRes.tavolo_id !== newRes.tavolo_id) {
-          await setTableStatus(newRes.tavolo_id, 'PRENOTATO');
-        }
+        // tavolo_id esplicitamente null se tolto: un campo undefined non viene inviato e il tavolo resterebbe
+        await supabase.from('prenotazioni').update({ ...newRes, tavolo_id: newRes.tavolo_id ?? null }).eq('id', editingReservation.id);
+        // Vecchio e nuovo tavolo: stato ricalcolato sulle prenotazioni di oggi (possono essercene altre)
+        await syncTableReservationStatus(oldRes.tavolo_id, newRes.tavolo_id);
       } else {
         const created = { ...newRes, id: newUniqueId() } as Reservation;
         const { error } = await supabase.from('prenotazioni').insert([created]);
@@ -127,9 +123,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
           void sendWa(created, 'conferma');
         }
 
-        if (newRes.tavolo_id) {
-          await setTableStatus(newRes.tavolo_id, 'PRENOTATO');
-        }
+        await syncTableReservationStatus(newRes.tavolo_id);
       }
       closeModal();
       fetchReservations();
@@ -195,6 +189,10 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   }
 
   const selectedTable = tables.find(t => t.id === newRes.tavolo_id);
+  /** Altre prenotazioni sullo stesso tavolo a meno di 2 ore (solo per il giorno caricato in lista). */
+  const nearby = selectedTable && newRes.ora && newRes.data === selectedDate
+    ? nearbyReservations(reservations, selectedTable.id, newRes.ora, editingReservation?.id)
+    : [];
   /** Tavoli già assegnati ad altre prenotazioni dello stesso giorno (se è il giorno caricato in lista). */
   const bookedNotes: Record<string, string> = {};
   if (newRes.data === selectedDate) {
@@ -226,9 +224,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     if (!supabase) return;
     const { error } = await supabase.from('prenotazioni').update({ status: 'ANNULLATA' }).eq('id', res.id);
     if (error) { addToast({ type: 'error', title: 'Errore', message: 'Annullamento fallito. Riprova.' }); return; }
-    if (res.tavolo_id) {
-      await setTableStatus(res.tavolo_id, 'LIBERO');
-    }
+    await syncTableReservationStatus(res.tavolo_id);
     fetchReservations();
   }
 
@@ -618,6 +614,11 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
                       </button>
                     )}
                   </div>
+                  {nearby.length > 0 && (
+                    <p className="ml-1 text-sm font-bold text-amber-400">
+                      Attenzione: sul tavolo {selectedTable?.nome} c'è già {nearby.map(r => `${r.nome} alle ${r.ora?.slice(0, 5)}`).join(', ')}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

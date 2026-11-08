@@ -10,6 +10,8 @@ import { useToast } from './Toast';
 import { toLocalISODate } from '../lib/dateUtils';
 
 import { SALE } from '../lib/salas';
+import { syncManager } from '../lib/OfflineSync';
+import { confirmedFor, pickReservation, desiredTableState, syncTableReservationStatus } from '../lib/tableReservations';
 
 export default function TableMapView({ onSelectTable, freedTableIds, onNavigateHome }: { onSelectTable?: (id: string, name: string, status: string) => void; freedTableIds?: Set<string>; onNavigateHome?: () => void }) {
   const { confirm } = useConfirm();
@@ -76,24 +78,22 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
         return;
       }
       if (data) {
-        const today = toLocalISODate();
-        const toFree: string[] = [];
-        await Promise.all(data.map(async (t) => {
-          if (t.status === 'PRENOTATO') {
-            const { data: prenotazioni } = await supabase!
-              .from('prenotazioni')
-              .select('id')
-              .eq('tavolo_id', t.id)
-              .eq('data', today)
-              .in('status', ['CONFERMATA', 'ARRIVATA'])
-              .maybeSingle();
-            if (!prenotazioni) toFree.push(t.id);
+        // Stato prenotato/libero riallineato alle prenotazioni confermate di oggi (anche più d'una per tavolo).
+        // Se la lettura delle prenotazioni fallisce non si tocca nulla.
+        let cleaned: Tavolo[] = data;
+        const { data: resOggi, error: resErr } = await supabase
+          .from('prenotazioni')
+          .select('tavolo_id, ora, persone')
+          .eq('data', toLocalISODate())
+          .eq('status', 'CONFERMATA');
+        if (!resErr && resOggi) {
+          cleaned = [];
+          for (const t of data as Tavolo[]) {
+            const want = desiredTableState(t, resOggi.filter(r => r.tavolo_id === t.id));
+            if (want) await syncManager.pushTableUpdate(t.id, want);
+            cleaned.push(want ? { ...t, ...want } : t);
           }
-        }));
-        for (const id of toFree) {
-          await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', id);
         }
-        const cleaned = data.map(t => toFree.includes(t.id) ? { ...t, status: 'LIBERO' as Tavolo['status'], clienti: 0 } : t);
         setTavoli(cleaned);
         const aperturaMap: Record<string, string> = {};
         await Promise.all(cleaned.map(async (t) => {
@@ -203,7 +203,9 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     void fetchTavoli();
   }
 
-  const tableReservation = (tableId: string) => reservations.find(r => r.tavolo_id === tableId && r.status === 'CONFERMATA');
+  // Con più prenotazioni sullo stesso tavolo vale quella di adesso (o la prossima)
+  const tableReservation = (tableId: string) => pickReservation(confirmedFor(reservations, tableId), new Date(now));
+  const tableReservationCount = (tableId: string) => confirmedFor(reservations, tableId).length;
 
   function openReservationModal(table: Tavolo) {
     const existing = tableReservation(table.id);
@@ -225,21 +227,13 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     if (!supabase || !resForm.nome || !resForm.data || !resForm.ora) return;
     const payload = { ...resForm };
     if (!payload.tavolo_id) delete payload.tavolo_id;
-    const isToday = payload.data === toLocalISODate();
     if (reservationModal.reservation) {
       const oldRes = reservationModal.reservation;
       await supabase.from('prenotazioni').update(payload).eq('id', oldRes.id);
-      if (oldRes.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
-        await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', oldRes.tavolo_id);
-      }
-      if (payload.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id && isToday) {
-        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
-      }
+      await syncTableReservationStatus(oldRes.tavolo_id, payload.tavolo_id);
     } else {
       await supabase.from('prenotazioni').insert([payload]);
-      if (payload.tavolo_id && isToday) {
-        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
-      }
+      await syncTableReservationStatus(payload.tavolo_id);
     }
     setReservationModal({ open: false });
     void fetchReservationsForDate();
@@ -251,9 +245,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${reservationModal.reservation.nome}?`, destructive: true });
     if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', reservationModal.reservation.id);
-    if (reservationModal.reservation.tavolo_id) {
-      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.reservation.tavolo_id);
-    }
+    await syncTableReservationStatus(reservationModal.reservation.tavolo_id);
     setReservationModal({ open: false });
     void fetchReservationsForDate();
     void fetchTavoli();
@@ -264,9 +256,7 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
     const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${res.nome}?`, destructive: true });
     if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', res.id);
-    if (res.tavolo_id) {
-      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', res.tavolo_id);
-    }
+    await syncTableReservationStatus(res.tavolo_id);
     void fetchReservationsForDate();
     void fetchTavoli();
   }
@@ -497,7 +487,8 @@ export default function TableMapView({ onSelectTable, freedTableIds, onNavigateH
                         )}
                         {tavolo.status === 'PRENOTATO' && tableReservation(tavolo.id) && (
                           <div className="text-[9px] font-black text-amber-300 truncate max-w-full px-1">
-                            {tableReservation(tavolo.id)!.nome}
+                            {tableReservation(tavolo.id)!.ora?.slice(0, 5)} {tableReservation(tavolo.id)!.nome}
+                            {tableReservationCount(tavolo.id) > 1 && ` +${tableReservationCount(tavolo.id) - 1}`}
                           </div>
                         )}
                       </div>

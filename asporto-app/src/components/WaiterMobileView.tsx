@@ -36,6 +36,7 @@ import CustomItemModal from './CustomItemModal';
 import { SALE } from '../lib/salas';
 import { hasTurno, toggleTurno } from '../lib/turni';
 import { toLocalISODate } from '../lib/dateUtils';
+import { syncTableReservationStatus } from '../lib/tableReservations';
 import { useRearScreen } from '../lib/rearScreen';
 
 export default function WaiterMobileView() {
@@ -969,17 +970,10 @@ export default function WaiterMobileView() {
     if (reservationModal.reservation) {
       const oldRes = reservationModal.reservation;
       await supabase.from('prenotazioni').update(payload).eq('id', oldRes.id);
-      if (oldRes.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
-        await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', oldRes.tavolo_id);
-      }
-      if (payload.tavolo_id && oldRes.tavolo_id !== payload.tavolo_id) {
-        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
-      }
+      await syncTableReservationStatus(oldRes.tavolo_id, payload.tavolo_id);
     } else {
       await supabase.from('prenotazioni').insert([payload]);
-      if (payload.tavolo_id) {
-        await supabase.from('tavoli').update({ status: 'PRENOTATO', clienti: resForm.persone }).eq('id', payload.tavolo_id);
-      }
+      await syncTableReservationStatus(payload.tavolo_id);
     }
     setReservationModal({ open: false });
     void fetchReservationsForDate();
@@ -991,9 +985,7 @@ export default function WaiterMobileView() {
     const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${reservationModal.reservation.nome}?`, destructive: true });
     if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', reservationModal.reservation.id);
-    if (reservationModal.reservation.tavolo_id) {
-      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', reservationModal.reservation.tavolo_id);
-    }
+    await syncTableReservationStatus(reservationModal.reservation.tavolo_id);
     setReservationModal({ open: false });
     void fetchReservationsForDate();
     void fetchTables();
@@ -1004,9 +996,7 @@ export default function WaiterMobileView() {
     const ok = await confirm({ title: 'Elimina prenotazione', message: `Eliminare la prenotazione per ${res.nome}?`, destructive: true });
     if (!ok) return;
     await supabase.from('prenotazioni').delete().eq('id', res.id);
-    if (res.tavolo_id) {
-      await supabase.from('tavoli').update({ status: 'LIBERO', clienti: 0 }).eq('id', res.tavolo_id);
-    }
+    await syncTableReservationStatus(res.tavolo_id);
     void fetchReservationsForDate();
     void fetchTables();
   }
