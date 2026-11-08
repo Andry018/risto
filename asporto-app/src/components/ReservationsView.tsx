@@ -8,6 +8,9 @@ import { waAvailable, phoneToJid, sendReservationWhatsapp, type WaReservationKin
 import { useConfirm } from './ConfirmModal';
 import { useToast } from './Toast';
 import { toLocalISODate } from '../lib/dateUtils';
+import Dialog from './Dialog';
+import MiniTableMap from './MiniTableMap';
+import { salaDi } from '../lib/salas';
 
 export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: () => void }) {
   const navigate = useNavigate();
@@ -25,6 +28,7 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
   const [sendWaConfirm, setSendWaConfirm] = useState(true);
   const [waSending, setWaSending] = useState<string | null>(null); // id prenotazione (o 'all') in invio
   const canWa = waAvailable();
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
   
   // New Reservation State
   const [newRes, setNewRes] = useState<Partial<Reservation>>({
@@ -188,6 +192,17 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
     setEditingReservation(res);
     setNewRes({ ...res, ora: res.ora?.split(':').slice(0, 2).join(':') ?? res.ora });
     setIsModalOpen(true);
+  }
+
+  const selectedTable = tables.find(t => t.id === newRes.tavolo_id);
+  /** Tavoli già assegnati ad altre prenotazioni dello stesso giorno (se è il giorno caricato in lista). */
+  const bookedNotes: Record<string, string> = {};
+  if (newRes.data === selectedDate) {
+    for (const r of reservations) {
+      if (!r.tavolo_id || r.status === 'ANNULLATA' || r.id === editingReservation?.id) continue;
+      const nota = `${r.ora?.slice(0, 5) ?? ''} ${r.nome}`.trim();
+      bookedNotes[r.tavolo_id] = bookedNotes[r.tavolo_id] ? `${bookedNotes[r.tavolo_id]} +` : nota;
+    }
   }
 
   function closeModal() {
@@ -579,16 +594,30 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Assegna Tavolo (Opzionale)</label>
-                  <select 
-                    value={newRes.tavolo_id || ''}
-                    onChange={e => setNewRes({...newRes, tavolo_id: e.target.value || undefined})}
-                    className="w-full bg-charcoal border border-surface-light rounded-2xl p-4 text-white font-bold outline-none focus:border-gold transition-all appearance-none"
-                  >
-                    <option value="">Nessun tavolo assegnato</option>
-                    {tables.map(t => (
-                      <option key={t.id} value={t.id}>{t.nome} ({t.sala}) {t.status === 'OCCUPATO' ? '🔴' : t.status === 'PRENOTATO' ? '🟡' : '🟢'}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setTablePickerOpen(true)}
+                      className="flex-1 flex items-center gap-3 bg-charcoal border border-surface-light rounded-2xl p-4 text-left hover:border-gold transition-all"
+                    >
+                      <MapPin size={20} className="text-gold shrink-0" />
+                      <span className="font-bold text-white">
+                        {selectedTable ? `Tavolo ${selectedTable.nome}` : 'Scegli sulla mappa'}
+                      </span>
+                      {selectedTable && <span className="text-xs text-gray-500 font-bold">{salaDi(selectedTable)}</span>}
+                      <span className="ml-auto text-xs font-black text-gold uppercase tracking-widest">{selectedTable ? 'Cambia' : 'Mappa'}</span>
+                    </button>
+                    {selectedTable && (
+                      <button
+                        type="button"
+                        onClick={() => setNewRes({ ...newRes, tavolo_id: undefined })}
+                        aria-label="Togli tavolo"
+                        className="px-4 bg-charcoal border border-surface-light rounded-2xl text-gray-500 hover:text-white"
+                      >
+                        <X size={20} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -612,6 +641,33 @@ export default function ReservationsView({ onNavigateHome }: { onNavigateHome?: 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Scelta tavolo dalla mappa (sopra il form prenotazione) */}
+      {isModalOpen && tablePickerOpen && (
+        <Dialog
+          open
+          onClose={() => setTablePickerOpen(false)}
+          label="Scegli il tavolo"
+          overlayClassName="z-[210] items-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+          panelClassName="bg-surface border border-surface-light w-full max-w-4xl rounded-[32px] shadow-2xl p-6 max-h-[94dvh] overflow-y-auto"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-2xl font-black uppercase tracking-tight text-white">Scegli il <span className="text-gold">tavolo</span></h2>
+              <p className="text-xs text-gray-400 font-bold mt-0.5">Tocca un tavolo per assegnarlo · {newRes.persone} persone</p>
+            </div>
+            <button type="button" onClick={() => setTablePickerOpen(false)} aria-label="Chiudi" className="p-3 bg-charcoal rounded-2xl text-gray-400 hover:text-white border border-surface-light">
+              <X size={22} />
+            </button>
+          </div>
+          <MiniTableMap
+            tables={tables}
+            selectedId={newRes.tavolo_id}
+            notes={bookedNotes}
+            onSelect={t => { setNewRes(prev => ({ ...prev, tavolo_id: t.id })); setTablePickerOpen(false); }}
+          />
+        </Dialog>
       )}
     </div>
   );

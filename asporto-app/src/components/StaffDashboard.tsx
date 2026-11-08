@@ -5,7 +5,7 @@ import type { Tavolo, Reservation } from '../types/entities';
 import {
   Sun, Map as MapIcon, ChefHat, Calculator, CalendarDays,
   FilePlus, Zap, History, PauseCircle, Package, Users,
-  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt, Info, MessageCircle
+  Settings, ArrowRight, ArrowLeft, UserPlus, Table2, X, Clock, ShieldCheck, Receipt, Info, MessageCircle, Minus, Plus
 } from 'lucide-react';
 import PrinterStatusBadge from '../components/PrinterStatusBadge';
 import { SETTINGS_KEYS, useSetting } from '../lib/appSettings';
@@ -13,6 +13,8 @@ import { toLocalISODate } from '../lib/dateUtils';
 import ChangelogModal from './ChangelogModal';
 import Dialog from './Dialog';
 import { useWaUnread } from '../lib/whatsapp';
+import { syncManager } from '../lib/OfflineSync';
+import { salaDi } from '../lib/salas';
 
 type Section = 'hub' | 'sala';
 
@@ -38,6 +40,10 @@ export default function StaffDashboard() {
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [newOrderName, setNewOrderName] = useState('');
   const [showChangelog, setShowChangelog] = useState(false);
+  /** Apertura dei conti in corso, per nome tavolo (ordini.nome_cliente = tavoli.nome) */
+  const [tableOpenedAt, setTableOpenedAt] = useState<Record<string, string>>({});
+  const [coversTable, setCoversTable] = useState<{ tavolo: Tavolo; coperti: number; prenotazione?: Reservation } | null>(null);
+  const [openingTable, setOpeningTable] = useState(false);
   const waUnread = useWaUnread();
 
   useEffect(() => {
@@ -50,13 +56,22 @@ export default function StaffDashboard() {
       if (!supabase) return;
       const today = toLocalISODate();
 
-      const [tablesRes, reservationsRes] = await Promise.all([
+      const [tablesRes, reservationsRes, ordersRes] = await Promise.all([
         supabase.from('tavoli').select('*').order('nome'),
-        supabase.from('prenotazioni').select('*').eq('data', today).order('ora')
+        supabase.from('prenotazioni').select('*').eq('data', today).order('ora'),
+        supabase.from('ordini').select('nome_cliente, created_at').eq('status', 'IN_ATTESA'),
       ]);
 
       if (tablesRes.data) setTables(tablesRes.data);
       if (reservationsRes.data) setReservations(reservationsRes.data);
+      if (ordersRes.data) {
+        const opened: Record<string, string> = {};
+        for (const o of ordersRes.data as { nome_cliente: string | null; created_at: string | null }[]) {
+          if (!o.nome_cliente || !o.created_at) continue;
+          if (!opened[o.nome_cliente] || o.created_at < opened[o.nome_cliente]) opened[o.nome_cliente] = o.created_at;
+        }
+        setTableOpenedAt(opened);
+      }
       setLoading(false);
     }
 
@@ -68,6 +83,7 @@ export default function StaffDashboard() {
     const channel = sb.channel('dashboard-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tavoli' }, () => void fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prenotazioni' }, () => void fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordini' }, () => void fetchData())
       .subscribe();
 
     return () => {
@@ -79,6 +95,40 @@ export default function StaffDashboard() {
   const availableCount = tables.filter(t => t.status === 'LIBERO').length;
   const reservedCount = tables.filter(t => t.status === 'PRENOTATO').length;
   const expectedPeople = reservations.reduce((sum, r) => sum + (r.persone || 0), 0);
+
+  // Tavoli raggruppati per sala, ordinati per nome "naturale" (2 prima di 10)
+  const tableGroups = Object.entries(
+    [...tables]
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'it', { numeric: true }))
+      .reduce<Record<string, Tavolo[]>>((acc, t) => { (acc[salaDi(t)] ||= []).push(t); return acc; }, {})
+  );
+
+  function goToPos(t: Tavolo) {
+    navigate(`/pos?tableId=${t.id}&tableName=${encodeURIComponent(t.nome)}`);
+  }
+
+  function handleTableTap(t: Tavolo) {
+    if (t.status === 'OCCUPATO') { goToPos(t); return; }
+    const prenotazione = reservations.find(r => r.tavolo_id === t.id && r.status === 'CONFERMATA');
+    setCoversTable({ tavolo: t, coperti: prenotazione?.persone || t.clienti || 2, prenotazione });
+  }
+
+  async function openTable() {
+    if (!coversTable || openingTable) return;
+    const { tavolo, coperti, prenotazione } = coversTable;
+    setOpeningTable(true);
+    try {
+      // Il POS legge i coperti dal tavolo per aggiungere il COPERTO: vanno scritti prima di navigare
+      await syncManager.pushTableUpdate(tavolo.id, { status: 'OCCUPATO', clienti: coperti });
+      if (prenotazione && supabase) {
+        await supabase.from('prenotazioni').update({ status: 'ARRIVATA' }).eq('id', prenotazione.id);
+      }
+      setCoversTable(null);
+      goToPos(tavolo);
+    } finally {
+      setOpeningTable(false);
+    }
+  }
 
   const timeStr = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -217,38 +267,46 @@ export default function StaffDashboard() {
         </div>
       )}
 
+      {/* Da tablet in su le card riempiono l'altezza disponibile (righe a 1fr con un minimo):
+          i pulsanti "Apri …" restano visibili e scorrono solo le liste interne. */}
       {section === 'sala' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 px-5 md:px-8 flex-1 min-h-0 py-5 overflow-y-auto custom-scrollbar">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 md:grid-rows-[minmax(20rem,1fr)_minmax(20rem,1fr)] lg:grid-rows-[minmax(24rem,1fr)] gap-4 px-5 md:px-8 flex-1 min-h-0 py-5 overflow-y-auto custom-scrollbar">
 
           {/* MAPPA */}
-          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
+          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative min-h-0">
             <div className="flex justify-between items-start mb-5 shrink-0">
                <div>
                   <h2 className="text-xl font-bold text-white mb-1">MAPPA</h2>
-                  <p className="text-[11px] text-gold">Visualizza & gestisci tavoli</p>
+                  <p className="text-[11px] text-gold">Tocca un tavolo per aprirlo</p>
                </div>
                <div className="text-gold">
                   <MapIcon size={30} strokeWidth={1.5} />
                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center">
-              <div className="w-full border border-surface-light rounded-xl p-3 mb-5">
-                <div className={`grid gap-2 w-full ${tables.length > 12 ? 'grid-cols-4' : 'grid-cols-3'}`}>
-                  {tables.map(t => (
-                    <div key={t.id} className={`rounded-lg border py-2.5 flex items-center justify-center text-xs font-bold transition ${
-                       t.status === 'OCCUPATO' ? 'border-gold bg-gold/10 text-gold' :
-                       t.status === 'LIBERO' ? 'border-emerald-400/40 bg-emerald-400/5 text-emerald-400' :
-                       'border-gray-500/40 bg-gray-500/5 text-gray-400'
-                    }`}>
-                      {t.nome}
-                    </div>
-                  ))}
-                  {tables.length === 0 && !loading && (
-                    <div className="col-span-full text-center text-[11px] text-gray-400 py-4">Nessun tavolo</div>
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar -mx-1 px-1 space-y-4">
+              {tableGroups.map(([sala, list]) => (
+                <div key={sala}>
+                  {tableGroups.length > 1 && (
+                    <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase mb-2">{sala}</p>
                   )}
+                  <div className="grid grid-cols-3 xl:grid-cols-4 gap-2">
+                    {list.map(t => (
+                      <TableTile
+                        key={t.id}
+                        tavolo={t}
+                        apertoDa={tableOpenedAt[t.nome]}
+                        prenotazione={reservations.find(r => r.tavolo_id === t.id && r.status !== 'ANNULLATA')}
+                        now={now}
+                        onClick={() => handleTableTap(t)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ))}
+              {tables.length === 0 && !loading && (
+                <div className="text-center text-[11px] text-gray-400 py-4">Nessun tavolo</div>
+              )}
             </div>
 
             <div className="pt-5 shrink-0">
@@ -259,33 +317,32 @@ export default function StaffDashboard() {
           </div>
 
           {/* POS */}
-          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
+          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative min-h-0">
             <div className="flex justify-between items-start mb-5 shrink-0">
                <div>
                   <h2 className="text-xl font-bold text-white mb-1">POS</h2>
-                  <p className="text-[11px] text-gold">Crea conto (senza tavolo)</p>
+                  <p className="text-[11px] text-gold">Conti senza tavolo e storico</p>
                </div>
                <div className="text-gold">
                   <Calculator size={30} strokeWidth={1.5} />
                </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
-                <PosBox icon={<FilePlus size={24} />} title="Nuovo Conto" desc="Apri un nuovo conto" onClick={() => { setShowNewOrderModal(true); setNewOrderName(''); }} />
-               <PosBox icon={<Zap size={24} />} title="Vendita Rapida" desc="Piatti veloci, asporto" onClick={() => navigate('/pos')} />
-               <PosBox icon={<History size={24} />} title="Conti Recenti" desc="Visualizza transazioni" onClick={() => navigate('/pos?showBills=day')} />
-               <PosBox icon={<PauseCircle size={24} />} title="Conti in Sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
+            <div className="flex-1 min-h-0 grid grid-rows-3 gap-3">
+              <PosBox icon={<FilePlus size={24} />} title="Nuovo conto con nome" desc="Eventi, feste, conti senza tavolo" onClick={() => { setShowNewOrderModal(true); setNewOrderName(''); }} />
+              <PosBox icon={<History size={24} />} title="Conti recenti" desc="Scontrini di oggi" onClick={() => navigate('/pos?showBills=day')} />
+              <PosBox icon={<PauseCircle size={24} />} title="Conti in sospeso" desc="Visualizza o riprendi" onClick={() => navigate('/pos?showHold=true')} />
             </div>
 
             <div className="pt-5 shrink-0">
                <button onClick={() => navigate('/pos')} className="w-full bg-gold text-black font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 hover:bg-gold-hover transition active:scale-[0.98] cursor-pointer">
-                  Apri POS <ArrowRight size={18} />
+                  <Zap size={18} /> Vendita rapida
                </button>
             </div>
           </div>
 
           {/* PRENOTAZIONI */}
-          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative">
+          <div className="bg-surface border border-surface-light rounded-[24px] flex flex-col p-6 relative min-h-0 md:col-span-2 lg:col-span-1">
             <div className="flex justify-between items-start mb-5 shrink-0">
                <div>
                   <h2 className="text-xl font-bold text-white mb-1">PRENOTAZIONI</h2>
@@ -347,48 +404,70 @@ export default function StaffDashboard() {
               <X size={20} />
             </button>
             <h2 className="text-2xl font-black text-white mb-6">Nuovo Conto</h2>
-            <div className="space-y-3">
+            <p className="text-sm text-gray-400 -mt-3 mb-5">Per eventi, feste o clienti senza tavolo. Per un tavolo, toccalo nella mappa.</p>
+            <form
+              onSubmit={e => { e.preventDefault(); if (newOrderName.trim()) { setShowNewOrderModal(false); navigate(`/pos?tableName=${encodeURIComponent(newOrderName.trim())}`); } }}
+              className="space-y-3"
+            >
+              <input
+                type="text"
+                value={newOrderName}
+                onChange={e => setNewOrderName(e.target.value)}
+                placeholder="Nome cliente o evento..."
+                className="w-full bg-charcoal border border-surface-light rounded-xl py-4 px-4 text-white text-base font-bold outline-none focus:border-gold transition-all placeholder:text-gray-400"
+                autoFocus
+              />
               <button
-                onClick={() => { setShowNewOrderModal(false); navigate('/map'); }}
-                className="w-full flex items-center gap-4 p-5 bg-charcoal border border-surface-light rounded-2xl hover:border-gold/40 transition-all group text-left"
+                type="submit"
+                disabled={!newOrderName.trim()}
+                className="w-full bg-gold text-black font-bold py-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition cursor-pointer"
               >
-                <div className="w-12 h-12 rounded-2xl bg-gold/10 flex items-center justify-center shrink-0 group-hover:bg-gold/20 transition-all">
-                  <Table2 size={24} className="text-gold" />
-                </div>
-                <div>
-                  <p className="font-bold text-white group-hover:text-gold transition-colors">Apri su Tavolo</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Seleziona un tavolo dalla mappa</p>
-                </div>
+                Apri conto <ArrowRight size={18} />
               </button>
-              <div className="flex items-center gap-3 py-1">
-                <div className="flex-1 h-px bg-surface-light" />
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">oppure</span>
-                <div className="flex-1 h-px bg-surface-light" />
-              </div>
-              <div>
-                <button
-                  onClick={() => { if (newOrderName.trim()) { setShowNewOrderModal(false); navigate(`/pos?tableName=${encodeURIComponent(newOrderName.trim())}`); } }}
-                  className="w-full flex items-center gap-4 p-5 bg-charcoal border border-surface-light rounded-2xl hover:border-gold/40 transition-all group text-left mb-3"
-                >
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-all">
-                    <UserPlus size={24} className="text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">Apri con Nome</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Per eventi, feste o conti sospesi</p>
-                  </div>
-                </button>
-                <input
-                  type="text"
-                  value={newOrderName}
-                  onChange={e => setNewOrderName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && newOrderName.trim()) { setShowNewOrderModal(false); navigate(`/pos?tableName=${encodeURIComponent(newOrderName.trim())}`); } }}
-                  placeholder="Inserisci nome cliente o evento..."
-                  className="w-full bg-charcoal border border-surface-light rounded-xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-gold transition-all placeholder:text-gray-400"
-                  autoFocus
-                />
-              </div>
-            </div>
+            </form>
+        </Dialog>
+      )}
+
+      {/* Apertura tavolo: coperti */}
+      {coversTable && (
+        <Dialog
+          open
+          onClose={() => setCoversTable(null)}
+          label={`Apri tavolo ${coversTable.tavolo.nome}`}
+          overlayClassName="z-[100] items-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200"
+          panelClassName="bg-surface border border-surface-light w-full max-w-sm rounded-[32px] shadow-2xl p-7 text-center relative"
+        >
+          <button onClick={() => setCoversTable(null)} aria-label="Chiudi" className="absolute top-5 right-5 text-gray-400 hover:text-white transition cursor-pointer">
+            <X size={20} />
+          </button>
+          <h2 className="text-3xl font-black text-white">{coversTable.tavolo.nome}</h2>
+          {coversTable.prenotazione ? (
+            <p className="text-sm text-sky-300 font-bold mt-1">
+              Prenotato: {coversTable.prenotazione.nome} · {coversTable.prenotazione.ora?.slice(0, 5)}
+            </p>
+          ) : (
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Coperti</p>
+          )}
+          <div className="flex items-center justify-between bg-charcoal border border-surface-light rounded-2xl p-3 my-6">
+            <button
+              onClick={() => setCoversTable(c => c && { ...c, coperti: Math.max(1, c.coperti - 1) })}
+              aria-label="Meno coperti"
+              className="w-14 h-14 flex items-center justify-center bg-surface rounded-xl text-gold active:scale-90 cursor-pointer"
+            ><Minus size={26} /></button>
+            <span className="text-5xl font-black text-white tabular-nums">{coversTable.coperti}</span>
+            <button
+              onClick={() => setCoversTable(c => c && { ...c, coperti: c.coperti + 1 })}
+              aria-label="Più coperti"
+              className="w-14 h-14 flex items-center justify-center bg-surface rounded-xl text-gold active:scale-90 cursor-pointer"
+            ><Plus size={26} /></button>
+          </div>
+          <button
+            onClick={() => void openTable()}
+            disabled={openingTable}
+            className="w-full bg-gold text-black font-black py-4 rounded-2xl text-lg flex items-center justify-center gap-2 active:scale-[0.98] transition disabled:opacity-50 cursor-pointer"
+          >
+            {coversTable.prenotazione ? 'Check-in e apri' : 'Apri tavolo'} <ArrowRight size={20} />
+          </button>
         </Dialog>
       )}
 
@@ -448,12 +527,47 @@ function BigSectionCard({ title, desc, icon, accent, onClick, badge }: {
 
 function PosBox({ icon, title, desc, onClick }: { icon: React.ReactNode, title: string, desc: string, onClick?: () => void }) {
   return (
-    <button onClick={onClick} className="bg-transparent border border-surface-light rounded-2xl p-4 flex flex-col items-center justify-center gap-3 group hover:border-gold/50 transition h-full text-center cursor-pointer">
-      <div className="text-gold">{icon}</div>
-      <div>
-        <h3 className="text-[13px] font-semibold text-[#f5f5f5] group-hover:text-gold transition">{title}</h3>
-        <p className="text-[10px] text-gray-400 mt-1">{desc}</p>
+    <button onClick={onClick} className="bg-transparent border border-surface-light rounded-2xl px-4 py-2 flex items-center gap-4 group hover:border-gold/50 transition h-full min-h-0 overflow-hidden text-left cursor-pointer active:scale-[0.98]">
+      <div className="text-gold shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold text-[#f5f5f5] group-hover:text-gold transition truncate">{title}</h3>
+        <p className="text-[11px] text-gray-400 mt-0.5 truncate">{desc}</p>
       </div>
+      <ArrowRight size={16} className="ml-auto shrink-0 text-gray-600 group-hover:text-gold transition" />
+    </button>
+  );
+}
+
+/** Tavolo nella card Sala: colore per stato, coperti e da quanto è aperto. */
+function TableTile({ tavolo, apertoDa, prenotazione, now, onClick }: {
+  tavolo: Tavolo; apertoDa?: string; prenotazione?: Reservation; now: Date; onClick: () => void;
+}) {
+  const occupato = tavolo.status === 'OCCUPATO';
+  const prenotato = tavolo.status === 'PRENOTATO';
+  let durata = '';
+  if (occupato && apertoDa) {
+    const mins = Math.max(0, Math.floor((now.getTime() - new Date(apertoDa).getTime()) / 60000));
+    durata = mins < 60 ? `${mins}'` : `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-xl border-2 min-h-[64px] px-1 py-2 flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer ${
+        occupato ? 'border-gold bg-gold/15 text-gold' :
+        prenotato ? 'border-sky-400/60 bg-sky-400/10 text-sky-300' :
+        'border-emerald-400/40 bg-emerald-400/5 text-emerald-400'
+      }`}
+    >
+      <span className="text-base font-black leading-none text-white">{tavolo.nome}</span>
+      {occupato && (
+        <span className="flex items-center gap-1 text-[10px] font-bold leading-none">
+          <Users size={10} /> {tavolo.clienti || 0}{durata && <> · {durata}</>}
+        </span>
+      )}
+      {prenotato && prenotazione && (
+        <span className="text-[10px] font-bold leading-none truncate max-w-full">{prenotazione.ora?.slice(0, 5)} {prenotazione.nome}</span>
+      )}
+      {!occupato && !prenotato && <span className="text-[10px] font-bold leading-none">libero</span>}
     </button>
   );
 }
