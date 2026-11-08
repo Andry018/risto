@@ -40,6 +40,9 @@ export default function BillReviewPanel({
 }: Props) {
   const toPay = scontoTipo ? discountedTotal : total;
   const pieces = cart.filter(i => i.categoria !== 'Servizio').reduce((s, i) => s + i.quantity, 0);
+  // persone rimaste sul conto: i coperti ancora da pagare (dopo un pagamento per piatto possono essere meno)
+  const copertiSulConto = cart.filter(i => /coperto/i.test(i.nome)).reduce((s, i) => s + i.quantity, 0);
+  const persone = copertiSulConto || covers;
 
   // righe raggruppate per uscita (senza uscita in fondo)
   const groups = new Map<string, CustomizedItem[]>();
@@ -134,7 +137,7 @@ export default function BillReviewPanel({
                   </span>
                 </p>
               )}
-              {covers > 1 && toPay > 0 && <p>A testa <span className="font-bold text-gray-200 tabular-nums">{euro(toPay / covers)}</span></p>}
+              {persone > 1 && toPay > 0 && <p>A testa <span className="font-bold text-gray-200 tabular-nums">{euro(toPay / persone)}</span></p>}
               <button type="button" onClick={onDiscount} className="flex items-center gap-1 font-bold text-gray-400 hover:text-gold">
                 <Percent size={14} /> {scontoTipo ? 'Modifica sconto' : 'Applica sconto'}
               </button>

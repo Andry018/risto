@@ -20,6 +20,7 @@ import { syncManager } from '../lib/OfflineSync';
 import { useRearScreen } from '../lib/rearScreen';
 import { calculateItemPrice, roundCents } from '../lib/priceUtils';
 import { getItemKey, qtyByKey, computePending } from '../lib/orderPending';
+import { applyItemSplit, splitAmount, subtractSaved, type ItemSelection } from '../lib/splitByItems';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
 import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent, printErrorMessage } from '../lib/lanPrint';
@@ -53,7 +54,11 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
-  const [splitType, setSplitType] = useState<'NONE' | 'EQUAL' | 'GUESTS' | 'CUSTOM'>('NONE');
+  const [splitType, setSplitType] = useState<'NONE' | 'EQUAL' | 'GUESTS' | 'CUSTOM' | 'ITEMS'>('NONE');
+  /** Divisione per piatto: pezzi scelti per chi paga adesso */
+  const [itemSelection, setItemSelection] = useState<ItemSelection>({});
+  /** Pagamento in corso di una parte (per piatto): cosa si paga, cosa resta, quanto */
+  const [itemSplitPaying, setItemSplitPaying] = useState<{ paid: CustomizedItem[]; remaining: CustomizedItem[]; amount: number } | null>(null);
   const [customSplitCount, setCustomSplitCount] = useState(2);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -890,11 +895,88 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     setCardPaymentOpen(true);
   };
 
+  /** Rapporto sconto (totale scontato / pieno): lo sconto del tavolo si applica in proporzione a ogni parte. */
+  const discountRatio = total > 0 ? discountedTotal / total : 1;
+
+  const cartToCarrello = (items: CustomizedItem[]) => items.map(i => {
+    const extras = i.addedIngredients.reduce((s, a) => s + a.prezzo, 0);
+    const removals = i.removedIngredients.reduce((s, rName) => {
+      const ing = ingredients.find(ig => ig.nome.toLowerCase() === rName.toLowerCase());
+      return s + (ing?.prezzo_rimozione || 0);
+    }, 0);
+    return {
+      nome: i.nome,
+      quantity: i.quantity,
+      prezzo_unitario: Math.max(0, i.prezzo + extras - removals),
+      portata: i.portata,
+      modifiche: { aggiunte: i.addedIngredients.map(a => a.nome), rimozioni: i.removedIngredients, note: i.notes },
+    };
+  });
+
+  /** Avvia il pagamento dei piatti scelti. Se sono tutti, è un normale "chiudi conto". */
+  const startItemPayment = (method: 'cash' | 'card') => {
+    const { paid, remaining } = applyItemSplit(cart, itemSelection);
+    if (paid.length === 0) return;
+    setIsSplitModalOpen(false);
+    if (remaining.length === 0) {
+      setItemSplitPaying(null);
+      if (method === 'cash') { setCashPaymentAmount(discountedTotal); setCashPaymentOpen(true); }
+      else openCardPayment();
+      return;
+    }
+    const amount = splitAmount(paid, ingredients, discountRatio);
+    setItemSplitPaying({ paid, remaining, amount });
+    if (method === 'cash') { setCashPaymentAmount(amount); setCashPaymentOpen(true); }
+    else { setCardPaymentSplitParts(undefined); setCardPaymentOpen(true); }
+  };
+
+  /**
+   * Pagamento di una parte riuscito: i piatti pagati diventano un ordine COMPLETATO (conta negli
+   * incassi e nei report), il resto rimane aperto sul tavolo.
+   */
+  const finishItemSplit = async () => {
+    const pay = itemSplitPaying;
+    if (!pay) return;
+    setFinishingOrder(true);
+    localUpdateRef.current = true;
+    try {
+      const orario = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      await syncManager.pushOrder({
+        nome_cliente: tableName || 'POS VENDITA',
+        orario_ritiro: orario,
+        totale: pay.amount,
+        status: 'COMPLETATO' as const,
+        carrello: cartToCarrello(pay.paid),
+      });
+      const restTotale = splitAmount(pay.remaining, ingredients, discountRatio);
+      if (activeOrderId) {
+        await syncManager.pushOrder({ id: activeOrderId, carrello: cartToCarrello(pay.remaining), totale: restTotale });
+      } else {
+        setActiveOrderId(await syncManager.pushOrder({
+          nome_cliente: tableName || 'POS VENDITA', orario_ritiro: orario, totale: restTotale,
+          status: 'IN_ATTESA' as const, carrello: cartToCarrello(pay.remaining),
+        }));
+      }
+      setCart(pay.remaining);
+      setSavedQtys(subtractSaved(savedItemQtysRef.current, pay.paid));
+      setItemSelection({});
+      setItemSplitPaying(null);
+      void fetchMagazzino();
+      toast.addToast({ type: 'success', title: `Pagato €${pay.amount.toFixed(2)}`, message: `Restano €${restTotale.toFixed(2)} sul tavolo.`, duration: 3500 });
+    } catch (error) {
+      console.error('Errore pagamento parziale:', error);
+      toast.addToast({ type: 'error', title: 'Errore', message: 'Pagamento parziale non registrato. Riprova.' });
+    } finally {
+      setFinishingOrder(false);
+    }
+  };
+
   const handleCardAllPaid = (_results: PaymentResult[]) => {
     setCardPaymentOpen(false);
     setCardPaymentSplitParts(undefined);
     setSplitResult(null);
     setIsSplitModalOpen(false);
+    if (itemSplitPaying) { void finishItemSplit(); return; }
     void handleFinishOrder();
   };
 
@@ -1382,9 +1464,9 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
 
       {/* Payment Split Modal */}
       {isSplitModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-surface border border-surface-light w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden p-10">
-            <div className="flex justify-between items-center mb-10">
+        <div className="fixed inset-0 z-[110] flex justify-center p-4 overflow-y-auto bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-surface border border-surface-light w-full max-w-xl my-auto rounded-[40px] shadow-2xl p-6 md:p-10">
+            <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-4xl font-black italic uppercase text-white tracking-tighter">Divisione <span className="text-gold">Conto</span></h2>
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">Seleziona come dividere il totale di €{total.toFixed(2)}</p>
@@ -1400,7 +1482,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
                 <div className="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center text-xl font-black italic">1/2</div>
                 <div className="text-center">
                   <div className="text-xs font-black uppercase tracking-widest">In due</div>
-                  <div className="text-[10px] opacity-60 mt-1">€{(total / 2).toFixed(2)} a testa</div>
+                  <div className="text-[10px] opacity-60 mt-1">€{(discountedTotal / 2).toFixed(2)} a testa</div>
                 </div>
               </button>
 
@@ -1433,7 +1515,61 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               </div>
             </div>
 
-            <button 
+            {/* Per piatto: ognuno paga il suo, il resto rimane sul tavolo */}
+            <button
+              onClick={() => { setSplitType('ITEMS'); setItemSelection({}); }}
+              className={`w-full -mt-6 mb-6 p-5 rounded-3xl border-2 flex items-center gap-4 text-left transition-all ${splitType === 'ITEMS' ? 'bg-gold/10 border-gold text-gold shadow-xl' : 'bg-charcoal border-surface-light text-gray-500'}`}
+            >
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${splitType === 'ITEMS' ? 'bg-gold text-black' : 'bg-surface'}`}><Receipt size={22} /></div>
+              <div>
+                <div className="text-xs font-black uppercase tracking-widest">Per piatto</div>
+                <div className="text-[11px] opacity-70 mt-1">Ognuno paga quello che ha preso, il resto rimane sul tavolo</div>
+              </div>
+            </button>
+
+            {splitType === 'ITEMS' && (() => {
+              const { paid } = applyItemSplit(cart, itemSelection);
+              const amount = splitAmount(paid, ingredients, discountRatio);
+              const tutti = paid.reduce((n, i) => n + i.quantity, 0) === cart.reduce((n, i) => n + i.quantity, 0);
+              return (
+                <div className="mb-6">
+                  <div className="max-h-[40vh] overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                    {cart.map(item => {
+                      const sel = itemSelection[item.uniqueId] || 0;
+                      const unit = calculateItemPrice({ ...item, quantity: 1 }, ingredients);
+                      const setSel = (n: number) => setItemSelection(prev => ({ ...prev, [item.uniqueId]: Math.max(0, Math.min(item.quantity, n)) }));
+                      return (
+                        <div key={item.uniqueId} className={`flex items-center gap-3 rounded-2xl border px-3 py-2 ${sel > 0 ? 'border-gold/60 bg-gold/5' : 'border-surface-light bg-charcoal'}`}>
+                          <button onClick={() => setSel(sel > 0 ? 0 : item.quantity)} className="flex-1 min-w-0 text-left">
+                            <p className="font-bold text-white truncate">{item.nome}</p>
+                            <p className="text-xs text-gray-400">€{unit.toFixed(2)} cad. · al tavolo {item.quantity}</p>
+                          </button>
+                          {item.quantity > 1 ? (
+                            <div className="flex items-center bg-surface rounded-xl border border-surface-light shrink-0">
+                              <button onClick={() => setSel(sel - 1)} className="w-9 h-9 flex items-center justify-center text-gray-300"><Minus size={16} /></button>
+                              <span className="w-10 text-center font-black text-white tabular-nums">{sel}/{item.quantity}</span>
+                              <button onClick={() => setSel(sel + 1)} className="w-9 h-9 flex items-center justify-center text-gray-300"><Plus size={16} /></button>
+                            </div>
+                          ) : (
+                            <span className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 ${sel > 0 ? 'bg-gold border-gold text-black' : 'border-surface-light'}`}>{sel > 0 && <CheckCircle size={16} />}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between mt-4 mb-3">
+                    <span className="text-sm text-gray-400">{paid.length === 0 ? 'Tocca i piatti di chi paga' : tutti ? 'Tutto il conto' : 'Da pagare ora'}</span>
+                    <span className="text-3xl font-black text-gold tabular-nums">€{amount.toFixed(2)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => startItemPayment('cash')} disabled={paid.length === 0 || finishingOrder} className="py-4 rounded-2xl bg-gold text-black font-black active:scale-95 disabled:opacity-30">Contanti</button>
+                    <button onClick={() => startItemPayment('card')} disabled={paid.length === 0 || finishingOrder} className="py-4 rounded-2xl bg-sky-500 text-white font-black flex items-center justify-center gap-2 active:scale-95 disabled:opacity-30"><CreditCard size={18} /> Carta</button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {splitType !== 'ITEMS' && <button 
               onClick={() => {
                 const parts = splitType === 'EQUAL' ? 2 : splitType === 'GUESTS' ? (tableClienti || 1) : customSplitCount;
                 setSplitResult({ parts, eachAmount: discountedTotal / parts });
@@ -1442,7 +1578,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
               className="w-full bg-gold hover:bg-gold-hover text-black font-black py-6 rounded-3xl text-xl shadow-2xl shadow-gold/20 active:scale-95 transition-all disabled:opacity-30"
             >
               PROCEDI AL PAGAMENTO DIVISO
-            </button>
+            </button>}
           </div>
         </div>
       )}
@@ -1628,21 +1764,21 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
         open={cashPaymentOpen}
         total={cashPaymentAmount}
         loading={finishingOrder}
-        onClose={() => setCashPaymentOpen(false)}
-        onConfirm={() => { setCashPaymentOpen(false); void handleFinishOrder(); }}
+        onClose={() => { setCashPaymentOpen(false); setItemSplitPaying(null); }}
+        onConfirm={() => { setCashPaymentOpen(false); if (itemSplitPaying) void finishItemSplit(); else void handleFinishOrder(); }}
       />
       <CardPaymentModal
         open={cardPaymentOpen}
-        totalAmount={discountedTotal}
+        totalAmount={itemSplitPaying ? itemSplitPaying.amount : discountedTotal}
         splitParts={cardPaymentSplitParts}
         label={tableName || 'POS'}
-        fiscalItems={cart.map(item => ({
+        fiscalItems={(itemSplitPaying ? itemSplitPaying.paid : cart).map(item => ({
           nome:     item.nome,
           prezzo:   calculateItemPrice(item, ingredients),
           quantita: item.quantity,
           iva:      '10',
         }))}
-        onClose={() => { setCardPaymentOpen(false); setCardPaymentSplitParts(undefined); }}
+        onClose={() => { setCardPaymentOpen(false); setCardPaymentSplitParts(undefined); setItemSplitPaying(null); }}
         onAllPaid={handleCardAllPaid}
       />
     </>
