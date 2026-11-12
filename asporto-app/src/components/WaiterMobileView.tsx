@@ -39,25 +39,6 @@ import { toLocalISODate } from '../lib/dateUtils';
 import { syncTableReservationStatus } from '../lib/tableReservations';
 import { useRearScreen } from '../lib/rearScreen';
 
-const SWIPE_BACK_MIN_PX = 100;
-const SWIPE_BACK_MAX_MS = 700;
-
-/** Il tocco parte da un punto dove lo swipe "indietro" non deve valere: finestre aperte sopra il tavolo,
- *  campi di testo, righe con il proprio swipe, elenchi che scorrono in orizzontale (categorie, uscite). */
-function swipeBackBlocked(target: EventTarget | null, root: HTMLElement | null): boolean {
-  let el = target instanceof Element ? target : null;
-  while (el && el !== root) {
-    if (el.matches('[role="dialog"], [aria-modal="true"], input, textarea, select, [data-no-swipe-back]')) return true;
-    const style = getComputedStyle(el);
-    // position: fixed = finestra/pannello sovrapposto (non tutte le modali hanno role="dialog")
-    if (style.position === 'fixed') return true;
-    if ((style.overflowX === 'auto' || style.overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 1) return true;
-    el = el.parentElement;
-  }
-  // Fuori dal contenitore (portali delle finestre): mai
-  return el !== root;
-}
-
 export default function WaiterMobileView() {
   const navigate = useNavigate();
   const [tables, setTables] = useState<Tavolo[]>([]);
@@ -109,34 +90,7 @@ export default function WaiterMobileView() {
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
-  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Swipe verso destra = torna alla mappa. Prima bastavano 50 px a destra in qualunque direzione e
-  // da qualunque punto (anche scorrendo la lista, le categorie o dentro una finestra aperta): si usciva
-  // dal tavolo a ogni piccolo tocco. Ora serve un gesto deciso e nettamente orizzontale, valutato al rilascio.
-  const handleTouchStartSwipe = (e: React.TouchEvent) => {
-    swipeStart.current = selectedTable && e.touches.length === 1 && !swipeBackBlocked(e.target, containerRef.current)
-      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: e.timeStamp }
-      : null;
-  };
-
-  const handleTouchMoveSwipe = (e: React.TouchEvent) => {
-    if (e.touches.length > 1) swipeStart.current = null;
-  };
-
-  const handleTouchEndSwipe = (e: React.TouchEvent) => {
-    const start = swipeStart.current;
-    swipeStart.current = null;
-    if (!start || !selectedTable) return;
-    const touch = e.changedTouches[0];
-    if (!touch) return;
-    const dx = touch.clientX - start.x;
-    const dy = Math.abs(touch.clientY - start.y);
-    if (dx >= SWIPE_BACK_MIN_PX && dy < dx * 0.4 && e.timeStamp - start.t < SWIPE_BACK_MAX_MS) {
-      leaveTable();
-    }
-  };
 
   // Reservation state
   const [isReservationsOpen, setIsReservationsOpen] = useState(false);
@@ -1056,9 +1010,9 @@ export default function WaiterMobileView() {
   return (
     <div
       ref={containerRef}
-      onTouchStart={(e) => { handleTouchStartPull(e); handleTouchStartSwipe(e); }}
-      onTouchMove={(e) => { handleTouchMovePull(e); handleTouchMoveSwipe(e); }}
-      onTouchEnd={(e) => { handleTouchEndPull(e); handleTouchEndSwipe(e); }}
+      onTouchStart={handleTouchStartPull}
+      onTouchMove={handleTouchMovePull}
+      onTouchEnd={handleTouchEndPull}
       className="h-dvh overflow-hidden bg-charcoal text-white font-sans flex flex-col max-w-2xl mx-auto relative border-x border-surface"
     >
       
@@ -1832,7 +1786,6 @@ function SwipeableCartItem({ item, newQty, onRemove, onEdit, onSetCart }: Swipea
         </button>
       </div>
       <div
-        data-no-swipe-back
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
