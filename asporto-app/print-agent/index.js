@@ -5,6 +5,8 @@ const PrinterTypes = require('node-thermal-printer').types;
 const http = require('node:http');
 const net  = require('node:net');
 const { URL } = require('node:url');
+const path = require('node:path');
+const { createPendingStore } = require('./pendingJobs');
 
 /**
  * Invia un buffer ESC/POS alla stampante via TCP raw.
@@ -687,6 +689,22 @@ async function fetchMenuProducts() {
   return menuProductsCache.data;
 }
 
+async function runPrintJob(job) {
+  if (job.kind === 'kitchen') return printKitchenJob(job);
+  if (job.kind === 'sala') return printSalaJob(job);
+  if (job.kind === 'pre_conto') return printPreContoJob(job);
+  if (job.kind === 'receipt') return printReceiptJob(job);
+  if (job.kind === 'haccp_label') return stampaEtichettaHaccp(job);
+  if (job.kind === 'quick_label') return printQuickLabelJob(job);
+  throw new Error('Unknown print job');
+}
+
+/** Solo le comande vanno in lista d'attesa: conti, pre-conti ed etichette si ristampano a mano sul momento. */
+const QUEUED_KINDS = ['kitchen', 'sala'];
+const PENDING_RETRY_INTERVAL_MS = 20_000;
+const pending = createPendingStore({ file: path.join(__dirname, 'pending-jobs.json'), runJob: runPrintJob });
+setInterval(() => { if (pending.size > 0) void pending.flush(); }, PENDING_RETRY_INTERVAL_MS);
+
 const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -727,6 +745,29 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ ok: true }));
   }
 
+  // Comande non stampate: lista e azioni (Ristampa / Elimina) dall'app
+  if (reqUrl.pathname === '/pending' && req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.end(JSON.stringify({ jobs: pending.list() }));
+  }
+  const pendingAction = /^\/pending\/([0-9a-f-]{36})\/(retry|delete)$/.exec(reqUrl.pathname);
+  if (pendingAction && req.method === 'POST') {
+    const [, id, action] = pendingAction;
+    res.setHeader('Content-Type', 'application/json');
+    if (action === 'delete') {
+      return res.end(JSON.stringify({ ok: pending.remove(id) }));
+    }
+    try {
+      const result = await pending.retry(id);
+      res.statusCode = result.ok ? 200 : 500;
+      return res.end(JSON.stringify(result));
+    } catch (e) {
+      res.statusCode = 500;
+      return res.end(JSON.stringify({ ok: false, error: String(e.message || e) }));
+    }
+  }
+
   if (req.method === 'POST' && reqUrl.pathname === '/print') {
     let body = '';
     req.on('data', (chunk) => {
@@ -734,30 +775,26 @@ const server = http.createServer(async (req, res) => {
       if (body.length > 1_000_000) req.destroy();
     });
     req.on('end', async () => {
+      let job = null;
       try {
-        const job = JSON.parse(body || '{}');
-        if (job.kind === 'kitchen') {
-          await printKitchenJob(job);
-        } else if (job.kind === 'sala') {
-          await printSalaJob(job);
-        } else if (job.kind === 'pre_conto') {
-          await printPreContoJob(job);
-        } else if (job.kind === 'receipt') {
-          await printReceiptJob(job);
-        } else if (job.kind === 'haccp_label') {
-          await stampaEtichettaHaccp(job);
-        } else if (job.kind === 'quick_label') {
-          await printQuickLabelJob(job);
-        } else {
-          throw new Error('Unknown print job');
-        }
+        job = JSON.parse(body || '{}');
+        await runPrintJob(job);
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true }));
+        // La stampante funziona: se c'erano comande in attesa escono adesso
+        if (pending.size > 0) void pending.flush();
       } catch (error) {
         console.error('[PRINT BRIDGE ERROR]', error);
-        res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');
+        // Comanda (cucina/sala) non stampata per un problema della stampante (beforeConnect è valorizzato
+        // solo dagli errori di comunicazione con la stampante): non si perde, va nella lista d'attesa.
+        if (job && QUEUED_KINDS.includes(job.kind) && error && error.beforeConnect !== undefined) {
+          const entry = pending.add(job, error);
+          res.statusCode = 202;
+          return res.end(JSON.stringify({ ok: false, queued: true, auto: entry.auto, id: entry.id, error: String(error.message || error) }));
+        }
+        res.statusCode = 500;
         res.end(JSON.stringify({ ok: false, error: String(error.message || error) }));
       }
     });

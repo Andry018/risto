@@ -42,3 +42,6 @@ asporto-app/ecr-agent/.env
 asporto-app/wa-agent/.env
 asporto-app/ecr-agent/ecr-state.json
 telegram-bot/dist/
+
+# Comande non stampate in attesa (print agent, stato locale)
+asporto-app/print-agent/pending-jobs.json

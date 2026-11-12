@@ -22,6 +22,7 @@ import { PinProvider } from './components/PinModal';
 import { PromptProvider } from './components/PromptModal';
 import { WakeLockManager } from './components/WakeLockManager';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
+import PendingPrintsBar from './components/PendingPrintsBar';
 
 // Lazy load heavy admin/feature routes
 const AdminView = lazy(() => import('./components/AdminView'));
@@ -66,6 +67,7 @@ export default function App() {
         <ExitGuard>
         <WakeLockManager />
         <PwaUpdatePrompt />
+        <PendingPrintsBar />
         <Suspense fallback={<LoadingFallback />}>
         <Routes>
           {/* Pubbliche: nessun login (il DB concede ad anon solo lettura menu ed etichette HACCP) */}

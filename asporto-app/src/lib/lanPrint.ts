@@ -194,6 +194,13 @@ async function sendPrintJob(rawJob: PrintJob, agentUrl: string): Promise<void> {
     clearTimeout(timer);
   }
 
+  if (res.status === 202) {
+    // Comanda non stampata ma tenuta dal print agent nella lista "Comande non stampate"
+    const data = await res.json().catch(() => ({})) as { error?: string; auto?: boolean };
+    notifyPendingPrintsChanged();
+    throw new PrintQueuedError(data.error || 'Stampante non pronta', data.auto !== false);
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     let msg = text;
@@ -202,11 +209,96 @@ async function sendPrintJob(rawJob: PrintJob, agentUrl: string): Promise<void> {
   }
 }
 
+/**
+ * La comanda non è uscita ma il print agent l'ha messa nella lista "Comande non stampate".
+ * `auto` = si ristampa da sola appena la stampante è pronta (l'errore è avvenuto prima di stampare);
+ * altrimenti va ristampata a mano dalla lista. In entrambi i casi NON va ristampata con il tasto Stampa
+ * (uscirebbe due volte).
+ */
+export class PrintQueuedError extends Error {
+  readonly auto: boolean;
+  constructor(message: string, auto: boolean) {
+    super(message);
+    this.name = 'PrintQueuedError';
+    this.auto = auto;
+  }
+}
+
+export function isPrintQueued(error: unknown): error is PrintQueuedError {
+  return error instanceof PrintQueuedError;
+}
+
+export const PENDING_PRINTS_EVENT = 'risto:pending-prints-changed';
+
+function notifyPendingPrintsChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(PENDING_PRINTS_EVENT));
+}
+
 /** Messaggio leggibile per il toast di errore stampa (codici di rete tradotti). */
 export function printErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? '');
-  if (/ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|connect timeout|Socket timeout/i.test(raw)) {
-    return 'Stampante non raggiungibile: controlla che sia accesa e collegata alla rete.';
+  const base = /ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|connect timeout|Socket timeout/i.test(raw)
+    ? 'Stampante non raggiungibile: controlla che sia accesa e collegata alla rete.'
+    : raw || 'Controlla print agent, IP stampante e rete LAN.';
+  if (isPrintQueued(error)) {
+    return `${base.replace(/\s*(Poi )?ristampa\.?$/i, '').trim()} ${error.auto
+      ? 'La comanda è in attesa ed esce da sola appena la stampante è pronta.'
+      : "La comanda è nella lista 'Comande non stampate': ristampala da lì."}`;
   }
-  return raw || 'Controlla print agent, IP stampante e rete LAN.';
+  return base;
+}
+
+/**
+ * Avviso per una comanda salvata ma non stampata. Se è in lista d'attesa non si dice "ristampa"
+ * (uscirebbe doppia): esce da sola o si ristampa dalla lista.
+ */
+export function comandaNotPrintedToast(failed: string[], reason: unknown, saved: string) {
+  const what = failed.join(' e ');
+  if (isPrintQueued(reason)) {
+    return {
+      type: 'warning' as const,
+      title: `${saved}, comanda ${what} in attesa di stampa`,
+      message: printErrorMessage(reason),
+      duration: 15000,
+    };
+  }
+  return {
+    type: 'error' as const,
+    title: `${saved}, comanda ${what} NON stampata`,
+    message: `${printErrorMessage(reason)} Poi ristampa con il tasto Stampa.`,
+    duration: 15000,
+  };
+}
+
+/** Riga della lista "Comande non stampate" del print agent. */
+export interface PendingPrint {
+  id: string;
+  createdAt: string;
+  kind: 'kitchen' | 'sala' | string;
+  label: string;
+  reason: string;
+  attempts: number;
+  /** Si ristampa da sola appena la stampante è pronta */
+  auto: boolean;
+  items: string[];
+}
+
+export async function fetchPendingPrints(agentUrl: string): Promise<PendingPrint[]> {
+  const res = await fetch(`${normalizeAgentUrl(agentUrl)}/pending`, { signal: AbortSignal.timeout(5000), cache: 'no-store' });
+  if (!res.ok) throw new Error(`Print agent error (${res.status})`);
+  const data = await res.json() as { jobs?: PendingPrint[] };
+  return data.jobs ?? [];
+}
+
+export async function retryPendingPrint(agentUrl: string, id: string): Promise<void> {
+  const res = await fetch(`${normalizeAgentUrl(agentUrl)}/pending/${encodeURIComponent(id)}/retry`, { method: 'POST', signal: AbortSignal.timeout(PRINT_REQUEST_TIMEOUT_MS) });
+  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
+  notifyPendingPrintsChanged();
+  if (!res.ok || !data.ok) throw new Error(data.error || `Print agent error (${res.status})`);
+}
+
+export async function deletePendingPrint(agentUrl: string, id: string): Promise<void> {
+  const res = await fetch(`${normalizeAgentUrl(agentUrl)}/pending/${encodeURIComponent(id)}/delete`, { method: 'POST', signal: AbortSignal.timeout(5000) });
+  notifyPendingPrintsChanged();
+  if (!res.ok) throw new Error(`Print agent error (${res.status})`);
 }

@@ -6,7 +6,7 @@ import type { Product, Ingredient, CustomizedItem } from '../types/entities';
 import { MOCK_PRODUCTS, MOCK_INGREDIENTS } from '../lib/MockData';
 import { calculateItemPrice, roundCents } from '../lib/priceUtils';
 import { syncManager } from '../lib/OfflineSync';
-import { printKitchenViaAgent, printErrorMessage } from '../lib/lanPrint';
+import { printKitchenViaAgent, printErrorMessage, isPrintQueued } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { useToast } from './Toast';
 import { newUniqueId } from '../lib/id';
@@ -205,7 +205,7 @@ export default function TakeawayTabletView() {
       await printKitchenViaAgent(items, `ASP ${nome}`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), `RITIRO ${pickupTime}`, undefined, true);
       addToast({ type: 'success', title: 'Ordine salvato e stampato', message: `${nome} · ritiro ${pickupTime}` });
     } catch (error) {
-      addToast({ type: 'warning', title: 'Ordine salvato, stampa non riuscita', message: printErrorMessage(error), duration: 6000 });
+      addToast({ type: 'warning', title: isPrintQueued(error) ? 'Ordine salvato, comanda in attesa di stampa' : 'Ordine salvato, stampa non riuscita', message: printErrorMessage(error), duration: 10000 });
     }
     setSaving(false);
 

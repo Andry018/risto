@@ -9,7 +9,7 @@ import { Plus, Minus, Save, ChevronLeft, Edit3, Trash2, Receipt, RefreshCw, Book
 import BillsHistoryModal from './BillsHistoryModal';
 import ChangelogModal from './ChangelogModal';
 import { staffLogout, getCurrentUser } from '../lib/staffAuth';
-import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent, printErrorMessage } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent, printPreContoViaAgent, printErrorMessage, comandaNotPrintedToast, isPrintQueued } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import { syncManager } from '../lib/OfflineSync';
 import { calculateItemPrice, roundCents } from '../lib/priceUtils';
@@ -142,12 +142,18 @@ export default function WaiterMobileView() {
     const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
     try {
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      // Cucina e sala sempre tutte e due: se la prima non esce la seconda va provata lo stesso
+      const failed: string[] = [];
+      let reason: unknown;
       if (cucinaItems.length > 0) {
-        await printKitchenViaAgent(cucinaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined);
+        await printKitchenViaAgent(cucinaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined)
+          .catch((e: unknown) => { failed.push('cucina'); reason = e; });
       }
       if (salaItems.length > 0) {
-        await printSalaViaAgent(salaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
+        await printSalaViaAgent(salaItems, tableName, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())
+          .catch((e: unknown) => { failed.push('sala'); reason = e; });
       }
+      if (failed.length > 0) throw reason;
       toast.addToast({
         type: 'success',
         title: 'Comanda stampata',
@@ -158,11 +164,13 @@ export default function WaiterMobileView() {
     } catch (error) {
       console.error('Print failed:', error);
       toast.addToast({
-        type: 'error',
-        title: 'Stampa non riuscita',
+        type: isPrintQueued(error) ? 'warning' : 'error',
+        title: isPrintQueued(error) ? 'Comanda in attesa di stampa' : 'Stampa non riuscita',
         message: printErrorMessage(error),
-        duration: 4500,
+        duration: isPrintQueued(error) ? 10000 : 4500,
       });
+      // In attesa = uscirà comunque: l'ordine va salvato come se fosse stampato
+      if (isPrintQueued(error)) await saveOrder(true);
     } finally {
       setPrintBusy(null);
     }
@@ -907,14 +915,7 @@ export default function WaiterMobileView() {
           await printSalaViaAgent(salaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())
             .catch((e: unknown) => { failed.push('sala'); reason = e; });
         }
-        if (failed.length > 0) {
-          toast.addToast({
-            type: 'error',
-            title: `Comanda salvata, ${failed.join(' e ')} NON stampata`,
-            message: `${printErrorMessage(reason)} Poi ristampala.`,
-            duration: 15000,
-          });
-        }
+        if (failed.length > 0) toast.addToast(comandaNotPrintedToast(failed, reason, 'Comanda salvata'));
       }
 
       clearDraft(selectedTable.id);

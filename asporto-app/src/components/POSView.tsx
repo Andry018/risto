@@ -23,7 +23,7 @@ import { getItemKey, qtyByKey, computePending } from '../lib/orderPending';
 import { applyItemSplit, splitAmount, subtractSaved, type ItemSelection } from '../lib/splitByItems';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmModal';
-import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent, printErrorMessage } from '../lib/lanPrint';
+import { printKitchenViaAgent, printSalaViaAgent, printReceiptViaAgent, printErrorMessage, comandaNotPrintedToast, isPrintQueued } from '../lib/lanPrint';
 import { getPrintAgentUrl, getPrinterIp, getPrinterPort } from '../lib/printConfig';
 import {
   addedIngredientsFromStoredOrderLine,
@@ -520,7 +520,12 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
       else await printSalaViaAgent(items, tableName || 'Tavolo', getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
       toast.addToast({ type: 'success', title: 'Ristampata', message: `Comanda ${kind} inviata alla stampante.`, duration: 2500 });
     } catch (error) {
-      toast.addToast({ type: 'error', title: 'Stampa non riuscita', message: printErrorMessage(error), duration: 4500 });
+      toast.addToast({
+        type: isPrintQueued(error) ? 'warning' : 'error',
+        title: isPrintQueued(error) ? 'Comanda in attesa di stampa' : 'Stampa non riuscita',
+        message: printErrorMessage(error),
+        duration: isPrintQueued(error) ? 10000 : 4500,
+      });
     } finally {
       setPrintBusy(null);
     }
@@ -627,12 +632,18 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     const salaItems = itemsToPrint.filter(i => salaCats.includes(i.categoria));
     try {
       const orderTime = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      // Cucina e sala sempre tutte e due: se la prima non esce la seconda va provata lo stesso
+      const failed: string[] = [];
+      let reason: unknown;
       if (cucinaItems.length > 0) {
-        await printKitchenViaAgent(cucinaItems, tableLabel, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime);
+        await printKitchenViaAgent(cucinaItems, tableLabel, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime)
+          .catch((e: unknown) => { failed.push('cucina'); reason = e; });
       }
       if (salaItems.length > 0) {
-        await printSalaViaAgent(salaItems, tableLabel, getPrintAgentUrl(), getPrinterIp(), getPrinterPort());
+        await printSalaViaAgent(salaItems, tableLabel, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())
+          .catch((e: unknown) => { failed.push('sala'); reason = e; });
       }
+      if (failed.length > 0) throw reason;
       toast.addToast({
         type: 'success',
         title: 'Comanda stampata',
@@ -642,10 +653,10 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
     } catch (error) {
       console.error('Print failed:', error);
       toast.addToast({
-        type: 'error',
-        title: 'Stampa non riuscita',
+        type: isPrintQueued(error) ? 'warning' : 'error',
+        title: isPrintQueued(error) ? 'Comanda in attesa di stampa' : 'Stampa non riuscita',
         message: printErrorMessage(error),
-        duration: 4500,
+        duration: isPrintQueued(error) ? 10000 : 4500,
       });
     } finally {
       setPrintBusy(null);
@@ -734,14 +745,7 @@ export default function POSView({ tableId: propTableId, tableName: propTableName
           await printSalaViaAgent(salaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())
             .catch((e: unknown) => { failed.push('sala'); reason = e; });
         }
-        if (failed.length > 0) {
-          toast.addToast({
-            type: 'error',
-            title: `Conto salvato, comanda ${failed.join(' e ')} NON stampata`,
-            message: `${printErrorMessage(reason)} Poi ristampa con il tasto Stampa.`,
-            duration: 15000,
-          });
-        }
+        if (failed.length > 0) toast.addToast(comandaNotPrintedToast(failed, reason, 'Conto salvato'));
       }
       
       setOrderSuccess(true);
