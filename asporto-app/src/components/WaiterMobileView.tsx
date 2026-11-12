@@ -914,11 +914,24 @@ export default function WaiterMobileView() {
         const cucinaItems = printItems.filter(i => !salaCats.includes(i.categoria));
         const salaItems = printItems.filter(i => salaCats.includes(i.categoria));
         const label = isUpdate ? `${selectedTable.nome} (AGGIUNTA)` : selectedTable.nome;
+        // La cucina lavora solo sui fogli: se la comanda non esce bisogna saperlo subito.
+        const failed: string[] = [];
+        let reason: unknown;
         if (cucinaItems.length > 0) {
-          await printKitchenViaAgent(cucinaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined).catch(() => {});
+          await printKitchenViaAgent(cucinaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), orderTime, allergieNote || undefined)
+            .catch((e: unknown) => { failed.push('cucina'); reason = e; });
         }
         if (salaItems.length > 0) {
-          await printSalaViaAgent(salaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort()).catch(() => {});
+          await printSalaViaAgent(salaItems, label, getPrintAgentUrl(), getPrinterIp(), getPrinterPort())
+            .catch((e: unknown) => { failed.push('sala'); reason = e; });
+        }
+        if (failed.length > 0) {
+          toast.addToast({
+            type: 'error',
+            title: `Comanda salvata, ${failed.join(' e ')} NON stampata`,
+            message: `${printErrorMessage(reason)} Poi ristampala.`,
+            duration: 15000,
+          });
         }
       }
 

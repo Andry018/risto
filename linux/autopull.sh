@@ -20,6 +20,10 @@ fi
 
 echo "[$(date -Iseconds)] Autopull avviato" >> "$LOG"
 
+# Se un passo fallisce (npm ci, build...) lo script si ferma: resta online la versione precedente.
+# Va scritto chiaro nel log, altrimenti sembra che l'aggiornamento sia andato e invece no.
+trap 'echo "[$(date -Iseconds)] ERRORE: autopull interrotto alla riga $LINENO (comando: $BASH_COMMAND). Resta attiva la versione precedente." >> "$LOG"' ERR
+
 cd "$RISTO_BASE"
 # Le versioni precedenti di questo script cancellavano il lockfile: ripristinalo,
 # altrimenti git pull si blocca quando il lockfile cambia su GitHub

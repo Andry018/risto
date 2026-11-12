@@ -14,6 +14,21 @@ export interface PendingOrder {
 }
 
 const MAX_ATTEMPTS = 5;
+/** Oltre questo tempo la richiesta si considera persa: senza limite una connessione "appesa"
+ *  (Wi-Fi che cade a metà) bloccava la coda e lasciava il tasto Salva in attesa per sempre. */
+const REQUEST_TIMEOUT_MS = 12_000;
+/** Con ordini in coda si riprova da soli ogni tanto, senza aspettare il prossimo salvataggio. */
+const RETRY_INTERVAL_MS = 15_000;
+
+function withTimeout<T>(request: PromiseLike<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timeout richiesta al server')), REQUEST_TIMEOUT_MS);
+    Promise.resolve(request).then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
 
 class OfflineSync {
   private queue: PendingOrder[] = [];
@@ -25,6 +40,14 @@ class OfflineSync {
     this.loadQueue();
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => void this.sync());
+      // Il telefono torna in primo piano (o il server torna su senza che cambi lo stato "online"):
+      // quello che è rimasto in coda riparte da solo.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.queue.length > 0) void this.sync();
+      });
+      setInterval(() => {
+        if (this.queue.length > 0 && !this.queueBusy) void this.sync();
+      }, RETRY_INTERVAL_MS);
       if (navigator.onLine) void this.sync();
     }
   }
@@ -46,7 +69,12 @@ class OfflineSync {
   }
 
   private saveQueue() {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(this.queue));
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(this.queue));
+    } catch (e) {
+      // Memoria del browser piena o bloccata: la coda resta valida in memoria finché la pagina è aperta
+      console.error('OfflineSync: impossibile salvare la coda su localStorage', e);
+    }
   }
 
   private async drainQueue(): Promise<void> {
@@ -65,16 +93,16 @@ class OfflineSync {
             // upsert (non insert) sull'id generato client-side: se un retry ripete questo insert
             // dopo un timeout la cui risposta si era persa (ma la insert originale era in realtà
             // andata a buon fine), riscrive la stessa riga invece di crearne una duplicata.
-            const { error } = await supabase.from('ordini').upsert([item.data], { onConflict: 'id' });
+            const { error } = await withTimeout(supabase.from('ordini').upsert([item.data], { onConflict: 'id' }));
             if (!error) success = true;
             else console.error('Supabase Sync Error (insert ordine):', error);
           } else if (item.type === 'UPDATE_ORDER' && item.data.id) {
             const { id, ...updates } = item.data as Partial<Order> & { id: string };
-            const { error } = await supabase.from('ordini').update(updates).eq('id', id);
+            const { error } = await withTimeout(supabase.from('ordini').update(updates).eq('id', id));
             if (!error) success = true;
             else console.error('Supabase Sync Error (update ordine):', error);
           } else if (item.type === 'TABLE_UPDATE' && item.tableId) {
-            const { error } = await supabase.from('tavoli').update(item.tableUpdates!).eq('id', item.tableId);
+            const { error } = await withTimeout(supabase.from('tavoli').update(item.tableUpdates!).eq('id', item.tableId));
             if (!error) success = true;
             else console.error('Supabase Sync Error (update tavolo):', error);
           }

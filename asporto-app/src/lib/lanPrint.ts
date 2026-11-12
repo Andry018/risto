@@ -6,6 +6,8 @@ type KitchenPrintJob = {
   orderTime?: string;
   items: CustomizedItem[];
   allergieNote?: string;
+  /** Asporto: sul foglio cucina vanno anche bevande e dolci (tutto su un foglio). */
+  allItems?: boolean;
   printerIp?: string;
   printerPort?: number;
 };
@@ -77,13 +79,14 @@ function normalizeAgentUrl(agentUrl: string): string {
   return trimmed.replace(/\/+$/, '');
 }
 
-export async function printKitchenViaAgent(items: CustomizedItem[], tableName: string, agentUrl: string, printerIp?: string, printerPort?: number, orderTime?: string, allergieNote?: string): Promise<void> {
+export async function printKitchenViaAgent(items: CustomizedItem[], tableName: string, agentUrl: string, printerIp?: string, printerPort?: number, orderTime?: string, allergieNote?: string, allItems?: boolean): Promise<void> {
   await sendPrintJob({
     kind: 'kitchen',
     tableName,
     orderTime,
     items,
     allergieNote,
+    ...(allItems ? { allItems: true } : {}),
     printerIp,
     printerPort,
   }, agentUrl);

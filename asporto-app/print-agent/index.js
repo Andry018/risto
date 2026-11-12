@@ -23,12 +23,22 @@ function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
       socket.destroy();
       // Segna se l'errore è avvenuto prima di inviare dati: solo in quel caso si può riprovare
       // senza rischiare una doppia stampa.
-      if (err && typeof err === 'object') err.beforeConnect = !connected;
+      if (err && typeof err === 'object' && err.beforeConnect === undefined) err.beforeConnect = !connected;
       reject(err);
     };
 
     // Timeout globale sull'intera operazione
     const timer = setTimeout(() => fail(new Error('Socket timeout')), timeoutMs);
+
+    const writeJob = () => {
+      socket.write(buffer, null, (writeErr) => {
+        if (writeErr) return fail(writeErr);
+        // Chiusura graceful: FIN viene inviato solo dopo che tutti i byte
+        // sono stati ricevuti dalla stampante (evita troncamenti su buffer grandi).
+        socket.end();
+        if (!done) { done = true; resolve(); }
+      });
+    };
 
     socket.connect(port, host, () => {
       connected = true;
@@ -37,19 +47,74 @@ function sendBufferToTcp(host, port, buffer, timeoutMs = 15000) {
       // buffer grandi (cucina con testo quad) possono richiedere più tempo.
       socket.setTimeout(0);
 
-      socket.write(buffer, null, (writeErr) => {
-        if (writeErr) return fail(writeErr);
-        // Chiusura graceful: FIN viene inviato solo dopo che tutti i byte
-        // sono stati ricevuti dalla stampante (evita troncamenti su buffer grandi).
-        socket.end();
-        if (!done) { done = true; resolve(); }
-      });
+      // Stampante che non ha mai risposto alla domanda di stato: per un po' non gliela si rifà,
+      // così non si perde tempo a ogni stampa.
+      const hostKey = `${host}:${port}`;
+      if (!PRINTER_STATUS_CHECK || (silentPrinters.get(hostKey) || 0) > Date.now()) return writeJob();
+
+      // Prima di stampare chiede alla stampante se è pronta (ESC/POS "real-time status").
+      // Senza questo controllo la stampante accetta i byte anche senza carta o col coperchio
+      // aperto: l'app diceva "stampato" e il foglio non usciva. Se la stampante non risponde
+      // entro poco (modello che non supporta il comando) si stampa comunque come prima.
+      const replies = [];
+      let waiting = true;
+      const proceed = () => {
+        if (!waiting || done) return;
+        waiting = false;
+        clearTimeout(statusTimer);
+        socket.removeListener('data', onData);
+        if (replies.length === 0) silentPrinters.set(hostKey, Date.now() + SILENT_PRINTER_SKIP_MS);
+        else silentPrinters.delete(hostKey);
+        const problem = printerProblemFromStatus(replies);
+        if (problem) {
+          const err = new Error(problem);
+          err.beforeConnect = false; // inutile riprovare da soli: serve una persona
+          err.printerNotReady = true;
+          return fail(err);
+        }
+        writeJob();
+      };
+      const onData = (chunk) => {
+        for (const b of chunk) replies.push(b);
+        if (replies.length >= 2) proceed();
+      };
+      const statusTimer = setTimeout(proceed, PRINTER_STATUS_TIMEOUT_MS);
+      socket.on('data', onData);
+      // DLE EOT 2 = causa offline (coperchio, errore) · DLE EOT 4 = sensore carta
+      socket.write(Buffer.from([0x10, 0x04, 0x02, 0x10, 0x04, 0x04]));
     });
 
     socket.on('error', fail);
     socket.on('timeout', () => fail(new Error('Socket connect timeout')));
     socket.setTimeout(5000); // solo per la fase di connect
   });
+}
+
+/** Controllo stato prima della stampa: PRINTER_STATUS_CHECK=0 nel .env lo disattiva. */
+const PRINTER_STATUS_CHECK = !/^(0|false|no|off)$/i.test(String(process.env.PRINTER_STATUS_CHECK || '1').trim());
+const PRINTER_STATUS_TIMEOUT_MS = Number(process.env.PRINTER_STATUS_TIMEOUT_MS) || 700;
+const SILENT_PRINTER_SKIP_MS = 10 * 60 * 1000;
+const silentPrinters = new Map();
+
+/**
+ * Interpreta le risposte a DLE EOT 2 e DLE EOT 4 (nell'ordine in cui sono state chieste).
+ * Ogni byte di stato ESC/POS ha bit fissi (0 e 7 a zero, 1 e 4 a uno): un byte che non li rispetta
+ * non è uno stato valido e viene ignorato, così una stampante "strana" non blocca mai la stampa.
+ * Ritorna il messaggio per l'operatore oppure null se è tutto a posto / non si sa.
+ */
+function printerProblemFromStatus(bytes) {
+  const valid = (b) => typeof b === 'number' && (b & 0x93) === 0x12;
+  // Servono tutte e due le risposte: con una sola non si sa a quale domanda appartiene
+  // (i bit hanno significati diversi) e si rischierebbe un falso allarme.
+  if (bytes.length < 2) return null;
+  const [offline, paper] = bytes;
+  if (valid(paper) && (paper & 0x60) === 0x60) return 'Carta finita: cambia il rotolo e ristampa.';
+  if (valid(offline)) {
+    if (offline & 0x20) return 'Carta finita: cambia il rotolo e ristampa.';
+    if (offline & 0x04) return 'Coperchio della stampante aperto: chiudilo e ristampa.';
+    if (offline & 0x40) return 'Stampante in errore (spia accesa): spegnila, riaccendila e ristampa.';
+  }
+  return null;
 }
 
 /**
@@ -252,7 +317,7 @@ function topPadding(printer) {
 function setReadableText(printer) {
   if (typeof printer.setTextNormal === 'function') printer.setTextNormal();
   // ESC/POS GS ( E: imposta densità stampa al massimo (8/8)
-  printer.raw(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
+  printer.append(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
 }
 
 function printModLines(printer, item, maxNote = 44) {
@@ -302,7 +367,11 @@ function printItemWithHeader(printer, item, maxName) {
 async function printKitchenJob(job) {
   const printer = createPrinter(resolvePrinterInterface(job));
   setReadableText(printer);
-  const foodItems = (job.items || []).filter(i => !CATEGORIES_NO_KITCHEN.includes(i.categoria));
+  // allItems (asporto): tutto su un foglio, bevande e dolci compresi; resta fuori solo il coperto.
+  const foodItems = (job.items || []).filter(i => job.allItems
+    ? i.categoria !== 'Servizio'
+    : !CATEGORIES_NO_KITCHEN.includes(i.categoria));
+  if (foodItems.length === 0) throw new Error('Nessun piatto da stampare su questa comanda.');
   const grouped = groupByPortata(foodItems);
   const orderTime = cleanText(job.orderTime) || formatDateTime(new Date());
 
@@ -494,7 +563,7 @@ async function printSalaJob(job) {
 
 async function printQuickLabelJob(job) {
   const printer = createPrinter(resolvePrinterInterface(job));
-  printer.raw(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
+  printer.append(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
 
   const now = new Date();
   const dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -519,7 +588,7 @@ async function printQuickLabelJob(job) {
 
 async function stampaEtichettaHaccp(dati) {
   const printer = createPrinter(resolvePrinterInterface(dati));
-  printer.raw(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
+  printer.append(Buffer.from([0x1D, 0x28, 0x45, 0x02, 0x00, 0x02, 0x08]));
 
   try {
     printer.println('');
@@ -701,6 +770,15 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(serverPort, '0.0.0.0', () => {
   console.log(`Print bridge ascolta su 0.0.0.0:${serverPort}`);
+});
+
+// Un errore sfuggito non deve far cadere l'agent a metà servizio (con lui cadevano anche le stampe in coda):
+// si scrive nel log e si va avanti.
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('[UNCAUGHT EXCEPTION]', error);
 });
 
 process.on('SIGINT', () => {

@@ -202,7 +202,7 @@ export default function TakeawayTabletView() {
     // Comanda in cucina: intestazione con nome e orario di ritiro (tutto su un foglio, bevande comprese)
     const items = cart.filter(i => i.categoria !== 'Servizio');
     try {
-      await printKitchenViaAgent(items, `ASP ${nome}`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), `RITIRO ${pickupTime}`);
+      await printKitchenViaAgent(items, `ASP ${nome}`, getPrintAgentUrl(), getPrinterIp(), getPrinterPort(), `RITIRO ${pickupTime}`, undefined, true);
       addToast({ type: 'success', title: 'Ordine salvato e stampato', message: `${nome} · ritiro ${pickupTime}` });
     } catch (error) {
       addToast({ type: 'warning', title: 'Ordine salvato, stampa non riuscita', message: printErrorMessage(error), duration: 6000 });
