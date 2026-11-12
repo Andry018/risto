@@ -1,4 +1,5 @@
 import type { CustomizedItem } from '../types/entities';
+import { PANINO_COMPOSTO_ID } from './paninoConfig';
 
 type KitchenPrintJob = {
   kind: 'kitchen';
@@ -136,7 +137,7 @@ export async function printPreContoViaAgent(items: CustomizedItem[], tableName: 
       prezzo: i.prezzo,
       addedIngredients: i.addedIngredients,
       removedIngredients: i.removedIngredients,
-      notes: i.notes,
+      notes: i.id === PANINO_COMPOSTO_ID ? '' : i.notes, // panino composto: solo il nome (vedi hidePaninoDetails)
       lineTotal: undefined,
       removalDiscount: removalDiscounts?.[idx],
     })),
@@ -156,7 +157,23 @@ export async function printQuickLabelViaAgent(nome: string, agentUrl: string): P
 /** Più dei nuovi tentativi lato agent (~5 s) + timeout socket (15 s): oltre, la richiesta è persa. */
 const PRINT_REQUEST_TIMEOUT_MS = 30_000;
 
-async function sendPrintJob(job: PrintJob, agentUrl: string): Promise<void> {
+/**
+ * Il panino composto ha la sua scheda cartacea, compilata dal cliente e consegnata in cucina:
+ * sui fogli non va l'elenco degli ingredienti (resta nell'app per il prezzo). In comanda esce
+ * "VEDI SCHEDA", su conto e pre-conto solo il nome.
+ */
+export function hidePaninoDetails<T extends PrintJob>(job: T): T {
+  if (!('items' in job) || !Array.isArray(job.items)) return job;
+  return {
+    ...job,
+    items: job.items.map(i => (i as { id?: string }).id === PANINO_COMPOSTO_ID
+      ? { ...i, notes: job.kind === 'kitchen' ? 'VEDI SCHEDA' : undefined }
+      : i),
+  };
+}
+
+async function sendPrintJob(rawJob: PrintJob, agentUrl: string): Promise<void> {
+  const job = hidePaninoDetails(rawJob);
   const url = `${normalizeAgentUrl(agentUrl)}/print`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PRINT_REQUEST_TIMEOUT_MS);

@@ -39,6 +39,25 @@ import { toLocalISODate } from '../lib/dateUtils';
 import { syncTableReservationStatus } from '../lib/tableReservations';
 import { useRearScreen } from '../lib/rearScreen';
 
+const SWIPE_BACK_MIN_PX = 100;
+const SWIPE_BACK_MAX_MS = 700;
+
+/** Il tocco parte da un punto dove lo swipe "indietro" non deve valere: finestre aperte sopra il tavolo,
+ *  campi di testo, righe con il proprio swipe, elenchi che scorrono in orizzontale (categorie, uscite). */
+function swipeBackBlocked(target: EventTarget | null, root: HTMLElement | null): boolean {
+  let el = target instanceof Element ? target : null;
+  while (el && el !== root) {
+    if (el.matches('[role="dialog"], [aria-modal="true"], input, textarea, select, [data-no-swipe-back]')) return true;
+    const style = getComputedStyle(el);
+    // position: fixed = finestra/pannello sovrapposto (non tutte le modali hanno role="dialog")
+    if (style.position === 'fixed') return true;
+    if ((style.overflowX === 'auto' || style.overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 1) return true;
+    el = el.parentElement;
+  }
+  // Fuori dal contenitore (portali delle finestre): mai
+  return el !== root;
+}
+
 export default function WaiterMobileView() {
   const navigate = useNavigate();
   const [tables, setTables] = useState<Tavolo[]>([]);
@@ -90,24 +109,33 @@ export default function WaiterMobileView() {
   const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const pullStartY = useRef(0);
-  const swipeStartX = useRef(0);
+  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Swipe verso destra = torna alla mappa. Prima bastavano 50 px a destra in qualunque direzione e
+  // da qualunque punto (anche scorrendo la lista, le categorie o dentro una finestra aperta): si usciva
+  // dal tavolo a ogni piccolo tocco. Ora serve un gesto deciso e nettamente orizzontale, valutato al rilascio.
   const handleTouchStartSwipe = (e: React.TouchEvent) => {
-    swipeStartX.current = e.touches[0].clientX;
+    swipeStart.current = selectedTable && e.touches.length === 1 && !swipeBackBlocked(e.target, containerRef.current)
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: e.timeStamp }
+      : null;
   };
 
   const handleTouchMoveSwipe = (e: React.TouchEvent) => {
-    if (!selectedTable) return;
-    const diff = e.touches[0].clientX - swipeStartX.current;
-    if (diff > 50) {
-      // Swipe right detected - go back to table map
-      leaveTable();
-    }
+    if (e.touches.length > 1) swipeStart.current = null;
   };
 
-  const handleTouchEndSwipe = (_e?: React.TouchEvent) => {
-    swipeStartX.current = 0;
+  const handleTouchEndSwipe = (e: React.TouchEvent) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || !selectedTable) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = Math.abs(touch.clientY - start.y);
+    if (dx >= SWIPE_BACK_MIN_PX && dy < dx * 0.4 && e.timeStamp - start.t < SWIPE_BACK_MAX_MS) {
+      leaveTable();
+    }
   };
 
   // Reservation state
@@ -1762,24 +1790,32 @@ interface SwipeableCartItemProps {
 
 function SwipeableCartItem({ item, newQty, onRemove, onEdit, onSetCart }: SwipeableCartItemProps) {
   const [swipeX, setSwipeX] = useState(0);
-  const swipeStartX = useRef(0);
+  const swipeStart = useRef({ x: 0, y: 0 });
+  /** Direzione decisa dopo i primi 10 px: se il dito va in verticale si sta scorrendo la lista, non eliminando. */
+  const axis = useRef<'none' | 'x' | 'y'>('none');
   const DELETE_THRESHOLD = -80;
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    swipeStartX.current = e.touches[0].clientX;
+    swipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    axis.current = 'none';
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    const diff = e.touches[0].clientX - swipeStartX.current;
-    if (diff < 0) {
-      setSwipeX(Math.max(diff, DELETE_THRESHOLD * 1.2));
+    const dx = e.touches[0].clientX - swipeStart.current.x;
+    const dy = e.touches[0].clientY - swipeStart.current.y;
+    if (axis.current === 'none' && Math.hypot(dx, dy) > 10) {
+      axis.current = Math.abs(dx) > Math.abs(dy) * 1.5 ? 'x' : 'y';
+    }
+    if (axis.current === 'x' && dx < 0) {
+      setSwipeX(Math.max(dx, DELETE_THRESHOLD * 1.2));
     }
   };
 
   const handleTouchEnd = () => {
-    if (swipeX <= DELETE_THRESHOLD) {
+    if (axis.current === 'x' && swipeX <= DELETE_THRESHOLD) {
       onRemove(item.uniqueId);
     }
+    axis.current = 'none';
     setSwipeX(0);
   };
 
@@ -1796,6 +1832,7 @@ function SwipeableCartItem({ item, newQty, onRemove, onEdit, onSetCart }: Swipea
         </button>
       </div>
       <div
+        data-no-swipe-back
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

@@ -57,4 +57,7 @@ export const PANINO_CATEGORIES: PaninoCategory[] = [
 
 export const PANINO_BASE_PRICE = 1;
 
+/** id della riga "Panino: <nome>" creata da Componi panino. */
+export const PANINO_COMPOSTO_ID = 'panino-builder';
+
 export const COTTURE = ['Sangue', 'Medio', 'Ben Cotta'];
